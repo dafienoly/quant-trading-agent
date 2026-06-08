@@ -1,0 +1,45 @@
+# 环境与密钥
+.env
+.env.local
+.env.production
+
+# Python
+*.pyc
+*.pyo
+__pycache__/
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+env/
+
+# 数据目录（不提交行情数据）
+data/raw/
+data/cleaned/
+data/backtest_results/
+
+# 日志
+logs/*.log
+
+# 测试与覆盖率
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Trae IDE
+.trae/

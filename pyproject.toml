@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-trading-agent"
+version = "0.1.0"
+description = "A股主板/港股半导体方向量化交易Agent系统"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "akshare>=1.10",
+    "aktools>=0.0.91",
+    "httpx>=0.25",
+    "pydantic>=2.0",
+    "loguru>=0.7",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "duckdb>=0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
+backtest = [
+    "vectorbt>=0.26",
+]
+ui = [
+    "streamlit>=1.28",
+    "plotly>=5.18",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -1,0 +1,116 @@
+# 半导体主题股票池配置
+# 按子板块分组，仅包含主板/中小板可交易标的
+
+semiconductor_pool:
+  pcb_ccl:
+    name: "PCB/CCL/高速材料"
+    stocks:
+      - symbol: "002463"
+        name: "沪电股份"
+        market: "SZ"
+      - symbol: "002916"
+        name: "深南电路"
+        market: "SZ"
+      - symbol: "600183"
+        name: "生益科技"
+        market: "SH"
+      - symbol: "603228"
+        name: "景旺电子"
+        market: "SH"
+
+  advanced_packaging:
+    name: "先进封装/封测"
+    stocks:
+      - symbol: "600584"
+        name: "长电科技"
+        market: "SH"
+      - symbol: "002156"
+        name: "通富微电"
+        market: "SZ"
+      - symbol: "002185"
+        name: "华天科技"
+        market: "SZ"
+      - symbol: "000021"
+        name: "深科技"
+        market: "SZ"
+
+  equipment_material:
+    name: "半导体设备/材料"
+    stocks:
+      - symbol: "002371"
+        name: "北方华创"
+        market: "SZ"
+      - symbol: "002409"
+        name: "雅克科技"
+        market: "SZ"
+      - symbol: "603650"
+        name: "彤程新材"
+        market: "SH"
+      - symbol: "600206"
+        name: "有研新材"
+        market: "SH"
+      - symbol: "603690"
+        name: "至纯科技"
+        market: "SH"
+      - symbol: "600641"
+        name: "万业企业"
+        market: "SH"
+
+  optical_module_cpo:
+    name: "光模块/CPO/硅光"
+    stocks:
+      - symbol: "002281"
+        name: "光迅科技"
+        market: "SZ"
+      - symbol: "000988"
+        name: "华工科技"
+        market: "SZ"
+      - symbol: "603083"
+        name: "剑桥科技"
+        market: "SH"
+      - symbol: "600487"
+        name: "亨通光电"
+        market: "SH"
+
+  memory_hbm:
+    name: "存储/HBM"
+    stocks:
+      - symbol: "603986"
+        name: "兆易创新"
+        market: "SH"
+      - symbol: "000021"
+        name: "深科技"
+        market: "SZ"
+      - symbol: "600667"
+        name: "太极实业"
+        market: "SH"
+
+  hk_semiconductor:
+    name: "港股半导体"
+    stocks:
+      - symbol: "00981"
+        name: "中芯国际"
+        market: "HK"
+
+# 关注的指数
+watch_indices:
+  - symbol: "000001"
+    name: "上证指数"
+    market: "SH"
+  - symbol: "000300"
+    name: "沪深300"
+    market: "SH"
+  - symbol: "399006"
+    name: "创业板指"
+    market: "SZ"
+
+# 板块政策权重（用于策略层，此处预定义）
+sector_policy_weight:
+  semiconductor_equipment: 100
+  semiconductor_material: 95
+  advanced_packaging: 95
+  pcb_ccl: 90
+  memory_hbm: 85
+  optical_module_cpo: 80
+  chip_design: 65
+  traditional_packaging: 60
