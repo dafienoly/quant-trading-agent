@@ -55,6 +55,7 @@ from src.backtest_engine.persistence import (
     load_backtest_result,
     list_backtest_runs,
 )
+from src.models.schemas import Signal
 
 
 # ============================================================
@@ -191,6 +192,82 @@ class TestS1EventBacktester:
         # 如果有成交，应被回调
         for fe in fill_events:
             assert isinstance(fe, FillEvent)
+
+    def test_event_backtester_next_open_executes_on_next_trade_date(self, monkeypatch):
+        """事件驱动回测的next_open也必须使用下一交易日行情。"""
+        import src.backtest_engine.event_backtester as event_module
+
+        data = pd.DataFrame([
+            {
+                "symbol": "002463.SZ",
+                "trade_date": "20240101",
+                "open": 10.0,
+                "high": 105.0,
+                "low": 9.0,
+                "close": 100.0,
+                "volume": 100000.0,
+                "amount": 10000000.0,
+                "pct_change": 2.0,
+                "turnover_rate": 1.5,
+                "is_suspended": False,
+                "is_st": False,
+                "is_data_missing": False,
+            },
+            {
+                "symbol": "002463.SZ",
+                "trade_date": "20240102",
+                "open": 20.0,
+                "high": 21.0,
+                "low": 19.0,
+                "close": 20.5,
+                "volume": 100000.0,
+                "amount": 2050000.0,
+                "pct_change": 1.0,
+                "turnover_rate": 1.5,
+                "is_suspended": False,
+                "is_st": False,
+                "is_data_missing": False,
+            },
+        ])
+
+        def fake_compute_all_factors(lookback_data, pool=None):
+            return lookback_data.assign(total_score=100.0)
+
+        def fake_generate_signals(today_scored, current_returns=None, include_hold=False):
+            row = today_scored.iloc[0]
+            if row["trade_date"] != "20240101":
+                return []
+            return [
+                Signal(
+                    signal_id="SIG_20240101_002463SZ_BUY_BREAKOUT_TEST02",
+                    symbol="002463.SZ",
+                    stock_name="沪电股份",
+                    sector="pcb_ccl",
+                    trade_date="20240101",
+                    strategy="semiconductor_rotation",
+                    signal_type="BUY",
+                    sub_type="BREAKOUT",
+                    score=100.0,
+                    price_trigger=100.0,
+                    reason="测试信号",
+                    stop_loss_price=92.0,
+                    take_profit_price=115.0,
+                    position_pct=0.10,
+                    risk_note="测试",
+                    created_at="2024-01-01 15:00:00",
+                )
+            ]
+
+        monkeypatch.setattr(event_module, "compute_all_factors", fake_compute_all_factors)
+        monkeypatch.setattr(event_module, "generate_signals", fake_generate_signals)
+
+        eb = EventBacktester(initial_capital=100000, fill_price_mode="next_open")
+        result = eb.run(data)
+        trades = result["trade_records"]
+
+        assert len(trades) == 1
+        assert trades.iloc[0]["trade_date"] == "20240102"
+        assert trades.iloc[0]["price"] == 20.0
 
 
 # ============================================================
@@ -613,6 +690,82 @@ class TestL1FillPriceModel:
         engine = BacktestEngine(initial_capital=1000000, buy_price_mode="close")
         result = engine.run(data)
         assert result is not None
+
+    def test_engine_next_open_executes_on_next_trade_date(self, monkeypatch):
+        """next_open 成交必须使用信号日后的下一交易日，避免同日收盘信号买在同日开盘。"""
+        import src.backtest_engine.engine as engine_module
+
+        data = pd.DataFrame([
+            {
+                "symbol": "002463.SZ",
+                "trade_date": "20240101",
+                "open": 10.0,
+                "high": 105.0,
+                "low": 9.0,
+                "close": 100.0,
+                "volume": 100000.0,
+                "amount": 10000000.0,
+                "pct_change": 2.0,
+                "turnover_rate": 1.5,
+                "is_suspended": False,
+                "is_st": False,
+                "is_data_missing": False,
+            },
+            {
+                "symbol": "002463.SZ",
+                "trade_date": "20240102",
+                "open": 20.0,
+                "high": 21.0,
+                "low": 19.0,
+                "close": 20.5,
+                "volume": 100000.0,
+                "amount": 2050000.0,
+                "pct_change": 1.0,
+                "turnover_rate": 1.5,
+                "is_suspended": False,
+                "is_st": False,
+                "is_data_missing": False,
+            },
+        ])
+
+        def fake_compute_all_factors(lookback_data, pool=None):
+            return lookback_data.assign(total_score=100.0)
+
+        def fake_generate_signals(today_scored, current_returns=None, include_hold=False):
+            row = today_scored.iloc[0]
+            if row["trade_date"] != "20240101":
+                return []
+            return [
+                Signal(
+                    signal_id="SIG_20240101_002463SZ_BUY_BREAKOUT_TEST01",
+                    symbol="002463.SZ",
+                    stock_name="沪电股份",
+                    sector="pcb_ccl",
+                    trade_date="20240101",
+                    strategy="semiconductor_rotation",
+                    signal_type="BUY",
+                    sub_type="BREAKOUT",
+                    score=100.0,
+                    price_trigger=100.0,
+                    reason="测试信号",
+                    stop_loss_price=92.0,
+                    take_profit_price=115.0,
+                    position_pct=0.10,
+                    risk_note="测试",
+                    created_at="2024-01-01 15:00:00",
+                )
+            ]
+
+        monkeypatch.setattr(engine_module, "compute_all_factors", fake_compute_all_factors)
+        monkeypatch.setattr(engine_module, "generate_signals", fake_generate_signals)
+
+        engine = BacktestEngine(initial_capital=100000, buy_price_mode="next_open")
+        result = engine.run(data)
+        trades = result["trade_records"]
+
+        assert len(trades) == 1
+        assert trades.iloc[0]["trade_date"] == "20240102"
+        assert trades.iloc[0]["price"] == 20.0
 
 
 # ============================================================
