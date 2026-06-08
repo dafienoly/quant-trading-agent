@@ -531,6 +531,24 @@ pytest tests/ --cov=src --cov-report=html
 
 实盘盯盘与信号生成
 
+### 8.0 架构复核裁决（2026-06-08）
+
+本次复核结论：
+
+1. Phase 3 可以进入 Phase 4，但不是无条件放行。
+2. 已补充 `BACKTEST_POLICY.md`，明确日频信号默认必须在下一交易日成交，禁止前视偏差。
+3. 已修复 `BacktestEngine` 与 `EventBacktester` 的 `next_open`/`vwap` 同日成交问题。
+4. 已修复 `factor_evaluation.evaluate_all_factors()` 缺少 `forward_return` 时的 `symbol_col` 未定义问题。
+5. 已修复 Rank IC 与统计显著性检验对未声明 `scipy` 的硬依赖。
+6. 全量测试结果：`251 passed in 23.39s`。
+
+Phase 4 开发顺序调整为：
+
+1. 先实现 `risk_engine` 运行时风控骨架和只读 Kill Switch 状态。
+2. 再实现实时行情 Provider、行情延迟报告和数据健康门禁。
+3. 再实现信号生成服务，交易模式保持 `LEVEL_1_SIGNAL_ONLY`。
+4. 最后实现 API/UI/通知层。
+
 ### 8.2 核心任务
 
 1. **FastAPI 后端服务**

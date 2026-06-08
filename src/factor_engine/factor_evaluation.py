@@ -33,7 +33,9 @@ def calc_rank_ic(factor: pd.Series, forward_return: pd.Series) -> float:
     valid = factor.notna() & forward_return.notna()
     if valid.sum() < 5:
         return np.nan
-    return float(factor[valid].corr(forward_return[valid], method="spearman"))
+    factor_rank = factor[valid].rank()
+    return_rank = forward_return[valid].rank()
+    return float(factor_rank.corr(return_rank))
 
 
 def calc_ic_series(
@@ -155,8 +157,6 @@ def evaluate_factor(
     )
 
     # Rank IC
-    rank_ic_series = calc_ic_series(factor_df, factor_col, return_col, date_col)
-    # 使用 Spearman 方法
     rank_ics = []
     for date in factor_df[date_col].unique() if date_col in factor_df.columns else [0]:
         if date_col in factor_df.columns:
@@ -196,6 +196,7 @@ def evaluate_all_factors(
     factor_cols: Optional[List[str]] = None,
     return_col: str = "forward_return",
     date_col: str = "trade_date",
+    symbol_col: str = "symbol",
 ) -> pd.DataFrame:
     """
     批量评估多个因子，返回汇总 DataFrame。

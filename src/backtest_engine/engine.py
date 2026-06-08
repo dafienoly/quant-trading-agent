@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 from loguru import logger
 
-from src.backtest_engine.commission_model import CommissionModel
+from src.backtest_engine.commission_model import CommissionModel, FillPriceModel
 from src.backtest_engine.portfolio import Portfolio
 from src.backtest_engine.performance import PerformanceAnalyzer
 from src.backtest_engine.risk_check import BacktestRiskCheck
@@ -82,6 +82,7 @@ class BacktestEngine:
         # 按日期排序
         dates = sorted(data["trade_date"].unique())
         logger.info(f"回测开始: {dates[0]} ~ {dates[-1]}, {len(dates)}个交易日, {len(data)}行数据")
+        pending_signals: List = []
 
         # 预计算基准收益
         benchmark_returns = None
@@ -102,7 +103,12 @@ class BacktestEngine:
                 portfolio.record_daily_value(trade_date)
                 continue
 
-            # 3. 计算因子和信号（使用截至当日的数据）
+            # 3. 执行上一交易日产生、需在本交易日成交的信号
+            if pending_signals:
+                self._execute_signals(pending_signals, day_data, trade_date, portfolio)
+                pending_signals = []
+
+            # 4. 计算因子和信号（使用截至当日的数据）
             # 使用最近60个交易日的数据计算因子
             lookback_dates = dates[max(0, i - 60):i + 1]
             lookback_data = data[data["trade_date"].isin(lookback_dates)]
@@ -120,7 +126,7 @@ class BacktestEngine:
                 portfolio.record_daily_value(trade_date)
                 continue
 
-            # 4. 生成信号
+            # 5. 生成信号
             # 计算持仓收益率
             current_returns = {}
             for symbol, pos in portfolio.positions.items():
@@ -129,10 +135,18 @@ class BacktestEngine:
 
             signals = generate_signals(today_scored, current_returns=current_returns, include_hold=False)
 
-            # 5. 执行交易
-            self._execute_signals(signals, day_data, trade_date, portfolio)
+            # 6. 执行交易。默认 next_open/vwap 信号挂起到下一交易日执行。
+            same_day_signals = []
+            for sig in signals:
+                mode = self.buy_price_mode if sig.signal_type == "BUY" else self.sell_price_mode
+                if self._uses_next_trade_date(mode):
+                    pending_signals.append(sig)
+                else:
+                    same_day_signals.append(sig)
 
-            # 6. 记录每日资产
+            self._execute_signals(same_day_signals, day_data, trade_date, portfolio)
+
+            # 7. 记录每日资产
             portfolio.record_daily_value(trade_date)
 
         # 生成绩效报告
@@ -154,32 +168,21 @@ class BacktestEngine:
         portfolio: Portfolio,
     ):
         """执行信号对应的交易"""
-        # 构建当日数据查找表
-        day_lookup = {}
-        for _, row in day_data.iterrows():
-            day_lookup[row["symbol"]] = row
+        day_lookup = {row["symbol"]: row for _, row in day_data.iterrows()}
 
         for sig in signals:
             symbol = sig.symbol
-            if symbol not in day_lookup:
-                continue
-
-            row = day_lookup[symbol]
-            close = row.get("close", 0)
-            open_price = row.get("open", close)
-            is_suspended = row.get("is_suspended", False)
-            is_st = row.get("is_st", False)
-
-            # 涨跌停判断
-            pct = row.get("pct_change", 0)
-            is_limit_up = pct >= 9.5 if not is_st else pct >= 4.5
-            is_limit_down = pct <= -9.5 if not is_st else pct <= -4.5
 
             if sig.signal_type == "BUY":
-                # 买入使用次日开盘价（回测中简化为当日收盘价或次日开盘价）
-                buy_price = open_price if self.buy_price_mode == "next_open" else close
+                row = day_lookup.get(symbol)
+                if row is None:
+                    continue
+
+                buy_price = self._get_fill_price(self.buy_price_mode, row)
                 if buy_price <= 0:
                     continue
+
+                is_suspended, is_limit_up, _ = self._get_trade_status(row)
 
                 # 计算买入数量（按仓位比例）
                 position_pct = sig.position_pct
@@ -216,9 +219,15 @@ class BacktestEngine:
                 if pos is None or pos.quantity <= 0:
                     continue
 
-                sell_price = open_price if self.sell_price_mode == "next_open" else close
+                row = day_lookup.get(symbol)
+                if row is None:
+                    continue
+
+                sell_price = self._get_fill_price(self.sell_price_mode, row)
                 if sell_price <= 0:
                     continue
+
+                is_suspended, _, is_limit_down = self._get_trade_status(row)
 
                 # 根据信号确定卖出比例
                 sell_ratio = sig.position_pct
@@ -228,8 +237,6 @@ class BacktestEngine:
 
                 if quantity <= 0:
                     continue
-
-                current_return = pos.unrealized_pnl_pct if pos.cost_price > 0 else 0
 
                 portfolio.sell(
                     symbol=symbol,
@@ -242,6 +249,32 @@ class BacktestEngine:
                     is_limit_down=is_limit_down,
                     is_suspended=is_suspended,
                 )
+
+    def _uses_next_trade_date(self, price_mode: str) -> bool:
+        """需要下一交易日成交的价格模式。"""
+        return price_mode in ("next_open", "vwap")
+
+    def _get_fill_price(self, price_mode: str, row: pd.Series) -> float:
+        """从选定交易日行情取成交参考价。"""
+        close = row.get("close", 0)
+        return FillPriceModel.get_fill_price(
+            price_mode,
+            open_price=row.get("open", close),
+            close_price=close,
+            high_price=row.get("high", 0.0),
+            low_price=row.get("low", 0.0),
+            volume=row.get("volume", 0.0),
+            amount=row.get("amount", 0.0),
+        )
+
+    def _get_trade_status(self, row: pd.Series) -> tuple[bool, bool, bool]:
+        """返回 (停牌, 涨停, 跌停)，用于成交可行性检查。"""
+        is_suspended = row.get("is_suspended", False)
+        is_st = row.get("is_st", False)
+        pct = row.get("pct_change", 0)
+        is_limit_up = pct >= 9.5 if not is_st else pct >= 4.5
+        is_limit_down = pct <= -9.5 if not is_st else pct <= -4.5
+        return is_suspended, is_limit_up, is_limit_down
 
     def _calc_sector_exposure(self, portfolio: Portfolio) -> Dict[str, float]:
         """计算当前板块暴露"""

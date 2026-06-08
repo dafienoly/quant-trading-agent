@@ -7,7 +7,8 @@
 """
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
+import math
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -56,13 +57,13 @@ def t_test_excess_return(
 
     t_stat = mean_excess / (std_excess / np.sqrt(n))
 
-    # 近似 p 值（使用正态近似，大样本下足够准确）
-    from scipy import stats as scipy_stats
     try:
+        from scipy import stats as scipy_stats
+
         p_value = float(1 - scipy_stats.t.cdf(t_stat, df=n - 1))
     except ImportError:
         # 无 scipy 时使用正态近似
-        p_value = float(1 - 0.5 * (1 + np.math.erf(t_stat / np.sqrt(2))))
+        p_value = float(1 - 0.5 * (1 + math.erf(t_stat / math.sqrt(2))))
 
     alpha = 1 - confidence
     is_significant = p_value < alpha

@@ -14,7 +14,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
@@ -115,11 +115,13 @@ class EventBacktester:
         self.risk_check.reset()
         dates = sorted(data["trade_date"].unique())
         logger.info(f"事件驱动回测: {dates[0]}~{dates[-1]}, {len(dates)}交易日")
+        pending_signals: List = []
 
         for i, trade_date in enumerate(dates):
             # Step 1: 生成 MarketEvent
             day_data = data[data["trade_date"] == trade_date].copy()
             market_event = MarketEvent(trade_date=trade_date, bar_data=day_data)
+            self.events.append(market_event)
 
             # Step 2: 更新持仓价格
             price_dict = dict(zip(day_data["symbol"], day_data["close"]))
@@ -132,7 +134,12 @@ class EventBacktester:
                 self.portfolio.record_daily_value(trade_date)
                 continue
 
-            # Step 4: 计算因子和信号 → SignalEvent
+            # Step 4: 执行上一交易日产生、需在本交易日成交的信号
+            if pending_signals:
+                self._execute_signal_events(pending_signals, day_data, trade_date)
+                pending_signals = []
+
+            # Step 5: 计算因子和信号 → SignalEvent
             lookback_dates = dates[max(0, i - 60):i + 1]
             lookback_data = data[data["trade_date"].isin(lookback_dates)]
 
@@ -161,17 +168,15 @@ class EventBacktester:
             if self.on_signal_handler:
                 self.on_signal_handler(signal_event)
 
-            # Step 5: 信号→订单→成交
+            # Step 6: 信号→订单→成交。默认 next_open/vwap 信号挂起到下一交易日执行。
+            same_day_signals = []
             for sig in signals:
-                order = self._signal_to_order(sig, day_data, trade_date)
-                if order is None:
-                    continue
+                if self._uses_next_trade_date(self.fill_price_mode):
+                    pending_signals.append(sig)
+                else:
+                    same_day_signals.append(sig)
 
-                fill = self._order_to_fill(order, day_data)
-                if fill is not None:
-                    self.events.append(fill)
-                    if self.on_fill_handler:
-                        self.on_fill_handler(fill)
+            self._execute_signal_events(same_day_signals, day_data, trade_date)
 
             self.portfolio.record_daily_value(trade_date)
 
@@ -189,6 +194,19 @@ class EventBacktester:
         result["events"] = self.events
 
         return result
+
+    def _execute_signal_events(self, signals: list, day_data: pd.DataFrame, trade_date: str):
+        """将信号转换为订单并在当前交易日成交。"""
+        for sig in signals:
+            order = self._signal_to_order(sig, day_data, trade_date)
+            if order is None:
+                continue
+
+            fill = self._order_to_fill(order, day_data)
+            if fill is not None:
+                self.events.append(fill)
+                if self.on_fill_handler:
+                    self.on_fill_handler(fill)
 
     def _signal_to_order(self, sig, day_data: pd.DataFrame, trade_date: str) -> Optional[OrderEvent]:
         """信号转订单"""
@@ -278,10 +296,13 @@ class EventBacktester:
 
         return None
 
+    def _uses_next_trade_date(self, price_mode: str) -> bool:
+        """需要下一交易日成交的价格模式。"""
+        return price_mode in ("next_open", "vwap")
+
     def _order_to_fill(self, order: OrderEvent, day_data: pd.DataFrame) -> Optional[FillEvent]:
         """订单转成交"""
         symbol = order.symbol
-        market = symbol.split(".")[-1] if "." in symbol else "SZ"
 
         if order.side == "BUY":
             record = self.portfolio.buy(

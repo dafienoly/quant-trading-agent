@@ -156,6 +156,24 @@ class TestFactorEvaluation:
         assert len(result) > 0
         assert "factor_name" in result.columns
 
+    def test_evaluate_all_factors_derives_forward_return(self):
+        """缺少forward_return时，应按股票使用下一期pct_change派生，不能抛NameError。"""
+        from src.factor_engine.factor_evaluation import evaluate_all_factors
+
+        df = self._make_factor_df().drop(columns=["forward_return"])
+        df["pct_change"] = np.linspace(-2.0, 2.0, len(df))
+
+        result = evaluate_all_factors(df)
+
+        assert len(result) > 0
+        assert set(result["factor_name"]) == {
+            "trend_score",
+            "sentiment_score",
+            "policy_score",
+            "fundamental_score",
+        }
+        assert "ic_mean" in result.columns
+
     def test_calc_ic(self):
         from src.factor_engine.factor_evaluation import calc_ic
         factor = pd.Series([1, 2, 3, 4, 5], dtype=float)

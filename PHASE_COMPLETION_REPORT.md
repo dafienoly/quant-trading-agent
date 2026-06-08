@@ -473,6 +473,17 @@ tests/test_storage.py .................  3 passed
 | 4 | 分红除权未处理（L3暂缓） | 低 | Phase 4+，需除权因子数据源 |
 | 5 | E2E测试和API测试待Phase 4补充 | 中 | Phase 4 实现FastAPI后补充 |
 
+### 架构复核记录（2026-06-08）
+
+| 项目 | 结论 |
+|------|------|
+| 缺失文档 | 已补充 `BACKTEST_POLICY.md`，作为回测硬约束 |
+| 回测时序 | 已修复 `next_open`/`vwap` 使用信号日行情的前视偏差，默认挂起到下一交易日执行 |
+| 因子评估 | 已修复缺少 `forward_return` 时的 `symbol_col` 未定义问题 |
+| 可选依赖 | 已修复 Rank IC 与显著性检验对未声明 `scipy` 的硬依赖 |
+| 验证结果 | `251 passed in 23.39s` |
+| Phase 4 准入 | 可以进入，但必须先建设 `risk_engine` 运行时风控与实时数据健康门禁，再做 API/UI |
+
 ---
 
 ## Phase 4: 实盘盯盘与信号生成
