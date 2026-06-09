@@ -133,7 +133,40 @@ class AkToolsProvider(MarketDataProvider):
             return pd.DataFrame()
 
     def get_realtime_quotes(self, symbols: List[str]) -> pd.DataFrame:
-        raise NotImplementedError("Realtime quotes will be implemented in Phase 4")
+        from src.data_gateway.realtime_provider import (
+            _is_hk_symbol,
+            map_a_share_realtime_quotes,
+            map_hk_realtime_quotes,
+            normalize_quote_symbol,
+        )
+
+        normalized = [normalize_quote_symbol(s) for s in symbols if str(s).strip()]
+        a_symbols = [s for s in normalized if not _is_hk_symbol(s)]
+        hk_symbols = [s for s in normalized if _is_hk_symbol(s)]
+        frames: list[pd.DataFrame] = []
+
+        if a_symbols:
+            try:
+                raw = self._get("stock_zh_a_spot_em")
+                if not raw.empty:
+                    frames.append(
+                        map_a_share_realtime_quotes(raw, a_symbols, data_source="aktools")
+                    )
+            except Exception as e:
+                logger.error(f"Failed to fetch AkTools A-share realtime quotes: {e}")
+
+        if hk_symbols:
+            try:
+                raw = self._get("stock_hk_spot_em")
+                if not raw.empty:
+                    frames.append(map_hk_realtime_quotes(raw, hk_symbols, data_source="aktools"))
+            except Exception as e:
+                logger.error(f"Failed to fetch AkTools HK realtime quotes: {e}")
+
+        frames = [frame for frame in frames if frame is not None and not frame.empty]
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True)
 
     def close(self):
         self._client.close()

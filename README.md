@@ -166,7 +166,7 @@ python scripts/stop_product.py
 | 标签页 | 功能说明 |
 |---|---|
 | 系统状态 | 健康检查、组件运行状态、Kill Switch 控制 |
-| 实时行情 | 股票行情表格、涨跌幅展示 |
+| 实时行情 | AkShare/AkTools 数据源选择、实时刷新、后台快照、Demo fallback 明示 |
 | 候选股监控 | 观察列表管理、信号触发提醒 |
 | 因子分析 | 四因子评分详情、雷达图可视化 |
 | 回测实验室 | 回测参数配置、回测结果展示 |
@@ -179,13 +179,14 @@ python scripts/stop_product.py
 
 ## API 接口
 
-系统提供 13 个产品端点，均以 `/product` 为前缀：
+系统提供 15 个产品端点，均以 `/product` 为前缀：
 
 ### 健康与仪表板
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/product/health` | 系统健康状态 |
+| GET | `/product/quotes` | 实时行情快照（AkShare/AkTools，可显式 Demo fallback） |
 | GET | `/product/dashboard` | 仪表板聚合数据 |
 
 ### 因子与回测
@@ -209,6 +210,7 @@ python scripts/stop_product.py
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/product/feedback` | 获取 Bug 列表 |
+| POST | `/product/feedback` | 提交 UI/API 自动反馈 Bug |
 | POST | `/product/feedback/{bug_id}/status` | 更新 Bug 状态 |
 
 ### 作业管理
@@ -237,6 +239,7 @@ cp .env.example .env
 | `ENABLE_LIVE_TRADING` | `false` | 是否启用实盘交易 |
 | `REQUIRE_HUMAN_CONFIRMATION` | `true` | 是否需要人工确认 |
 | `DATA_SOURCE` | `sina` | 数据源 |
+| `DEFAULT_DATA_PROVIDER` | `akshare` | 产品行情默认数据源（akshare/aktools） |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 | `API_PORT` | `8000` | API 服务端口 |
 | `STREAMLIT_PORT` | `8501` | 仪表板端口 |
@@ -260,6 +263,10 @@ python tests/test_e2e_acceptance.py
 
 # 产品 API 端到端测试
 python tests/test_product_api_e2e.py
+
+# 本次产品实时行情/前端触碰范围验证
+python -m pytest tests/test_phase4_api.py tests/test_phase4_realtime_health.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py -q --basetemp=runtime/pytest-tmp
+python -m ruff check src/product_app/market_data.py src/product_app/service_manager.py src/api/product_routes.py src/data_gateway/realtime_provider.py src/data_gateway/aktools_provider.py src/ui_report/product_dashboard.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py
 ```
 
 ---

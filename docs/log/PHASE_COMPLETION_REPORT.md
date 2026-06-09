@@ -658,7 +658,7 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 
 ### 交付物清单
 
-#### 产品服务模块（6 个）
+#### 产品服务模块（7 个）
 
 | # | 文件 | 说明 |
 |---|------|------|
@@ -668,31 +668,34 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 | 4 | `src/product_app/feedback.py` | 反馈系统：.md+.json双格式Bug报告，24h去重，脱敏，状态生命周期(open→triaged→fixed/ignored) |
 | 5 | `src/product_app/demo_data.py` | Demo数据：10只股票行情/3买2卖5持有信号/因子评分/账户信息，市场休市/离线模式自动降级 |
 | 6 | `src/product_app/__init__.py` | 包初始化 |
+| 7 | `src/product_app/market_data.py` | 产品行情门面：统一 AkShare/AkTools 实时行情、symbols 规范化、Demo fallback、反馈 Bug 生成 |
 
-#### 产品API路由（13个端点）
+#### 产品API路由（15个端点）
 
 | # | 端点 | 方法 | 说明 |
 |---|------|------|------|
 | 1 | `/product/health` | GET | 系统健康状态聚合 |
-| 2 | `/product/dashboard` | GET | 仪表板数据(行情+信号+因子+账户) |
-| 3 | `/product/factors/compute` | POST | 因子评分计算 |
-| 4 | `/product/jobs/backtest/start` | POST | 启动回测任务 |
-| 5 | `/product/config` | GET | 获取配置(掩码) |
-| 6 | `/product/config` | POST | 更新配置项 |
-| 7 | `/product/config/confirm-upgrade` | POST | 确认交易模式升级 |
-| 8 | `/product/config/restore-defaults` | POST | 恢复默认配置 |
-| 9 | `/product/feedback` | GET | 获取Bug列表 |
-| 10 | `/product/feedback/{bug_id}/status` | POST | 更新Bug状态 |
-| 11 | `/product/jobs` | GET | 作业列表 |
-| 12 | `/product/jobs/{job_name}/start` | POST | 启动作业 |
-| 13 | `/product/jobs/{job_name}/stop` | POST | 停止作业 |
+| 2 | `/product/quotes` | GET | 实时行情快照：AkShare/AkTools provider、Demo fallback、force_live |
+| 3 | `/product/dashboard` | GET | 仪表板数据(行情+信号+因子+账户) |
+| 4 | `/product/factors/compute` | POST | 因子评分计算 |
+| 5 | `/product/jobs/backtest/start` | POST | 启动回测任务 |
+| 6 | `/product/config` | GET | 获取配置(掩码) |
+| 7 | `/product/config` | POST | 更新配置项 |
+| 8 | `/product/config/confirm-upgrade` | POST | 确认交易模式升级 |
+| 9 | `/product/config/restore-defaults` | POST | 恢复默认配置 |
+| 10 | `/product/feedback` | GET | 获取Bug列表 |
+| 11 | `/product/feedback` | POST | 提交 UI/API 自动反馈 Bug |
+| 12 | `/product/feedback/{bug_id}/status` | POST | 更新Bug状态 |
+| 13 | `/product/jobs` | GET | 作业列表 |
+| 14 | `/product/jobs/{job_name}/start` | POST | 启动作业，quote_refresh 支持 symbols/provider/allow_demo/force_live |
+| 15 | `/product/jobs/{job_name}/stop` | POST | 停止作业 |
 
 #### 产品面板（9个Tab）
 
 | # | Tab | 说明 |
 |---|-----|------|
 | 1 | 系统状态 | 健康检查+组件状态+Kill Switch |
-| 2 | 实时行情 | 10只股票行情表格+涨跌幅 |
+| 2 | 实时行情 | AkShare/AkTools 数据源选择、实时刷新、后台快照、Demo fallback 显式标注 |
 | 3 | 候选股监控 | 观察列表+信号触发 |
 | 4 | 因子分析 | 四因子评分+雷达图 |
 | 5 | 回测实验室 | 参数配置+回测结果 |
@@ -775,6 +778,29 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 | 1 | Playwright chromium 下载慢(182MB)，浏览器E2E测试跳过 | 低 | 网络恢复后运行 `python -m playwright install chromium` |
 | 2 | Demo数据为确定性预置数据，非实时行情 | 中 | 实盘环境自动切换真实数据源 |
 | 3 | 后台作业为同步执行，长时间任务可能阻塞 | 中 | Phase 6 引入异步任务队列 |
+
+### 2026-06-10 产品补强复核
+
+本次补强不改变交易安全级别，不进入自动交易；目标是让 Phase 5.5 产品交付从“静态 Demo 面板”升级为“可选择实时数据源、可刷新、可后台落盘、可自动反馈”的用户闭环。
+
+| 项目 | 结论 |
+|---|---|
+| AkShare/AkTools 实时行情 | `/product/quotes` 与 `product_app.market_data` 已统一接入 |
+| Demo fallback | API 与 UI 均显式返回/展示 `is_demo`、`fallback_demo` 或 provider 状态 |
+| 后台 quote_refresh | 已写入 `runtime/state/latest_quotes.json`，包含 provider、symbols、quotes、messages、updated_at |
+| Dashboard 交互 | Realtime Market Tab 支持数据源选择、手动刷新、后台快照启动、作业状态展示 |
+| 自动 feedback | provider 异常或空结果会写入 `feedback/bugs/open` |
+| 安全边界 | 未引入真实自动下单；人工确认仍为逐笔确认，不允许批量确认买入 |
+
+#### 复核测试
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase4_api.py tests/test_phase4_realtime_health.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py -q --basetemp=runtime\pytest-tmp
+# 17 passed
+
+.venv\Scripts\python.exe -m ruff check src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py tests\test_realtime_provider.py tests\test_product_market_data.py tests\test_product_realtime_api.py tests\test_product_service_manager_quotes.py tests\test_product_dashboard_source.py
+# All checks passed
+```
 
 ---
 

@@ -1,169 +1,241 @@
-"""AkShare 实时行情实现
+"""Realtime quote providers backed by AkShare-compatible interfaces."""
 
-通过 AkShare 的 stock_zh_a_spot_em 接口获取 A 股实时行情快照。
-通过 AkShare 的 stock_hk_spot_em 接口获取港股实时行情快照。
-"""
 from __future__ import annotations
 
 import time
-from typing import List
+from typing import Iterable
 
 import akshare as ak
 import pandas as pd
 from loguru import logger
 
-from src.data_gateway.base import MarketDataProvider
+
+A_SHARE_COLUMNS = {
+    "代码": "code",
+    "名称": "name",
+    "最新价": "last_price",
+    "涨跌幅": "pct_change",
+    "涨跌额": "change",
+    "成交量": "volume",
+    "成交额": "amount",
+    "今开": "open",
+    "最高": "high",
+    "最低": "low",
+    "昨收": "pre_close",
+    "量比": "volume_ratio",
+    "换手率": "turnover_rate",
+    "市盈率-动态": "pe_ttm",
+}
+
+HK_COLUMNS = {
+    "代码": "code",
+    "名称": "name",
+    "最新价": "last_price",
+    "涨跌幅": "pct_change",
+    "涨跌额": "change",
+    "成交量": "volume",
+    "成交额": "amount",
+    "今开": "open",
+    "最高": "high",
+    "最低": "low",
+    "昨收": "pre_close",
+}
+
+NUMERIC_COLUMNS = (
+    "last_price",
+    "pct_change",
+    "change",
+    "volume",
+    "amount",
+    "open",
+    "high",
+    "low",
+    "pre_close",
+    "volume_ratio",
+    "turnover_rate",
+    "pe_ttm",
+)
+
+
+def normalize_quote_symbol(symbol: str) -> str:
+    """Return an uppercase exchange-qualified symbol for A-share/HK quote inputs."""
+    raw = str(symbol).strip().upper()
+    if not raw:
+        return raw
+    if "." in raw:
+        code, suffix = raw.split(".", 1)
+        return f"{code}.{suffix}"
+    if len(raw) == 5 and raw.isdigit():
+        return f"{raw}.HK"
+    if raw.startswith(("5", "6", "9")):
+        return f"{raw}.SH"
+    return f"{raw}.SZ"
+
+
+def _code(symbol: str) -> str:
+    return normalize_quote_symbol(symbol).split(".", 1)[0]
 
 
 def _is_hk_symbol(symbol: str) -> bool:
-    """判断是否为港股代码（5位纯数字）"""
-    code = symbol.split(".")[0] if "." in symbol else symbol
-    return len(code) == 5 and code.isdigit()
+    return normalize_quote_symbol(symbol).endswith(".HK")
 
 
-def _map_realtime_quotes(raw: pd.DataFrame, symbols: List[str]) -> pd.DataFrame:
-    """将 AkShare 实时行情原始数据映射为标准格式"""
-    symbol_set = set(s.split(".")[0] for s in symbols)
+def _symbol_market(code: str, *, hk: bool = False) -> str:
+    if hk:
+        return "HK"
+    if str(code).startswith(("5", "6", "9")):
+        return "SH"
+    return "SZ"
 
-    col_map = {
-        "代码": "code",
-        "名称": "name",
-        "最新价": "last_price",
-        "涨跌幅": "pct_change",
-        "涨跌额": "change",
-        "成交量": "volume",
-        "成交额": "amount",
-        "今开": "open",
-        "最高": "high",
-        "最低": "low",
-        "昨收": "pre_close",
-        "量比": "volume_ratio",
-        "换手率": "turnover_rate",
-        "市盈率-动态": "pe_ttm",
-    }
 
-    df = raw.rename(columns=col_map)
+def _with_exchange(code: str, *, hk: bool = False) -> str:
+    return f"{code}.{_symbol_market(code, hk=hk)}"
 
-    if "code" in df.columns:
-        df = df[df["code"].isin(symbol_set)]
 
-    now_str = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-    df["datetime"] = now_str
-    df["delay_seconds"] = 0.0
-    df["status"] = "NORMAL"
-
-    if "pct_change" in df.columns:
-        pct = df["pct_change"].astype(float, errors="ignore")
-        # 根据代码前缀区分涨跌停幅度
-        # 创业板(300/301)、科创板(688/689): 20%
-        # ST 股: 5%
-        # 主板/中小板: 10%
-        chinext_mask = df["code"].str.startswith(("300", "301"))
-        star_mask = df["code"].str.startswith(("688", "689"))
-        st_mask = df["name"].str.contains("ST", na=False, case=False)
-
-        # 主板 10% 涨跌停
-        mainboard_mask = ~(chinext_mask | star_mask | st_mask)
-        df.loc[mainboard_mask & (pct >= 9.9), "status"] = "LIMIT_UP"
-        df.loc[mainboard_mask & (pct <= -9.9), "status"] = "LIMIT_DOWN"
-
-        # 创业板/科创板 20% 涨跌停
-        gem_star_mask = chinext_mask | star_mask
-        df.loc[gem_star_mask & (pct >= 19.9), "status"] = "LIMIT_UP"
-        df.loc[gem_star_mask & (pct <= -19.9), "status"] = "LIMIT_DOWN"
-
-        # ST 股 5% 涨跌停
-        df.loc[st_mask & (pct >= 4.9), "status"] = "LIMIT_UP"
-        df.loc[st_mask & (pct <= -4.9), "status"] = "LIMIT_DOWN"
-
-    df["symbol"] = df["code"] + ".SZ"
-    mask_sh = df["code"].str.startswith(("6",))
-    df.loc[mask_sh, "symbol"] = df.loc[mask_sh, "code"] + ".SH"
-
+def _coerce_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    for col in NUMERIC_COLUMNS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
 
-def _map_hk_quotes(raw: pd.DataFrame, symbols: List[str]) -> pd.DataFrame:
-    """将 AkShare 港股实时行情原始数据映射为标准格式"""
-    symbol_set = set(s.split(".")[0] for s in symbols)
+def _prepare_raw(raw: pd.DataFrame, col_map: dict[str, str], symbols: Iterable[str]) -> pd.DataFrame:
+    if raw is None or raw.empty:
+        return pd.DataFrame()
 
-    col_map = {
-        "代码": "code",
-        "名称": "name",
-        "最新价": "last_price",
-        "涨跌幅": "pct_change",
-        "涨跌额": "change",
-        "成交量": "volume",
-        "成交额": "amount",
-        "今开": "open",
-        "最高": "high",
-        "最低": "low",
-        "昨收": "pre_close",
-    }
+    symbol_codes = {_code(s) for s in symbols}
+    df = raw.rename(columns=col_map).copy()
+    if "code" not in df.columns:
+        return pd.DataFrame()
 
-    df = raw.rename(columns=col_map)
+    df["code"] = df["code"].astype(str).str.zfill(5)
+    a_share_mask = df["code"].str.len() == 6
+    df.loc[a_share_mask, "code"] = df.loc[a_share_mask, "code"].str[-6:]
+    df = df[df["code"].isin(symbol_codes)]
+    if df.empty:
+        return pd.DataFrame()
 
-    if "code" in df.columns:
-        df = df[df["code"].isin(symbol_set)]
+    return _coerce_numeric(df)
 
-    now_str = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-    df["datetime"] = now_str
+
+def _mark_a_share_status(df: pd.DataFrame) -> pd.DataFrame:
+    df["status"] = "NORMAL"
+    if "pct_change" not in df.columns:
+        return df
+
+    pct = pd.to_numeric(df["pct_change"], errors="coerce")
+    names = df["name"].astype(str) if "name" in df.columns else pd.Series("", index=df.index)
+
+    chinext_mask = df["code"].str.startswith(("300", "301"))
+    star_mask = df["code"].str.startswith(("688", "689"))
+    st_mask = names.str.contains("ST", na=False, case=False)
+    mainboard_mask = ~(chinext_mask | star_mask | st_mask)
+
+    df.loc[mainboard_mask & (pct >= 9.9), "status"] = "LIMIT_UP"
+    df.loc[mainboard_mask & (pct <= -9.9), "status"] = "LIMIT_DOWN"
+
+    gem_star_mask = chinext_mask | star_mask
+    df.loc[gem_star_mask & (pct >= 19.9), "status"] = "LIMIT_UP"
+    df.loc[gem_star_mask & (pct <= -19.9), "status"] = "LIMIT_DOWN"
+
+    df.loc[st_mask & (pct >= 4.9), "status"] = "LIMIT_UP"
+    df.loc[st_mask & (pct <= -4.9), "status"] = "LIMIT_DOWN"
+    return df
+
+
+def map_a_share_realtime_quotes(
+    raw: pd.DataFrame,
+    symbols: list[str],
+    *,
+    data_source: str = "akshare",
+) -> pd.DataFrame:
+    """Map AkShare/Eastmoney A-share realtime snapshots to the internal quote shape."""
+    df = _prepare_raw(raw, A_SHARE_COLUMNS, symbols)
+    if df.empty:
+        return df
+
+    df["market"] = df["code"].map(lambda c: _symbol_market(c))
+    df["symbol"] = df["code"].map(lambda c: _with_exchange(c))
+    df["datetime"] = pd.Timestamp.now(tz="Asia/Shanghai").isoformat()
+    df["delay_seconds"] = 0.0
+    df["source_volume_unit"] = "lot"
+    df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0).astype("int64") * 100
+    df["currency"] = "CNY"
+    df["timezone"] = "Asia/Shanghai"
+    df["data_source"] = data_source
+    df["updated_at"] = df["datetime"]
+    df["data_version"] = "realtime-v1"
+    df = _mark_a_share_status(df)
+    return df
+
+
+def map_hk_realtime_quotes(
+    raw: pd.DataFrame,
+    symbols: list[str],
+    *,
+    data_source: str = "akshare",
+) -> pd.DataFrame:
+    """Map AkShare HK realtime snapshots to the internal quote shape."""
+    df = _prepare_raw(raw, HK_COLUMNS, symbols)
+    if df.empty:
+        return df
+
+    df["market"] = "HK"
+    df["symbol"] = df["code"].map(lambda c: _with_exchange(c, hk=True))
+    df["datetime"] = pd.Timestamp.now(tz="Asia/Hong_Kong").isoformat()
     df["delay_seconds"] = 0.0
     df["status"] = "NORMAL"
-    df["symbol"] = df["code"] + ".HK"
-
+    df["source_volume_unit"] = "share"
+    df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0).astype("int64")
+    df["currency"] = "HKD"
+    df["timezone"] = "Asia/Hong_Kong"
+    df["data_source"] = data_source
+    df["updated_at"] = df["datetime"]
+    df["data_version"] = "realtime-v1"
     return df
 
 
 class AkShareRealtimeProvider:
-    """AkShare 实时行情 Provider
-
-    使用 stock_zh_a_spot_em 获取 A 股实时快照，
-    使用 stock_hk_spot_em 获取港股实时快照，然后过滤目标股票。
-    """
+    """Fetch realtime A-share and HK quote snapshots through AkShare."""
 
     def __init__(self, request_interval: float = 2.0):
         self._request_interval = request_interval
         self._last_request_time = 0.0
 
-    def _rate_limit(self):
+    def _rate_limit(self) -> None:
         elapsed = time.time() - self._last_request_time
         if elapsed < self._request_interval:
             time.sleep(self._request_interval - elapsed)
         self._last_request_time = time.time()
 
-    def get_realtime_quotes(self, symbols: List[str]) -> pd.DataFrame:
-        a_symbols = [s for s in symbols if not _is_hk_symbol(s)]
-        hk_symbols = [s for s in symbols if _is_hk_symbol(s)]
+    def get_realtime_quotes(self, symbols: list[str]) -> pd.DataFrame:
+        normalized = [normalize_quote_symbol(s) for s in symbols if str(s).strip()]
+        a_symbols = [s for s in normalized if not _is_hk_symbol(s)]
+        hk_symbols = [s for s in normalized if _is_hk_symbol(s)]
+        frames: list[pd.DataFrame] = []
 
-        results: list[pd.DataFrame] = []
-
-        # A 股行情
         if a_symbols:
             try:
                 self._rate_limit()
                 logger.info(f"Fetching A-share realtime quotes for {len(a_symbols)} symbols")
-                raw = ak.stock_zh_a_spot_em()
-                if raw is not None and not raw.empty:
-                    results.append(_map_realtime_quotes(raw, a_symbols))
-                else:
-                    logger.warning("Empty A-share realtime data returned")
-            except Exception as e:
-                logger.error(f"Failed to fetch A-share realtime quotes: {e}")
+                frames.append(map_a_share_realtime_quotes(ak.stock_zh_a_spot_em(), a_symbols))
+            except Exception as exc:
+                logger.error(f"Failed to fetch A-share realtime quotes: {exc}")
 
-        # 港股行情
         if hk_symbols:
             try:
                 self._rate_limit()
                 logger.info(f"Fetching HK realtime quotes for {len(hk_symbols)} symbols")
-                raw = ak.stock_hk_spot_em()
-                if raw is not None and not raw.empty:
-                    results.append(_map_hk_quotes(raw, hk_symbols))
-                else:
-                    logger.warning("Empty HK realtime data returned")
-            except Exception as e:
-                logger.error(f"Failed to fetch HK realtime quotes: {e}")
+                frames.append(map_hk_realtime_quotes(ak.stock_hk_spot_em(), hk_symbols))
+            except Exception as exc:
+                logger.error(f"Failed to fetch HK realtime quotes: {exc}")
 
-        if not results:
+        frames = [frame for frame in frames if frame is not None and not frame.empty]
+        if not frames:
             return pd.DataFrame()
-        return pd.concat(results, ignore_index=True)
+        return pd.concat(frames, ignore_index=True)
+
+
+def get_realtime_quotes(symbols: list[str]) -> pd.DataFrame:
+    """Backward-compatible convenience wrapper used by product routes."""
+    return AkShareRealtimeProvider().get_realtime_quotes(symbols)

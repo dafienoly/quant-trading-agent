@@ -682,3 +682,51 @@ git push -u origin feature/phase4-fastapi
 | v0.4.0 | 2026-06-08 | Phase 3 | 回测与评估 |
 | v0.4.1 | 2026-06-08 | Phase 3 审计 | 审计整改 (248/248 测试通过) |
 | v0.5.0 | 2026-06-08 | Phase 4 Risk-First | 运行时风控+数据健康门禁+只读监控器+API (262/262 测试通过) |
+| v0.5.6 | 2026-06-10 | Phase 5.5 产品补强 | AkShare/AkTools 产品行情门面、实时行情 API、后台 quote_refresh 快照、9 Tab Dashboard 交互补强 (17 项聚焦测试通过) |
+
+---
+
+## 十一、2026-06-10 产品实时行情与 Dashboard 补强
+
+### 11.1 背景
+
+Phase 5.5 已具备一键启动与产品 Demo，但用户侧核心体验仍需要从“静态 Demo 表格”升级为“可选择数据源、可触发实时刷新、可落盘后台快照”的产品闭环。本次修改保持默认 `LEVEL_1_SIGNAL_ONLY`，不引入任何真实自动下单能力。
+
+### 11.2 完成内容
+
+1. 新增 `src/product_app/market_data.py`，统一产品侧 AkShare/AkTools provider 构建、symbols 规范化、Demo fallback、自动 feedback Bug 生成。
+2. `/product/quotes` 接入统一行情门面，支持 `provider=akshare|aktools`、`allow_demo`、`force_live` 参数。
+3. `ServiceManager.quote_refresh` 不再只写 `source=demo`，改为写入 `runtime/state/latest_quotes.json`，包含 `status/provider/is_demo/symbols/quotes/messages/updated_at`。
+4. Streamlit 产品 Dashboard 的 `Realtime Market` Tab 增加数据源选择、实时刷新、后台快照启动、后台作业状态展示。
+5. Dashboard 保留人工确认安全边界：不暴露批量买入确认，不启用 LEVEL_3 自动交易。
+6. 新增聚焦测试：
+   - `tests/test_product_market_data.py`
+   - `tests/test_product_realtime_api.py`
+   - `tests/test_product_service_manager_quotes.py`
+   - `tests/test_realtime_provider.py`
+   - `tests/test_product_dashboard_source.py`
+
+### 11.3 后续 Agent 必须遵守的开发准则
+
+1. 修改 `src/data_gateway/realtime_provider.py` 或 `src/data_gateway/aktools_provider.py` 时，必须确认 volume 内部单位仍为股，并保留 `data_source/updated_at/data_version/currency/timezone`。
+2. 修改 `/product/quotes`、`product_app.market_data` 或 `ServiceManager.quote_refresh` 时，必须同时验证 API 与后台 `latest_quotes.json` 快照。
+3. Dashboard 新增交易相关控件时，必须保持 LEVEL_3 不默认暴露，买入订单不允许批量确认。
+4. AkShare/AkTools 失败时不得静默吞错，必须生成 `feedback/bugs/open` 下的 Bug 清单；允许 Demo fallback，但 UI/API 必须显式标注 `is_demo=true` 或 `fallback_demo`。
+5. 触碰本次范围后必须运行：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase4_api.py tests/test_phase4_realtime_health.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py -q --basetemp=runtime\pytest-tmp
+.venv\Scripts\python.exe -m ruff check src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py tests\test_realtime_provider.py tests\test_product_market_data.py tests\test_product_realtime_api.py tests\test_product_service_manager_quotes.py tests\test_product_dashboard_source.py
+.venv\Scripts\python.exe -m py_compile src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py
+```
+
+### 11.4 本次验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| 聚焦 pytest | 17 passed |
+| ruff touched scope | All checks passed |
+| py_compile touched scope | passed |
+| API smoke | `/product/quotes` 返回 HTTP 200，Demo fallback 状态显式 |
+| Streamlit smoke | `http://127.0.0.1:8771` 返回 HTTP 200 |
+| Browser smoke | Realtime Market Tab、数据源选择、刷新、后台快照按钮可见，quote_refresh 状态可见 |

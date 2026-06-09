@@ -11,11 +11,22 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from loguru import logger
 
-from src.config.settings import MAX_TRADING_LEVEL
+from src.config.settings import DEFAULT_DATA_PROVIDER
+from src.product_app.market_data import fetch_product_quotes
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
 
 
 class JobState(str, Enum):
@@ -174,8 +185,14 @@ class ServiceManager:
 
         if job_name == "quote_refresh":
             logger.info(f"[{now}] 行情刷新作业执行")
-            # 写入状态文件
-            self._write_state_file("latest_quotes.json", {"updated_at": now, "source": "demo"})
+            quote_result = fetch_product_quotes(
+                params.get("symbols", ""),
+                provider=str(params.get("provider", DEFAULT_DATA_PROVIDER)),
+                allow_demo=_as_bool(params.get("allow_demo"), default=True),
+                force_live=_as_bool(params.get("force_live"), default=False),
+            )
+            quote_result["updated_at"] = now
+            self._write_state_file("latest_quotes.json", quote_result)
 
         elif job_name == "watchlist_monitor":
             logger.info(f"[{now}] 候选股监控作业执行")
