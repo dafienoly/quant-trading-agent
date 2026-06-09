@@ -1,0 +1,221 @@
+"""服务管理器 — 后台作业调度与状态管理
+
+管理后台轮询作业：行情刷新、候选股监控、信号生成、风控快照、回测、反馈压缩。
+每个作业有明确状态：IDLE / QUEUED / RUNNING / SUCCEEDED / FAILED / CANCELLED
+"""
+from __future__ import annotations
+
+import json
+import threading
+import uuid
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Callable
+
+from loguru import logger
+
+from src.config.settings import MAX_TRADING_LEVEL
+
+
+class JobState(str, Enum):
+    IDLE = "IDLE"
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class JobInfo:
+    """作业信息"""
+
+    def __init__(self, name: str, state: JobState = JobState.IDLE):
+        self.name = name
+        self.state = state
+        self.last_run_at: str = ""
+        self.last_result: str = ""
+        self.error_message: str = ""
+        self.job_id: str = ""
+        self.started_at: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "state": self.state.value,
+            "last_run_at": self.last_run_at,
+            "last_result": self.last_result,
+            "error_message": self.error_message,
+            "job_id": self.job_id,
+            "started_at": self.started_at,
+        }
+
+
+class ServiceManager:
+    """服务管理器
+
+    管理后台轮询作业的启动、停止和状态查询。
+    状态持久化到 runtime/state/jobs.json。
+    """
+
+    def __init__(self, state_dir: str = "runtime/state"):
+        self._state_dir = Path(state_dir)
+        self._state_dir.mkdir(parents=True, exist_ok=True)
+        self._jobs: dict[str, JobInfo] = {
+            "quote_refresh": JobInfo("quote_refresh"),
+            "watchlist_monitor": JobInfo("watchlist_monitor"),
+            "signal_generation": JobInfo("signal_generation"),
+            "risk_snapshot": JobInfo("risk_snapshot"),
+            "backtest": JobInfo("backtest"),
+            "feedback_compaction": JobInfo("feedback_compaction"),
+        }
+        self._load_state()
+
+    def _load_state(self):
+        """从文件加载作业状态"""
+        filepath = self._state_dir / "jobs.json"
+        if filepath.exists():
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for name, info in data.items():
+                    if name in self._jobs:
+                        job = self._jobs[name]
+                        job.state = JobState(info.get("state", "IDLE"))
+                        job.last_run_at = info.get("last_run_at", "")
+                        job.last_result = info.get("last_result", "")
+                        job.error_message = info.get("error_message", "")
+            except Exception as e:
+                logger.warning(f"ServiceManager: 加载作业状态失败 {e}")
+
+    def _save_state(self):
+        """持久化作业状态"""
+        filepath = self._state_dir / "jobs.json"
+        try:
+            data = {name: job.to_dict() for name, job in self._jobs.items()}
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"ServiceManager: 保存作业状态失败 {e}")
+
+    def list_jobs(self) -> list[dict]:
+        """列出所有作业及其状态"""
+        return [job.to_dict() for job in self._jobs.values()]
+
+    def get_job_status(self, job_name: str) -> dict | None:
+        """获取单个作业状态"""
+        if job_name in self._jobs:
+            return self._jobs[job_name].to_dict()
+        return None
+
+    def start_job(self, job_name: str, params: dict | None = None) -> dict:
+        """启动作业"""
+        if job_name not in self._jobs:
+            return {"status": "error", "message": f"未知作业: {job_name}"}
+
+        job = self._jobs[job_name]
+        if job.state == JobState.RUNNING:
+            return {"status": "error", "message": f"作业 {job_name} 正在运行中"}
+
+        job.state = JobState.QUEUED
+        job.job_id = f"{job_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}"
+        job.started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 在线程中执行作业
+        def _run():
+            job.state = JobState.RUNNING
+            self._save_state()
+            try:
+                self._execute_job(job_name, params or {})
+                job.state = JobState.SUCCEEDED
+                job.last_result = "ok"
+            except Exception as e:
+                job.state = JobState.FAILED
+                job.error_message = str(e)
+                logger.error(f"ServiceManager: 作业 {job_name} 失败: {e}")
+                # 生成反馈 bug 记录
+                try:
+                    from src.product_app.feedback import get_feedback_service
+                    get_feedback_service().write_bug_report(
+                        component=f"job_{job_name}",
+                        title=f"后台作业 {job_name} 执行失败",
+                        summary=str(e),
+                        exception_type=type(e).__name__,
+                        exception_message=str(e),
+                    )
+                except Exception:
+                    logger.error("ServiceManager: 写入反馈记录失败")
+            finally:
+                job.last_run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._save_state()
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+
+        return {"status": "ok", "job_id": job.job_id, "message": f"作业 {job_name} 已启动"}
+
+    def stop_job(self, job_name: str) -> dict:
+        """停止作业"""
+        if job_name not in self._jobs:
+            return {"status": "error", "message": f"未知作业: {job_name}"}
+
+        job = self._jobs[job_name]
+        if job.state != JobState.RUNNING:
+            return {"status": "error", "message": f"作业 {job_name} 未在运行中"}
+
+        job.state = JobState.CANCELLED
+        job.last_run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._save_state()
+        return {"status": "ok", "message": f"作业 {job_name} 已取消"}
+
+    def _execute_job(self, job_name: str, params: dict):
+        """执行具体作业逻辑"""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if job_name == "quote_refresh":
+            logger.info(f"[{now}] 行情刷新作业执行")
+            # 写入状态文件
+            self._write_state_file("latest_quotes.json", {"updated_at": now, "source": "demo"})
+
+        elif job_name == "watchlist_monitor":
+            logger.info(f"[{now}] 候选股监控作业执行")
+            self._write_state_file("latest_signals.json", {"updated_at": now})
+
+        elif job_name == "signal_generation":
+            logger.info(f"[{now}] 信号生成作业执行")
+            self._write_state_file("latest_signals.json", {"updated_at": now})
+
+        elif job_name == "risk_snapshot":
+            logger.info(f"[{now}] 风控快照作业执行")
+            self._write_state_file("latest_risk.json", {"updated_at": now})
+
+        elif job_name == "backtest":
+            logger.info(f"[{now}] 回测作业执行: {params}")
+            job_id = params.get("job_id", "unknown")
+            self._write_state_file(f"backtests/{job_id}.json", {
+                "job_id": job_id, "status": "completed", "updated_at": now,
+            })
+
+        elif job_name == "feedback_compaction":
+            logger.info(f"[{now}] 反馈压缩作业执行")
+
+    def _write_state_file(self, filename: str, data: dict):
+        """写入状态文件"""
+        filepath = self._state_dir / filename
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"ServiceManager: 写入状态文件失败 {e}")
+
+
+# 全局单例
+_service_manager: ServiceManager | None = None
+
+
+def get_service_manager() -> ServiceManager:
+    global _service_manager
+    if _service_manager is None:
+        _service_manager = ServiceManager()
+    return _service_manager

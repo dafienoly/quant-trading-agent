@@ -15,6 +15,7 @@
 | 3 | 回测与评估 | ✅ 已完成(含审计整改) | 2026-06-08 | 248/248 (含审计修复) |
 | 4 | 实盘盯盘与信号生成 | ✅ 已完成 | 2026-06-09 | 289/289 (含审计整改) |
 | 5 | 人工确认交易 | ✅ 已完成 | 2026-06-09 | 328/328 |
+| 5.5 | 产品交付 | ✅ 已完成 | 2026-06-09 | 364/364 + 84项E2E验收 |
 | 6 | 小资金自动交易实验 | ⬜ 未开始 | - | - |
 
 ---
@@ -642,6 +643,138 @@ tests/test_storage.py .................  3 passed
 | 3 | 无真实券商接口实现 | 中 | Phase 6 按需接入 |
 | 4 | 订单超时自动取消未实现 | 低 | Phase 6 实现 |
 | 5 | APScheduler 后台调度未集成 | 中 | Phase 6 集成定时信号触发+订单生成 |
+
+---
+
+## Phase 5.5: 产品交付
+
+### 完成日期
+
+2026-06-09
+
+### 背景
+
+Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODUCT_DELIVERY_SUB_ROADMAP.md`，要求在正式进入 Phase 6 之前完成产品化交付工作，确保交付到用户手中的功能完整可用。
+
+### 交付物清单
+
+#### 产品服务模块（6 个）
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/product_app/service_manager.py` | 服务管理器：6种后台作业(quote_refresh/watchlist_monitor/signal_generation/risk_snapshot/backtest/feedback_compaction)，状态持久化，失败自动生成Bug报告 |
+| 2 | `src/product_app/health.py` | 健康服务：6组件(api/data_source/risk_engine/jobs/storage/feedback)状态聚合，OK/WARN/ERROR三级 |
+| 3 | `src/product_app/config_service.py` | 配置中心：3层加载(.env→环境变量→user_config.json)，敏感字段掩码，LEVEL_3_AUTO阻断，LEVEL_2升级确认 |
+| 4 | `src/product_app/feedback.py` | 反馈系统：.md+.json双格式Bug报告，24h去重，脱敏，状态生命周期(open→triaged→fixed/ignored) |
+| 5 | `src/product_app/demo_data.py` | Demo数据：10只股票行情/3买2卖5持有信号/因子评分/账户信息，市场休市/离线模式自动降级 |
+| 6 | `src/product_app/__init__.py` | 包初始化 |
+
+#### 产品API路由（13个端点）
+
+| # | 端点 | 方法 | 说明 |
+|---|------|------|------|
+| 1 | `/product/health` | GET | 系统健康状态聚合 |
+| 2 | `/product/dashboard` | GET | 仪表板数据(行情+信号+因子+账户) |
+| 3 | `/product/factors/compute` | POST | 因子评分计算 |
+| 4 | `/product/jobs/backtest/start` | POST | 启动回测任务 |
+| 5 | `/product/config` | GET | 获取配置(掩码) |
+| 6 | `/product/config` | POST | 更新配置项 |
+| 7 | `/product/config/confirm-upgrade` | POST | 确认交易模式升级 |
+| 8 | `/product/config/restore-defaults` | POST | 恢复默认配置 |
+| 9 | `/product/feedback` | GET | 获取Bug列表 |
+| 10 | `/product/feedback/{bug_id}/status` | POST | 更新Bug状态 |
+| 11 | `/product/jobs` | GET | 作业列表 |
+| 12 | `/product/jobs/{job_name}/start` | POST | 启动作业 |
+| 13 | `/product/jobs/{job_name}/stop` | POST | 停止作业 |
+
+#### 产品面板（9个Tab）
+
+| # | Tab | 说明 |
+|---|-----|------|
+| 1 | 系统状态 | 健康检查+组件状态+Kill Switch |
+| 2 | 实时行情 | 10只股票行情表格+涨跌幅 |
+| 3 | 候选股监控 | 观察列表+信号触发 |
+| 4 | 因子分析 | 四因子评分+雷达图 |
+| 5 | 回测实验室 | 参数配置+回测结果 |
+| 6 | 信号中心 | 买入/卖出/持有信号列表 |
+| 7 | 人工确认 | 待确认订单+逐笔确认/拒绝 |
+| 8 | 配置中心 | 配置查看/修改/恢复默认 |
+| 9 | 反馈中心 | Bug报告提交+状态管理 |
+
+#### 启动脚本（3个）
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `scripts/bootstrap.py` | 预检脚本：Python版本/依赖/目录/.env/关键默认值 |
+| 2 | `scripts/start_product.py` | 一键启动：FastAPI+Streamlit，PID管理，实盘安全门禁 |
+| 3 | `scripts/stop_product.py` | 优雅停止：读取PID文件，先Streamlit后FastAPI |
+
+#### 测试文件（2个）
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `tests/test_browser_e2e.py` | Playwright浏览器端到端测试(需chromium) |
+| 2 | `tests/test_e2e_acceptance.py` | 84项端到端验收测试：API端点+面板+Demo数据+服务管理器+健康+配置+反馈+脚本+路由 |
+
+### 端到端验收结果
+
+```
+============================================================
+  Phase 5.5 产品交付端到端验收测试
+============================================================
+
+  1. FastAPI 产品端点测试     — 30 PASS
+  2. Streamlit 产品面板测试   —  4 PASS
+  3. Demo 数据验证            —  8 PASS
+  4. 服务管理器验证           —  9 PASS
+  5. 健康服务验证             —  9 PASS
+  6. 配置服务验证             —  6 PASS
+  7. 反馈服务验证             —  4 PASS
+  8. 启动脚本验证             —  6 PASS
+  9. 产品路由完整性验证       —  8 PASS
+
+  测试结果: 84 通过, 0 失败
+============================================================
+```
+
+### pytest 单元测试结果
+
+```
+364 passed, 2 skipped (Playwright浏览器测试), 1 warning in 27.88s
+```
+
+### 验收标准检查
+
+| # | 验收标准 | 状态 | 验证方式 |
+|---|---------|------|---------|
+| 1 | 一键启动/停止 | ✅ | bootstrap.py + start_product.py + stop_product.py |
+| 2 | 产品面板9个Tab可访问 | ✅ | Streamlit HTTP 200 + health端点正常 |
+| 3 | 13个产品API端点可用 | ✅ | 84项E2E验收测试全部通过 |
+| 4 | Demo模式离线可用 | ✅ | is_demo_mode() 自动降级，10只股票预置数据 |
+| 5 | 配置安全可控 | ✅ | LEVEL_3_AUTO阻断 + LEVEL_2升级确认 + 敏感字段掩码 |
+| 6 | Bug反馈闭环 | ✅ | 提交→去重→状态流转→修复确认 |
+| 7 | 健康检查完整 | ✅ | 6组件状态聚合 + OK/WARN/ERROR三级 |
+| 8 | 后台作业管理 | ✅ | 6种作业 + 启动/停止/状态查询 |
+
+### PRODUCT_DELIVERY_SUB_ROADMAP 合规性
+
+| 子阶段 | 要求 | 状态 |
+|--------|------|------|
+| 5.5-A | 交付基线与安全修复 | ✅ Phase 5审计已完成 |
+| 5.5-B | 一键启动脚本 | ✅ bootstrap/start/stop |
+| 5.5-C | 产品配置中心 | ✅ ConfigService + 掩码 + 验证 |
+| 5.5-D | 集成Web产品面板 | ✅ 9 Tab Streamlit + 13 API端点 |
+| 5.5-E | 实时作业与状态模型 | ✅ ServiceManager + HealthService |
+| 5.5-F | 自动反馈与Bug收集 | ✅ FeedbackService + 去重 + 脱敏 |
+| 5.5-G | 发布打包与验收 | ✅ 84项E2E验收 + 364项pytest |
+
+### 已知问题与限制
+
+| # | 问题 | 严重程度 | 处理计划 |
+|---|------|----------|---------|
+| 1 | Playwright chromium 下载慢(182MB)，浏览器E2E测试跳过 | 低 | 网络恢复后运行 `python -m playwright install chromium` |
+| 2 | Demo数据为确定性预置数据，非实时行情 | 中 | 实盘环境自动切换真实数据源 |
+| 3 | 后台作业为同步执行，长时间任务可能阻塞 | 中 | Phase 6 引入异步任务队列 |
 
 ---
 

@@ -26,6 +26,10 @@ def create_app(
     _signal_service = signal_service
     _execution_service = execution_service
 
+    # 注册产品路由
+    from src.api.product_routes import router as product_router
+    app.include_router(product_router, prefix="/product", tags=["product"])
+
     @app.get("/health")
     def health() -> dict:
         return {
@@ -174,3 +178,7 @@ def create_app(
             pass
 
     return app
+
+
+# Module-level app instance for uvicorn
+app = create_app()
