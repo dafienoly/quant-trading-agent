@@ -24,8 +24,8 @@ if PROJECT_ROOT not in sys.path:
 
 import requests
 
-BASE_API = "http://localhost:8001"
-BASE_UI = "http://localhost:8501"
+BASE_API = os.environ.get("API_BASE_URL", "http://localhost:8000")
+BASE_UI = os.environ.get("UI_BASE_URL", "http://localhost:8501")
 SCREENSHOT_DIR = "screenshots"
 
 PASSED = 0
@@ -152,9 +152,9 @@ def verify_api_endpoints():
     except Exception as e:
         check("/product/jobs/backtest/start", False, str(e))
 
-    # 1.10 配置更新
+    # 1.10 配置更新 (使用安全白名单内的键)
     try:
-        r = requests.post(f"{BASE_API}/product/config?key=TEST_KEY&value=test_value", timeout=5)
+        r = requests.post(f"{BASE_API}/product/config?key=LOG_LEVEL&value=DEBUG", timeout=5)
         check("POST /product/config 返回200", r.status_code == 200, f"status={r.status_code}")
     except Exception as e:
         check("POST /product/config", False, str(e))
@@ -335,8 +335,8 @@ def verify_config_service():
         masked = cs.get_config(masked=True)
         check("获取掩码配置成功", masked is not None, "None")
 
-        # 测试配置更新
-        result = cs.update_config("TEST_KEY", "test_value")
+        # 测试配置更新 (使用安全白名单内的键)
+        result = cs.update_config("LOG_LEVEL", "DEBUG")
         check("更新配置成功", result, f"result={result}")
 
         # 测试配置验证

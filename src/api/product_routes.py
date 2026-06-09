@@ -73,7 +73,8 @@ _config_service = get_config_service()
 @router.get("/health")
 def product_health() -> dict:
     """产品健康检查端点"""
-    risk_decision = _risk_engine.check_realtime_snapshot(quotes=[])
+    kill_switch = _risk_engine.kill_switch
+    risk_status = "BLOCK" if kill_switch.active else "OK"
     demo = is_demo_mode()
 
     return {
@@ -81,7 +82,7 @@ def product_health() -> dict:
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "api_status": "running",
         "data_source": "demo" if demo else "akshare",
-        "risk_status": "OK" if risk_decision.risk_pass else "BLOCK",
+        "risk_status": risk_status,
         "trading_mode": MAX_TRADING_LEVEL,
         "is_live": ENABLE_LIVE_TRADING,
         "is_demo": demo,
@@ -156,15 +157,8 @@ def product_dashboard() -> dict:
             "status": quote_match.get("status", "UNKNOWN") if quote_match else "UNKNOWN",
         })
 
-    # 待确认订单
+    # 待确认订单（ExecutionService 未注入，需通过 /orders/pending 端点直接获取）
     pending_orders = []
-    try:
-        import requests as req
-        resp = req.get("http://localhost:8000/orders/pending", timeout=3)
-        if resp.status_code == 200:
-            pending_orders = resp.json().get("orders", [])
-    except Exception:
-        pass
 
     return {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

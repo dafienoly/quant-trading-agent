@@ -14,21 +14,19 @@ def render_risk_status(risk_engine: RuntimeRiskEngine):
     """渲染风控状态面板"""
     st.subheader("风控状态")
 
-    decision = risk_engine.check_realtime_snapshot(quotes=[])
+    kill_switch_active = risk_engine.kill_switch.active
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        status_color = "green" if decision.risk_pass else "red"
-        st.markdown(f"**风控状态:** :{status_color}[{'通过' if decision.risk_pass else '阻断'}]")
+        status_color = "green" if not kill_switch_active else "red"
+        status_text = "风控正常" if not kill_switch_active else "Kill Switch 已激活"
+        st.markdown(f"**风控状态:** :{status_color}[{status_text}]")
     with col2:
-        st.markdown(f"**交易模式:** {decision.trading_mode}")
+        st.markdown(f"**交易模式:** {risk_engine.kill_switch.reason or '正常'}")
     with col3:
         st.markdown(f"**实盘交易:** {'启用' if ENABLE_LIVE_TRADING else '禁用'}")
 
-    if decision.messages:
-        st.warning(" / ".join(decision.messages))
-
-    if risk_engine.kill_switch.active:
+    if kill_switch_active:
         st.error(f"Kill Switch 已激活: {risk_engine.kill_switch.reason}")
 
 
@@ -160,31 +158,10 @@ def _fetch_signals_from_api() -> list[dict]:
     return []
 
 
-def main():
-    st.set_page_config(page_title="量化交易盯盘", layout="wide")
-    st.title("量化交易盯盘面板")
-
-    st.sidebar.header("系统信息")
-    st.sidebar.markdown(f"- 交易模式: `{MAX_TRADING_LEVEL}`")
-    st.sidebar.markdown(f"- 实盘交易: `{'启用' if ENABLE_LIVE_TRADING else '禁用'}`")
-    st.sidebar.markdown(f"- 下单确认: `{'可用' if MAX_TRADING_LEVEL in ('LEVEL_2_HUMAN_CONFIRM', 'LEVEL_3_AUTO') else '不可用'}`")
-
-    risk_engine = RuntimeRiskEngine()
-
-    tab1, tab2, tab3, tab4 = st.tabs(["风控状态", "信号列表", "候选股", "订单确认"])
-
-    with tab1:
-        render_risk_status(risk_engine)
-
-    with tab2:
-        signals = _fetch_signals_from_api()
-        render_signal_panel(signals)
-
-    with tab3:
-        render_watchlist()
-
-    with tab4:
-        render_order_confirmation()
+def main() -> None:
+    """主入口 — 重定向到产品仪表板"""
+    from src.ui_report.product_dashboard import main as product_main
+    product_main()
 
 
 if __name__ == "__main__":

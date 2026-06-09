@@ -182,14 +182,13 @@ def main() -> None:
     # --- Step 5: Start services ---
     api_cmd = [
         sys.executable, "-m", "uvicorn",
-        "src.api.app:create_app",
-        "--factory",
+        "src.api.app:app",
         "--host", "0.0.0.0",
         "--port", str(api_port),
     ]
     streamlit_cmd = [
         sys.executable, "-m", "streamlit", "run",
-        str(PROJECT_ROOT / "src" / "ui_report" / "dashboard.py"),
+        str(PROJECT_ROOT / "src" / "ui_report" / "product_dashboard.py"),
         "--server.port", str(streamlit_port),
         "--server.headless", "true",
     ]
