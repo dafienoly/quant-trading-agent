@@ -19,6 +19,10 @@ env/
 data/raw/
 data/cleaned/
 data/backtest_results/
+data/trade_records/
+
+# Trae/Claude IDE
+.claude/
 
 # 日志
 logs/*.log

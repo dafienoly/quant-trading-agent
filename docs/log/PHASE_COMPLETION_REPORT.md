@@ -13,8 +13,8 @@
 | 1 | 数据层与股票池 | ✅ 已完成 | 2026-06-08 | 74/74 (含审计修复) |
 | 2 | 因子与策略评分 | ✅ 已完成 | 2026-06-08 | 148/148 (含审计修复) |
 | 3 | 回测与评估 | ✅ 已完成(含审计整改) | 2026-06-08 | 248/248 (含审计修复) |
-| 4 | 实盘盯盘与信号生成 | ✅ 已完成 | 2026-06-08 | 271/271 |
-| 5 | 人工确认交易 | ⬜ 未开始 | - | - |
+| 4 | 实盘盯盘与信号生成 | ✅ 已完成 | 2026-06-09 | 289/289 (含审计整改) |
+| 5 | 人工确认交易 | ✅ 已完成 | 2026-06-09 | 328/328 |
 | 6 | 小资金自动交易实验 | ⬜ 未开始 | - | - |
 
 ---
@@ -543,7 +543,105 @@ tests/test_storage.py .................  3 passed
 
 ## Phase 5: 人工确认交易
 
-> ⬜ 未开始
+### 完成日期
+
+2026-06-09
+
+### 交付物清单
+
+#### 源代码文件（5 个）
+
+| # | 文件 | 行数 | 说明 |
+|---|------|------|------|
+| 1 | `src/models/schemas.py` (扩展) | ~80 | 新增 OrderDraft/TradeRecord/AccountInfo/Position 模型，Order 模型扩展字段 |
+| 2 | `src/execution_engine/broker_adapter.py` | ~210 | BrokerAdapter 抽象基类 + PaperBroker 模拟交易（含涨跌停/停牌/资金检查/手续费/印花税） |
+| 3 | `src/execution_engine/order_checker.py` | ~170 | 订单检查器：创业板/科创板禁止买入/黑名单/交易时段/价格/数量/资金/持仓检查 |
+| 4 | `src/execution_engine/execution_service.py` | ~210 | 执行服务：信号→草稿→风控→检查→确认→执行完整生命周期 |
+| 5 | `src/execution_engine/trade_recorder.py` | ~120 | 成交记录器：JSON持久化/当日摘要/信号链路追溯 |
+
+#### API 扩展
+
+| # | 端点 | 方法 | 说明 |
+|---|------|------|------|
+| 1 | `/orders/pending` | GET | 查询待确认订单列表 |
+| 2 | `/orders/{order_id}` | GET | 查询订单详情 |
+| 3 | `/orders/{order_id}/confirm` | POST | 确认订单（逐笔确认，禁止一键确认） |
+| 4 | `/orders/{order_id}/reject` | POST | 拒绝订单 |
+| 5 | `/orders/{order_id}/cancel` | POST | 撤销订单 |
+| 6 | `/account` | GET | 查询账户信息 |
+| 7 | `/positions` | GET | 查询持仓 |
+
+#### Streamlit 面板扩展
+
+| # | Tab | 说明 |
+|---|-----|------|
+| 1 | 订单确认 | 新增 Tab，展示待确认订单，逐笔确认/拒绝按钮 |
+
+#### 测试文件（3 个，39 个测试用例）
+
+| # | 文件 | 测试数 | 覆盖范围 |
+|---|------|--------|---------|
+| 1 | `tests/test_phase5_paper_broker.py` | 11 | 买入/卖出/无持仓/资金不足/涨停/跌停/停牌/超卖/账户/成交记录/清仓 |
+| 2 | `tests/test_phase5_order_checker.py` | 14 | 通过/创业板/科创板/黑名单/非交易时段/零价/零股/资金调整/无持仓/超卖/数量计算/交易时段/尾盘 |
+| 3 | `tests/test_phase5_execution.py` | 14 | LEVEL1禁止/LEVEL2创建/风控阻断/确认/拒绝/撤销/API待确认/API确认/API拒绝/API账户/API持仓/API详情/API不存在/无服务 |
+
+### 测试结果
+
+```
+328 passed in 22.36s
+```
+
+**通过率: 328/328 (100%)**
+
+### 验收标准检查
+
+| # | 验收标准 | 状态 | 验证方式 |
+|---|---------|------|---------|
+| 1 | 订单生命周期完整 | ✅ | CREATED → RISK_CHECKED → CONFIRMED → SENT → FILLED/REJECTED |
+| 2 | LEVEL_1 模式不生成订单 | ✅ | signal_to_draft() 返回 None |
+| 3 | LEVEL_2 人工确认模式 | ✅ | 创建订单后需 confirm_order() 才执行 |
+| 4 | 风控不通过不能下单 | ✅ | risk_decision.can_generate_signal=False 时 create_order() 返回 None |
+| 5 | 禁止一键确认 | ✅ | 每笔订单必须单独确认，无批量确认接口 |
+| 6 | 创业板/科创板禁止买入 | ✅ | OrderChecker 检查 is_excluded() |
+| 7 | 交易时段检查 | ✅ | 非交易时段拒绝下单，尾盘禁止开新仓 |
+| 8 | 模拟交易完整 | ✅ | PaperBroker 含涨跌停/停牌/资金/持仓/手续费/印花税 |
+| 9 | 成交记录可追溯 | ✅ | TradeRecorder 按 signal_id 追溯交易链路 |
+| 10 | 订单包含完整信息 | ✅ | Order 包含 stock_name/sector/stop_loss/take_profit/risk_note |
+
+### EXECUTION_POLICY 合规性检查
+
+| # | EXECUTION_POLICY 要求 | 状态 | 备注 |
+|---|----------------------|------|------|
+| 1 | 订单必须包含完整信息 | ✅ | OrderDraft → Order 含全部字段 |
+| 2 | LEVEL_1 不生成订单 | ✅ | signal_to_draft() 返回 None |
+| 3 | 订单生命周期管理 | ✅ | 8 种状态完整流转 |
+| 4 | 价格合理性检查 | ✅ | OrderChecker 检查 price > 0 |
+| 5 | 人工确认逐笔操作 | ✅ | 禁止一键确认，每笔单独操作 |
+| 6 | BrokerAdapter 抽象 | ✅ | 抽象基类 + PaperBroker 实现 |
+| 7 | 交易时段控制 | ✅ | A股 9:30-11:30/13:00-15:00，尾盘14:55禁止开新仓 |
+| 8 | 非交易时间不下单 | ✅ | OrderChecker 检查 is_trading_hours() |
+| 9 | 模拟交易模拟流动性 | ✅ | 涨停不买/跌停不卖/停牌不成交 |
+| 10 | 禁止创业板/科创板 | ✅ | OrderChecker + is_excluded() |
+
+### 安全约束检查
+
+| # | 安全约束 | 状态 | 备注 |
+|---|---------|------|------|
+| 1 | 默认模式 LEVEL_1_SIGNAL_ONLY | ✅ | 未修改 settings.py 默认值 |
+| 2 | 无硬编码密钥/账户 | ✅ | PaperBroker 不含真实账户信息 |
+| 3 | API 不提供批量确认 | ✅ | 逐笔确认端点 |
+| 4 | 订单必须经风控 | ✅ | create_order() 检查 risk_decision |
+| 5 | 交易记录不可篡改 | ✅ | TradeRecorder JSON 持久化 |
+
+### 已知问题与限制
+
+| # | 问题 | 严重程度 | 处理计划 |
+|---|------|----------|---------|
+| 1 | PaperBroker 为同步模拟，不支持异步撮合 | 低 | Phase 6 可引入异步撮合 |
+| 2 | 港股交易时段未区分竞价时段 | 低 | Phase 6 细化 |
+| 3 | 无真实券商接口实现 | 中 | Phase 6 按需接入 |
+| 4 | 订单超时自动取消未实现 | 低 | Phase 6 实现 |
+| 5 | APScheduler 后台调度未集成 | 中 | Phase 6 集成定时信号触发+订单生成 |
 
 ---
 

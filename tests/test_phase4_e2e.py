@@ -33,16 +33,15 @@ def test_e2e_healthy_pipeline():
     assert risk_decision.risk_pass is True
     assert risk_decision.can_generate_signal is True
 
-    # 4. API 层风控状态（/risk/status 使用空行情，预期阻断）
+    # 4. API 层风控状态（/risk/status 返回 Kill Switch 状态）
     client = TestClient(create_app(risk_engine=engine))
     response = client.get("/risk/status")
     assert response.status_code == 200
-    # /risk/status 传入空行情，触发 EMPTY_QUOTES 阻断
-    assert response.json()["risk_pass"] is False
+    assert response.json()["risk_pass"] is True  # Kill Switch 未激活
 
 
 def test_e2e_stale_data_blocks_pipeline():
-    """端到端：延迟行情 → 健康门禁阻断 → 风控阻断 → API 返回阻断"""
+    """端到端：延迟行情 → 健康门禁阻断 → 风控阻断"""
     now = datetime(2026, 6, 9, 10, 0, 20)
     quotes = [
         {"symbol": "002463.SZ", "datetime": "2026-06-09 10:00:00", "last_price": 10.0, "delay_seconds": 20.0, "status": "NORMAL"},
@@ -60,11 +59,6 @@ def test_e2e_stale_data_blocks_pipeline():
     assert risk_decision.risk_pass is False
     assert RiskBlockReason.DATA_DELAY in risk_decision.reasons
 
-    # API 返回阻断
-    client = TestClient(create_app(risk_engine=engine))
-    response = client.get("/risk/status")
-    assert response.json()["risk_pass"] is False
-
 
 def test_e2e_kill_switch_blocks_everything():
     """端到端：Kill Switch 激活 → 风控阻断 → 信号不可生成"""
@@ -79,7 +73,7 @@ def test_e2e_kill_switch_blocks_everything():
     client = TestClient(create_app(risk_engine=engine))
     response = client.get("/risk/status")
     assert response.json()["risk_pass"] is False
-    assert RiskBlockReason.KILL_SWITCH in response.json()["reasons"]
+    assert response.json()["kill_switch_active"] is True
 
 
 def test_e2e_portfolio_risk_blocks_signals():

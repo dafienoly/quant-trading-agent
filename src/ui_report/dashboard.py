@@ -1,7 +1,7 @@
 """量化交易盯盘面板
 
-Streamlit 前端，提供实时盯盘、信号列表、风控状态监控。
-核心约束：只读展示，不提供任何下单操作。
+Streamlit 前端，提供实时盯盘、信号列表、风控状态监控和订单确认。
+Phase 5 新增：订单确认页面 (EXECUTION_POLICY 5)
 """
 import streamlit as st
 
@@ -68,6 +68,85 @@ def render_watchlist(watchlist_data: list[dict] | None = None):
         st.metric(label=f"{name} ({symbol})", value=f"{total_score:.1f}分")
 
 
+def render_order_confirmation():
+    """渲染订单确认面板 (EXECUTION_POLICY 5)
+
+    禁止提供「全部确认」「一键确认」功能，必须逐笔操作。
+    """
+    st.subheader("待确认订单")
+
+    try:
+        import requests
+        resp = requests.get("http://localhost:8000/orders/pending", timeout=5)
+        if resp.status_code != 200:
+            st.info("无法连接交易服务")
+            return
+        data = resp.json()
+    except Exception:
+        st.info("无法连接交易服务")
+        return
+
+    orders = data.get("orders", [])
+    if not orders:
+        st.info("暂无待确认订单")
+        return
+
+    for order in orders:
+        order_id = order.get("order_id", "")
+        symbol = order.get("symbol", "")
+        side = order.get("side", "")
+        limit_price = order.get("limit_price", 0)
+        quantity = order.get("quantity", 0)
+        stock_name = order.get("stock_name", "")
+        strategy = order.get("strategy_name", "")
+        stop_loss = order.get("stop_loss_price", 0)
+        take_profit = order.get("take_profit_price", 0)
+        risk_note = order.get("risk_note", "")
+
+        amount = limit_price * quantity
+
+        with st.expander(f"{'买入' if side == 'BUY' else '卖出'} {stock_name}({symbol}) x{quantity}@{limit_price:.2f} = {amount:,.0f}元"):
+            col_info, col_action = st.columns([2, 1])
+
+            with col_info:
+                st.markdown(f"**订单ID:** {order_id}")
+                st.markdown(f"**方向:** {'买入' if side == 'BUY' else '卖出'}")
+                st.markdown(f"**价格:** {limit_price:.2f}")
+                st.markdown(f"**数量:** {quantity}")
+                st.markdown(f"**金额:** {amount:,.0f}元")
+                st.markdown(f"**策略:** {strategy}")
+                if stop_loss > 0:
+                    st.markdown(f"**止损位:** {stop_loss:.2f}")
+                if take_profit > 0:
+                    st.markdown(f"**止盈位:** {take_profit:.2f}")
+                if risk_note:
+                    st.warning(f"**风险提示:** {risk_note}")
+
+            with col_action:
+                # 逐笔确认 (EXECUTION_POLICY 5: 禁止一键确认)
+                if st.button("确认", key=f"confirm_{order_id}"):
+                    try:
+                        r = requests.post(f"http://localhost:8000/orders/{order_id}/confirm", timeout=5)
+                        if r.status_code == 200 and r.json().get("status") == "ok":
+                            st.success("订单已确认并执行")
+                            st.rerun()
+                        else:
+                            st.error(f"确认失败: {r.json().get('message', '未知错误')}")
+                    except Exception as e:
+                        st.error(f"确认失败: {e}")
+
+                if st.button("拒绝", key=f"reject_{order_id}"):
+                    try:
+                        r = requests.post(f"http://localhost:8000/orders/{order_id}/reject", timeout=5)
+                        if r.status_code == 200 and r.json().get("status") == "ok":
+                            st.success("订单已拒绝")
+                            st.rerun()
+                        else:
+                            st.error(f"拒绝失败: {r.json().get('message', '未知错误')}")
+                    except Exception as e:
+                        st.error(f"拒绝失败: {e}")
+
+
 def _fetch_signals_from_api() -> list[dict]:
     """从 API 获取最新信号数据"""
     try:
@@ -88,11 +167,11 @@ def main():
     st.sidebar.header("系统信息")
     st.sidebar.markdown(f"- 交易模式: `{MAX_TRADING_LEVEL}`")
     st.sidebar.markdown(f"- 实盘交易: `{'启用' if ENABLE_LIVE_TRADING else '禁用'}`")
-    st.sidebar.markdown(f"- 下单功能: `不可用`")
+    st.sidebar.markdown(f"- 下单确认: `{'可用' if MAX_TRADING_LEVEL in ('LEVEL_2_HUMAN_CONFIRM', 'LEVEL_3_AUTO') else '不可用'}`")
 
     risk_engine = RuntimeRiskEngine()
 
-    tab1, tab2, tab3 = st.tabs(["风控状态", "信号列表", "候选股"])
+    tab1, tab2, tab3, tab4 = st.tabs(["风控状态", "信号列表", "候选股", "订单确认"])
 
     with tab1:
         render_risk_status(risk_engine)
@@ -103,6 +182,9 @@ def main():
 
     with tab3:
         render_watchlist()
+
+    with tab4:
+        render_order_confirmation()
 
 
 if __name__ == "__main__":

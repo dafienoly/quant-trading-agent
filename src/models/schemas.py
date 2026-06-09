@@ -87,7 +87,7 @@ class RealtimeQuote(BaseModel):
 
 
 class Order(BaseModel):
-    """订单数据结构 (DATA_CONTRACTS 5)"""
+    """订单数据结构 (DATA_CONTRACTS 5, EXECUTION_POLICY 3)"""
     order_id: str  # 格式 ORD_{YYYYMMDD}_{6位随机码}
     symbol: str
     market: str
@@ -101,6 +101,86 @@ class Order(BaseModel):
     status: str = "CREATED"  # CREATED / RISK_CHECKED / CONFIRMED / SENT / FILLED / PARTIALLY_FILLED / REJECTED / CANCELLED
     created_at: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     updated_at: Optional[str] = None
+    # Phase 5: EXECUTION_POLICY 4.1 订单必须包含
+    stock_name: str = ""
+    sector: str = ""
+    stop_loss_price: float = 0.0
+    take_profit_price: float = 0.0
+    position_pct: float = 0.0  # 建议仓位比例
+    risk_note: str = ""
+    market_status: str = "NORMAL"  # NORMAL / LIMIT_UP / LIMIT_DOWN / SUSPENDED (M1 fix)
+    confirmed_by: Optional[str] = None  # 确认人
+    confirmed_at: Optional[str] = None  # 确认时间
+    fill_price: Optional[float] = None  # 成交价
+    fill_quantity: Optional[int] = None  # 成交数量
+    fill_at: Optional[str] = None  # 成交时间
+    reject_reason: Optional[str] = None  # 拒绝原因
+
+
+class OrderDraft(BaseModel):
+    """订单草稿 (EXECUTION_POLICY 3)
+
+    从信号生成，尚未经过风控检查和人工确认。
+    """
+    symbol: str
+    market: str = "SZ"
+    side: str  # BUY / SELL
+    price_type: str = "LIMIT"
+    limit_price: float
+    quantity: int
+    strategy_name: str
+    signal_id: str
+    stock_name: str = ""
+    sector: str = ""
+    stop_loss_price: float = 0.0
+    take_profit_price: float = 0.0
+    position_pct: float = 0.0
+    risk_note: str = ""
+
+
+class TradeRecord(BaseModel):
+    """成交记录 (EXECUTION_POLICY 1.5 可追溯)"""
+    trade_id: str
+    order_id: str
+    symbol: str
+    market: str
+    side: str
+    price: float
+    quantity: int
+    amount: float  # 成交金额
+    commission: float = 0.0  # 手续费
+    stamp_duty: float = 0.0  # 印花税
+    net_amount: float = 0.0  # 净金额
+    signal_id: str = ""
+    risk_check_id: str = ""
+    strategy_name: str = ""
+    env: str = "paper"  # paper / live
+    traded_at: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+
+class AccountInfo(BaseModel):
+    """账户信息 (EXECUTION_POLICY 6)"""
+    total_assets: float = 0.0
+    cash: float = 0.0
+    market_value: float = 0.0
+    available_cash: float = 0.0
+    daily_pnl: float = 0.0
+    daily_pnl_pct: float = 0.0
+
+
+class Position(BaseModel):
+    """持仓信息 (EXECUTION_POLICY 6)"""
+    symbol: str
+    market: str = "SZ"
+    name: str = ""
+    quantity: int = 0
+    available_quantity: int = 0  # 可卖数量
+    cost_price: float = 0.0
+    current_price: float = 0.0
+    market_value: float = 0.0
+    pnl: float = 0.0
+    pnl_pct: float = 0.0
+    sector: str = ""
 
 
 class DataQualityReport(BaseModel):

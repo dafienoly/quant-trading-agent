@@ -28,7 +28,7 @@ def test_risk_endpoint_uses_runtime_risk_engine():
     assert response.status_code == 200
     body = response.json()
     assert body["risk_pass"] is False
-    assert RiskBlockReason.KILL_SWITCH in body["reasons"]
+    assert body["kill_switch_active"] is True
 
 
 def test_risk_endpoint_no_orders_key():

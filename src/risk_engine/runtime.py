@@ -87,7 +87,7 @@ class RuntimeRiskEngine:
             evidence={"symbols": symbols, "disallowed": disallowed},
         )
 
-    def check_portfolio_risk(self, portfolio: dict) -> RiskDecision:
+    def check_portfolio_risk(self, portfolio: dict, trading_mode: str = LEVEL_1_SIGNAL_ONLY) -> RiskDecision:
         """交易层风控检查 (RISK_POLICY.md 2-4 节)
 
         Args:
@@ -101,6 +101,7 @@ class RuntimeRiskEngine:
                     - sector: str, 所属板块
                     - position_pct: float, 仓位占比 (如 0.15 表示 15%)
                     - pnl_pct: float, 浮动盈亏比例 (如 -0.05 表示 -5%)
+            trading_mode: 交易模式，影响风控严格程度
 
         Returns:
             RiskDecision: 风控决策结果
@@ -228,7 +229,7 @@ class RuntimeRiskEngine:
         return RiskDecision(
             risk_pass=risk_pass,
             level=level,
-            trading_mode="LEVEL_1_SIGNAL_ONLY",
+            trading_mode=trading_mode,
             reasons=reasons,
             messages=messages,
             evidence=evidence,
