@@ -13,7 +13,7 @@
 | 1 | 数据层与股票池 | ✅ 已完成 | 2026-06-08 | 74/74 (含审计修复) |
 | 2 | 因子与策略评分 | ✅ 已完成 | 2026-06-08 | 148/148 (含审计修复) |
 | 3 | 回测与评估 | ✅ 已完成(含审计整改) | 2026-06-08 | 248/248 (含审计修复) |
-| 4 | 实盘盯盘与信号生成 | ⬜ 未开始 | - | - |
+| 4 | 实盘盯盘与信号生成 | ✅ 已完成 | 2026-06-08 | 271/271 |
 | 5 | 人工确认交易 | ⬜ 未开始 | - | - |
 | 6 | 小资金自动交易实验 | ⬜ 未开始 | - | - |
 
@@ -488,7 +488,56 @@ tests/test_storage.py .................  3 passed
 
 ## Phase 4: 实盘盯盘与信号生成
 
-> ⬜ 未开始
+### Phase 4 实盘盯盘与信号生成
+
+#### Phase 4 Risk-First Checkpoint
+
+| Gate | Status |
+|------|--------|
+| Runtime risk engine | Completed |
+| Realtime data health gate | Completed |
+| Read-only signal monitor | Completed |
+| Signal generation service | Completed |
+| Realtime quote provider | Completed |
+| API endpoints | Completed |
+| Streamlit dashboard | Completed |
+| Order generation | Not enabled |
+| Full tests | 271/271 Passing |
+
+#### 交付物清单
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/risk_engine/models.py` | 运行时风控模型：RiskLevel/RiskBlockReason/KillSwitchState/RiskDecision |
+| 2 | `src/risk_engine/runtime.py` | 运行时风控引擎：数据延迟/空值/Kill Switch/股票池检查 |
+| 3 | `src/data_gateway/realtime_health.py` | 实时行情数据健康门禁：延迟检测/过期检测 |
+| 4 | `src/data_gateway/realtime_provider.py` | AkShare 实时行情 Provider |
+| 5 | `src/agent_orchestrator/watchlist_monitor.py` | 只读盯盘监控器：信号生成+风控门禁+异常处理，永不生成Order |
+| 6 | `src/agent_orchestrator/signal_service.py` | 信号生成服务：定时触发+风控检查+回调通知 |
+| 7 | `src/api/app.py` | API：/health + /risk/status + /signals/latest + /quotes/{symbol} + /backtest/run(拒绝) |
+| 8 | `src/ui_report/dashboard.py` | Streamlit 盯盘面板：风控状态/信号列表/候选股 |
+| 9 | `tests/test_phase4_risk_engine.py` | 风控引擎测试 (7个) |
+| 10 | `tests/test_phase4_realtime_health.py` | 数据健康门禁测试 (2个) |
+| 11 | `tests/test_phase4_watchlist_monitor.py` | 监控器测试 (3个) |
+| 12 | `tests/test_phase4_api.py` | API测试 (5个) |
+| 13 | `tests/test_phase4_signal_service.py` | 信号服务测试 (3个) |
+
+#### 审计修复
+
+| 问题 | 修复 |
+|------|------|
+| M1: /risk/status 硬编码 risk_pass=True | 集成 RuntimeRiskEngine，支持注入 |
+| M2: WatchlistMonitor 缺少异常处理 | 添加 try-except，信号生成失败返回空列表+错误信息 |
+| L1: 缺少空行情测试 | 新增 test_runtime_risk_blocks_empty_quotes |
+| L5: 缺少 WARN 级别测试 | 新增 test_warn_level_allows_signal_but_not_order |
+
+#### 核心约束
+
+- 交易模式保持 `LEVEL_1_SIGNAL_ONLY`
+- `RiskDecision.can_generate_order` 在 SIGNAL_ONLY 模式下永远为 False
+- `WatchlistMonitor.generate_alerts()` 返回的 `orders` 永远为空列表
+- API 只提供只读端点，`/backtest/run` 拒绝 API 触发回测
+- Streamlit 面板只读展示，不提供任何下单操作
 
 ---
 
