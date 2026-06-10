@@ -119,6 +119,8 @@ class BugWatchdog:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 bug_id = data.get("bug_id", "")
+                if data.get("status", "open") != "open":
+                    continue
                 if not bug_id or bug_id in self._processed_ids:
                     continue
                 self._processed_ids.add(bug_id)
@@ -161,6 +163,8 @@ class BugWatchdog:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if data.get("status", "open") != "open":
+                return
             bug_id = data.get("bug_id", "")
             if not bug_id:
                 logger.warning(f"Bug 文件缺少 bug_id: {path.name}")
@@ -197,6 +201,8 @@ class BugWatchdog:
                             try:
                                 with open(json_file, "r", encoding="utf-8") as f:
                                     data = json.load(f)
+                                if data.get("status", "open") != "open":
+                                    continue
                                 bug_id = data.get("bug_id", "")
                                 if not bug_id or bug_id in self._processed_ids:
                                     continue

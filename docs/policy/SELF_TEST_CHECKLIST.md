@@ -296,6 +296,11 @@ curl http://127.0.0.1:8771
 3. 测试失败自动回滚。
 4. DeepSeek / OpenAI API Key 只来自环境变量。
 5. 自动修复只运行相关测试时，不得漏掉核心安全测试。
+6. `bug_fix_agent` 常驻监听作业启动后必须保持 `RUNNING`，停止后必须释放 watchdog。
+7. 自动修复执行前必须校验 Git 工作区干净，禁止覆盖用户或其他 Agent 未提交修改。
+8. git add / commit / rev-parse 失败时必须进入 `fix_failed`，不得标记为 `fixed`。
+9. 分析 API 必须返回 `analysis_report`、`fix_proposal`、`fix_result` 和审批信息，不能只返回状态。
+10. Watchdog 只能自动分析 `status=open` 的 Bug。
 
 推荐命令：
 

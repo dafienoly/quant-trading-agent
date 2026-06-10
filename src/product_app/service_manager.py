@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -133,6 +134,10 @@ class ServiceManager:
         job.state = JobState.QUEUED
         job.job_id = f"{job_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}"
         job.started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        job.error_message = ""
+
+        if job_name == "bug_fix_agent":
+            return self._start_persistent_job(job_name, job, params or {})
 
         # 在线程中执行作业
         def _run():
@@ -167,13 +172,71 @@ class ServiceManager:
 
         return {"status": "ok", "job_id": job.job_id, "message": f"作业 {job_name} 已启动"}
 
+    def _start_persistent_job(self, job_name: str, job: JobInfo, params: dict) -> dict:
+        """启动需要常驻的后台作业。
+
+        `bug_fix_agent` 启动 watchdog 后必须保持 RUNNING，否则无法反映自动
+        分析服务是否仍在监听，也无法通过 stop_job 正常停止。
+        """
+        if job_name == "bug_fix_agent" and self._bug_watchdog is not None and self._bug_watchdog.is_running():
+            job.state = JobState.RUNNING
+            self._save_state()
+            return {"status": "error", "message": f"作业 {job_name} 正在运行中"}
+
+        def _run():
+            job.state = JobState.RUNNING
+            self._save_state()
+            try:
+                self._execute_job(job_name, params)
+                job.last_result = "watching"
+                self._save_state()
+
+                while (
+                    job_name == "bug_fix_agent"
+                    and self._bug_watchdog is not None
+                    and self._bug_watchdog.is_running()
+                ):
+                    time.sleep(1)
+
+                if job.state == JobState.RUNNING:
+                    job.state = JobState.SUCCEEDED
+                    job.last_result = "stopped"
+            except Exception as e:
+                job.state = JobState.FAILED
+                job.error_message = str(e)
+                logger.error(f"ServiceManager: 常驻作业 {job_name} 失败: {e}")
+                try:
+                    from src.product_app.feedback import get_feedback_service
+                    get_feedback_service().write_bug_report(
+                        component=f"job_{job_name}",
+                        title=f"后台作业 {job_name} 执行失败",
+                        summary=str(e),
+                        exception_type=type(e).__name__,
+                        exception_message=str(e),
+                    )
+                except Exception:
+                    logger.error("ServiceManager: 写入反馈记录失败")
+            finally:
+                job.last_run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._save_state()
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+
+        return {"status": "ok", "job_id": job.job_id, "message": f"作业 {job_name} 已启动"}
+
     def stop_job(self, job_name: str) -> dict:
         """停止作业"""
         if job_name not in self._jobs:
             return {"status": "error", "message": f"未知作业: {job_name}"}
 
         job = self._jobs[job_name]
-        if job.state != JobState.RUNNING:
+        watchdog_running = (
+            job_name == "bug_fix_agent"
+            and self._bug_watchdog is not None
+            and self._bug_watchdog.is_running()
+        )
+        if job.state != JobState.RUNNING and not watchdog_running:
             return {"status": "error", "message": f"作业 {job_name} 未在运行中"}
 
         job.state = JobState.CANCELLED

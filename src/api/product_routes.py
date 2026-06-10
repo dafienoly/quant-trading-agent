@@ -319,10 +319,16 @@ def get_bug_analysis(bug_id: str) -> dict[str, Any]:
     status_info = workflow.get_bug_status(bug_id)
     if status_info is None:
         return {"status": "error", "message": f"Bug not found: {bug_id}"}
+    bug_report = workflow.get_bug_report(bug_id) or {}
     return {
         "status": "ok",
         "bug_id": bug_id,
         "workflow_status": status_info,
+        "analysis_report": bug_report.get("analysis_report"),
+        "fix_proposal": bug_report.get("fix_proposal"),
+        "fix_result": bug_report.get("fix_result"),
+        "approval_status": bug_report.get("approval_status", "pending"),
+        "approval_comment": bug_report.get("approval_comment", ""),
     }
 
 

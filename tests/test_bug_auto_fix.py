@@ -16,6 +16,7 @@ from src.api.app import create_app
 from src.product_app.bug_fix_agent import BugFixAgent
 from src.product_app.bug_fix_workflow import BugFixWorkflow
 from src.product_app.bug_watchdog import BugWatchdog
+from src.product_app.service_manager import JobState, ServiceManager
 
 
 # ============================================================
@@ -263,6 +264,25 @@ class TestBugFixAgent:
         assert "blocked_files" in result
         assert any("risk_engine" in f for f in result["blocked_files"])
 
+    def test_execute_fix_rejects_blocked_module(self):
+        """测试 execute_fix() 二次阻断受限模块，防止手工篡改 proposal 绕过审批"""
+        agent = BugFixAgent()
+        proposal = {
+            "code_changes": [
+                {
+                    "file_path": "src/execution_engine/live_broker.py",
+                    "change_type": "modify",
+                    "diff": "--- a/src/execution_engine/live_broker.py\n+++ b/src/execution_engine/live_broker.py\n@@ -1,1 +1,1 @@\n-old\n+new\n",
+                }
+            ]
+        }
+
+        result = agent.execute_fix(_make_bug_report_dict(), proposal)
+
+        assert result["success"] is False
+        assert result["blocked"] is True
+        assert "execution_engine" in result["blocked_files"][0]
+
     def test_is_blocked_module(self):
         """测试 _is_blocked_module() 对各种文件路径的判断"""
         agent = BugFixAgent()
@@ -402,6 +422,24 @@ class TestBugWatchdog:
         # 第二次处理同一 Bug，应去重
         watchdog.process_existing_bugs()
         assert len(callback_count) == 1
+
+    def test_process_existing_bugs_skips_non_open_status(self, tmp_path):
+        """测试 watchdog 只自动分析 open 状态 Bug"""
+        watch_dir = tmp_path / "open"
+        watch_dir.mkdir()
+
+        callback_count = []
+
+        def on_bug(bug_id: str, data: dict):
+            callback_count.append(bug_id)
+
+        _write_bug_json(watch_dir, "BUG_20260610_PROP01", status="proposed")
+
+        watchdog = BugWatchdog(on_new_bug_callback=on_bug)
+        watchdog._watch_path = watch_dir
+        watchdog.process_existing_bugs()
+
+        assert callback_count == []
 
     def test_stop(self, tmp_path):
         """测试 start/stop 后 is_running() 返回 False"""
@@ -646,6 +684,76 @@ class TestBugFixWorkflow:
         assert "verified" in mock_fs.status_updates
         assert "fixed" in mock_fs.status_updates
 
+    def test_approve_fix_marks_failed_when_git_commit_fails(self, tmp_path, monkeypatch):
+        """测试 git commit 失败时不得把 Bug 误标为 fixed"""
+        open_dir = tmp_path / "open"
+        _write_bug_json(
+            open_dir,
+            "BUG_20260610_COMMIT",
+            status="proposed",
+            fix_proposal={
+                "fix_description": "测试修复",
+                "code_changes": [{"file_path": "src/product_app/example.py"}],
+                "risk_level": "low",
+            },
+        )
+
+        monkeypatch.setattr(
+            "src.product_app.bug_fix_workflow._BUG_DIRS",
+            [open_dir, tmp_path / "triaged", tmp_path / "fixed", tmp_path / "ignored"],
+        )
+        monkeypatch.setattr("src.product_app.bug_fix_workflow._PROJECT_ROOT", tmp_path)
+
+        class _MockFeedbackService:
+            def __init__(self):
+                self.status_updates = []
+                self.last_fields = {}
+
+            def update_bug_status(self, bug_id, new_status):
+                self.status_updates.append(new_status)
+                json_path = open_dir / f"{bug_id}.json"
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                data["status"] = new_status
+                json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                return True
+
+            def update_bug_fields(self, bug_id, **fields):
+                self.last_fields.update(fields)
+                json_path = open_dir / f"{bug_id}.json"
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                data.update(fields)
+                json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                return True
+
+        class _MockAgent:
+            def execute_fix(self, bug_report, proposal):
+                return {"success": True, "test_output": "All tests passed"}
+
+        def mock_run(cmd, **kwargs):
+            class _Result:
+                stdout = ""
+                stderr = ""
+                returncode = 0
+
+            result = _Result()
+            if cmd[:2] == ["git", "commit"]:
+                result.returncode = 1
+                result.stderr = "nothing to commit"
+            return result
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        workflow = BugFixWorkflow()
+        workflow._feedback_service = _MockFeedbackService()
+        workflow._bug_fix_agent = _MockAgent()
+
+        result = workflow.approve_fix("BUG_20260610_COMMIT", comment="LGTM")
+
+        assert result["status"] == "fix_failed"
+        assert result["error"] == "nothing to commit"
+        assert "fixed" not in workflow._feedback_service.status_updates
+        assert workflow._feedback_service.last_fields["fix_result"]["commit_failed"] is True
+
     def test_reject_fix(self, tmp_path, monkeypatch):
         """测试 reject_fix() 流程：proposed -> rejected"""
         open_dir = tmp_path / "open"
@@ -773,6 +881,8 @@ class TestBugFixAPIEndpoints:
         assert body["bug_id"] == "BUG_20260610_API001"
         assert "workflow_status" in body
         assert body["workflow_status"]["status"] == "proposed"
+        assert body["analysis_report"] == {"root_cause": "test"}
+        assert body["fix_proposal"] == {"fix_description": "test"}
 
     def test_approve_bug_fix(self, client, tmp_path, monkeypatch):
         """测试 POST /product/feedback/{bug_id}/approve"""
@@ -946,3 +1056,51 @@ class TestBugFixAPIEndpoints:
         assert body["fix_status"]["has_analysis"] is True
         assert body["fix_status"]["has_proposal"] is True
         assert body["fix_status"]["has_fix_result"] is False
+
+
+class TestServiceManagerBugFixAgent:
+    """ServiceManager 对 bug_fix_agent 常驻作业的生命周期测试"""
+
+    def test_bug_fix_agent_job_stays_running_until_stopped(self, tmp_path, monkeypatch):
+        """测试 bug_fix_agent 启动后保持 RUNNING，并可正常停止 watchdog"""
+        instances = []
+
+        class _FakeWatchdog:
+            def __init__(self, on_new_bug_callback=None):
+                self._running = False
+                instances.append(self)
+
+            def start(self):
+                self._running = True
+
+            def stop(self):
+                self._running = False
+
+            def is_running(self):
+                return self._running
+
+        monkeypatch.setattr("src.product_app.bug_watchdog.BugWatchdog", _FakeWatchdog)
+
+        manager = ServiceManager(state_dir=str(tmp_path / "state"))
+        result = manager.start_job("bug_fix_agent")
+
+        assert result["status"] == "ok"
+
+        deadline = time.time() + 2
+        while (
+            (
+                manager.get_job_status("bug_fix_agent")["state"] != JobState.RUNNING.value
+                or not instances
+            )
+            and time.time() < deadline
+        ):
+            time.sleep(0.05)
+
+        assert manager.get_job_status("bug_fix_agent")["state"] == JobState.RUNNING.value
+        assert instances and instances[0].is_running() is True
+
+        stop_result = manager.stop_job("bug_fix_agent")
+
+        assert stop_result["status"] == "ok"
+        assert manager.get_job_status("bug_fix_agent")["state"] == JobState.CANCELLED.value
+        assert instances[0].is_running() is False

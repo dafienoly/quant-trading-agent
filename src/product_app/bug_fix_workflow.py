@@ -32,7 +32,7 @@ class BugFixWorkflow:
     - 自动分析 & 方案生成
     - 人工审批
     - 自动修复执行 & 验证
-    - Git 操作（stash / commit）
+    - Git 操作（干净工作区校验 / commit）
     """
 
     VALID_TRANSITIONS: dict[str, list[str]] = {
@@ -224,6 +224,10 @@ class BugFixWorkflow:
             "has_fix_result": bug_report.get("fix_result") is not None,
         }
 
+    def get_bug_report(self, bug_id: str) -> Optional[dict]:
+        """获取 Bug 报告完整内容，供 API/UI 展示分析与修复方案。"""
+        return self._read_bug_report(bug_id)
+
     # ----------------------------------------------------------
     # 内部方法
     # ----------------------------------------------------------
@@ -246,24 +250,27 @@ class BugFixWorkflow:
         bug_report = self._read_bug_report(bug_id)
         proposal = bug_report.get("fix_proposal", {})
 
-        try:
-            # Git stash — record whether stash was actually created
-            stash_result = subprocess.run(
-                ["git", "stash"],
-                cwd=str(_PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            stashed = "No local changes to save" not in (stash_result.stdout or "")
+        dirty_files = self._get_dirty_files()
+        if dirty_files:
+            fix_result = {
+                "success": False,
+                "error": "工作区存在未提交变更，自动修复已拒绝执行",
+                "dirty_files": dirty_files,
+            }
+            self._transition(bug_id, "fix_failed")
+            self._update_bug_report(bug_id, fix_result=fix_result)
+            return {
+                "status": "fix_failed",
+                "bug_id": bug_id,
+                "error": fix_result["error"],
+                "dirty_files": dirty_files,
+            }
 
+        try:
             # 执行修复
             fix_result = self.bug_fix_agent.execute_fix(bug_report, proposal)
 
             if isinstance(fix_result, dict) and fix_result.get("success"):
-                # 修复成功
-                self._transition(bug_id, "verified")
-
                 # Git commit — only stage files modified by the fix
                 title = bug_report.get("title", "untitled")
                 commit_msg = f"fix(auto): {bug_id} - {title}"
@@ -271,20 +278,38 @@ class BugFixWorkflow:
                 for change in code_changes:
                     file_path = change.get("file_path", "")
                     if file_path:
-                        subprocess.run(
+                        add_result = subprocess.run(
                             ["git", "add", file_path],
                             cwd=str(_PROJECT_ROOT),
                             capture_output=True,
                             text=True,
                             timeout=30,
                         )
-                subprocess.run(
+                        if add_result.returncode != 0:
+                            raise RuntimeError(f"git add failed for {file_path}: {add_result.stderr}")
+
+                commit_result = subprocess.run(
                     ["git", "commit", "-m", commit_msg],
                     cwd=str(_PROJECT_ROOT),
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
+                if commit_result.returncode != 0:
+                    error_msg = commit_result.stderr or commit_result.stdout or "git commit failed"
+                    self._transition(bug_id, "fix_failed")
+                    failed_result = {
+                        **fix_result,
+                        "success": False,
+                        "error": error_msg.strip(),
+                        "commit_failed": True,
+                    }
+                    self._update_bug_report(bug_id, fix_result=failed_result)
+                    return {
+                        "status": "fix_failed",
+                        "bug_id": bug_id,
+                        "error": error_msg.strip(),
+                    }
 
                 # 获取 commit hash
                 result = subprocess.run(
@@ -294,6 +319,8 @@ class BugFixWorkflow:
                     text=True,
                     timeout=10,
                 )
+                if result.returncode != 0:
+                    raise RuntimeError(f"git rev-parse failed: {result.stderr}")
                 commit_hash = result.stdout.strip()
 
                 # 更新 Bug 报告
@@ -302,6 +329,9 @@ class BugFixWorkflow:
                     fix_result=fix_result,
                     git_commit_hash=commit_hash,
                 )
+
+                # 转换到 verified
+                self._transition(bug_id, "verified")
 
                 # 转换到 fixed
                 self._transition(bug_id, "fixed")
@@ -315,16 +345,6 @@ class BugFixWorkflow:
                     "commit_hash": commit_hash,
                 }
             else:
-                # 修复失败，回滚
-                if stashed:
-                    subprocess.run(
-                        ["git", "stash", "pop"],
-                        cwd=str(_PROJECT_ROOT),
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-
                 self._transition(bug_id, "fix_failed")
 
                 error_msg = fix_result.get("error", "未知错误") if isinstance(fix_result, dict) else str(fix_result)
@@ -337,19 +357,7 @@ class BugFixWorkflow:
                 }
 
         except Exception as e:
-            # 异常回滚
             logger.error(f"Bug {bug_id} 修复执行异常: {e}")
-            if stashed:
-                try:
-                    subprocess.run(
-                        ["git", "stash", "pop"],
-                        cwd=str(_PROJECT_ROOT),
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                except Exception:
-                    logger.error(f"Bug {bug_id} git stash pop 回滚失败")
 
             self._transition(bug_id, "fix_failed")
             self._update_bug_report(bug_id, fix_result={"success": False, "error": str(e)})
@@ -411,6 +419,34 @@ class BugFixWorkflow:
             更新是否成功
         """
         return self.feedback_service.update_bug_fields(bug_id, **fields)
+
+    def _get_dirty_files(self) -> list[str]:
+        """返回当前 Git 工作区未提交文件列表。
+
+        自动修复只允许在干净工作区执行，避免覆盖用户或其他 Agent 的修改。
+        如果运行环境不是 Git 仓库，返回空列表，让调用方继续执行测试场景。
+        """
+        try:
+            result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=str(_PROJECT_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except Exception as e:
+            logger.warning(f"检查 Git 工作区状态失败: {e}")
+            return []
+
+        if result.returncode != 0:
+            logger.warning(f"检查 Git 工作区状态失败: {result.stderr}")
+            return []
+
+        dirty_files: list[str] = []
+        for line in (result.stdout or "").splitlines():
+            if len(line) >= 4 and line[2] == " ":
+                dirty_files.append(line[3:].strip())
+        return dirty_files
 
     # ----------------------------------------------------------
     # 辅助方法

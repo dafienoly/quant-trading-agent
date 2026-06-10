@@ -9,12 +9,17 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from openai import OpenAI
+
+try:
+    from openai import OpenAI
+except ModuleNotFoundError:
+    OpenAI = None  # type: ignore[assignment]
 
 
 # ============================================================
@@ -186,22 +191,54 @@ class BugFixAgent:
         """
         try:
             code_changes = proposal.get("code_changes", [])
+            if not code_changes:
+                return {"success": False, "error": "修复方案未包含 code_changes，拒绝执行自动修复"}
+
+            is_blocked, blocked_files = self._is_blocked_module(code_changes)
+            if is_blocked:
+                return {
+                    "success": False,
+                    "blocked": True,
+                    "blocked_files": blocked_files,
+                    "error": "修复方案涉及受限模块，自动执行已拒绝",
+                }
+
+            project_root = self.project_root.resolve()
             # 保存原始文件内容，用于回滚
-            originals: dict[str, str] = {}
+            originals: dict[str, str | None] = {}
 
             for change in code_changes:
                 file_path = change.get("file_path", "")
                 if not file_path:
                     continue
 
-                full_path = self.project_root / file_path
-                if not full_path.exists():
-                    logger.warning(f"目标文件不存在，跳过: {full_path}")
+                full_path = (self.project_root / file_path).resolve()
+                if not full_path.is_relative_to(project_root):
+                    return {"success": False, "error": f"非法文件路径，已拒绝自动修复: {file_path}"}
+
+                change_type = str(change.get("change_type", "modify")).lower()
+                original_content = full_path.read_text(encoding="utf-8") if full_path.exists() else None
+                originals[str(full_path)] = original_content
+
+                if change_type == "add" and original_content is None:
+                    diff = change.get("diff", "")
+                    new_content = change.get("content") or self._extract_added_content(diff)
+                    if not new_content:
+                        return {"success": False, "error": f"新增文件缺少可应用内容: {file_path}"}
+                    full_path.parent.mkdir(parents=True, exist_ok=True)
+                    full_path.write_text(new_content, encoding="utf-8")
+                    logger.info(f"已新增文件: {file_path}")
                     continue
 
-                # 保存原始内容
-                original_content = full_path.read_text(encoding="utf-8")
-                originals[str(full_path)] = original_content
+                if change_type == "delete":
+                    if full_path.exists():
+                        full_path.unlink()
+                        logger.info(f"已删除文件: {file_path}")
+                    continue
+
+                if original_content is None:
+                    logger.warning(f"目标文件不存在，跳过: {full_path}")
+                    continue
 
                 # 解析 diff，执行简单字符串替换
                 diff = change.get("diff", "")
@@ -222,7 +259,12 @@ class BugFixAgent:
             # 测试失败，回滚变更
             logger.warning("测试失败，开始回滚变更")
             for full_path_str, original_content in originals.items():
-                Path(full_path_str).write_text(original_content, encoding="utf-8")
+                full_path = Path(full_path_str)
+                if original_content is None:
+                    if full_path.exists():
+                        full_path.unlink()
+                else:
+                    full_path.write_text(original_content, encoding="utf-8")
                 logger.info(f"已回滚: {full_path_str}")
 
             return {
@@ -259,6 +301,8 @@ class BugFixAgent:
 
         for attempt in range(max_retries):
             try:
+                if OpenAI is None:
+                    raise RuntimeError("openai package is not installed; cannot call DeepSeek API")
                 client = OpenAI(
                     api_key=self.api_key,
                     base_url=self.api_base,
@@ -407,6 +451,19 @@ class BugFixAgent:
         logger.warning("diff 中的旧代码未在原文件中找到匹配")
         return None
 
+    @staticmethod
+    def _extract_added_content(diff: str) -> str:
+        """从新增文件 diff 中提取新增内容。"""
+        new_lines: list[str] = []
+        for line in diff.splitlines():
+            if line.startswith("---") or line.startswith("+++") or line.startswith("@@"):
+                continue
+            if line.startswith("+"):
+                new_lines.append(line[1:])
+        if not new_lines:
+            return ""
+        return "\n".join(new_lines) + "\n"
+
     def _run_tests(self, code_changes: list | None = None) -> dict[str, Any]:
         """运行 pytest 测试
 
@@ -418,7 +475,7 @@ class BugFixAgent:
         返回:
             {"passed": bool, "output": str}
         """
-        test_args = ["python", "-m", "pytest", "-x", "--tb=short"]
+        test_args = [sys.executable, "-m", "pytest", "-x", "--tb=short"]
 
         # 根据修改文件选择相关测试
         if code_changes:
