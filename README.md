@@ -114,7 +114,7 @@ quant-trading-agent/
 │   ├── strategy_engine/      # 策略引擎（评分模型、信号生成、板块轮动）
 │   ├── ui_report/            # Web 仪表板（Streamlit）
 │   └── utils/                # 工具函数（日历、数据质量、存储）
-├── scripts/                  # 运维脚本（部署、启动、停止、数据拉取）
+├── scripts/                  # 运维脚本（部署、启动、停止、重启）
 ├── tests/                    # 测试用例
 ├── docs/                     # 设计文档与审计报告
 ├── feedback/                 # Bug 反馈数据
@@ -143,7 +143,11 @@ scripts\setup.bat
 ### 2. 一键启动
 
 ```bash
-python scripts/start_product.py
+# Linux / macOS
+bash scripts/start.sh
+
+# Windows
+scripts\start.bat
 ```
 
 启动后访问：
@@ -154,7 +158,21 @@ python scripts/start_product.py
 ### 3. 一键停止
 
 ```bash
-python scripts/stop_product.py
+# Linux / macOS
+bash scripts/stop.sh
+
+# Windows
+scripts\stop.bat
+```
+
+### 4. 一键重启
+
+```bash
+# Linux / macOS
+bash scripts/restart.sh
+
+# Windows
+scripts\restart.bat
 ```
 
 ---

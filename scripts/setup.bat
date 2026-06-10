@@ -183,8 +183,10 @@ REM ===================================================================
 echo.
 echo ============================================================
 echo   部署完成!
-echo   启动系统: python scripts\start_product.py
-echo   停止系统: python scripts\stop_product.py
+echo.
+echo   启动系统: scripts\start.bat
+echo   停止系统: scripts\stop.bat
+echo   重启系统: scripts\restart.bat
 echo ============================================================
 
 endlocal
