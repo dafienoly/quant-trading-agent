@@ -58,6 +58,65 @@ PAGE_CSS = """
   border-radius: 6px;
   color: #7f1d1d;
 }
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 8px 0;
+}
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+.step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: #334155;
+  border: 2px solid #475569;
+  z-index: 1;
+}
+.step-dot.step-completed {
+  background: #059669;
+  border-color: #10b981;
+}
+.step-dot.step-current {
+  background: #2563eb;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.3);
+}
+.step-label {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  margin-top: 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+.step-label.step-label-completed {
+  color: #10b981;
+}
+.step-label.step-label-current {
+  color: #3b82f6;
+  font-weight: 600;
+}
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: #334155;
+  margin-top: -12px;
+}
+.step-connector.step-connector-completed {
+  background: #059669;
+}
 </style>
 """
 
@@ -178,13 +237,13 @@ def render_market() -> None:
 
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        symbols = st.text_input("Symbols", "002463.SZ,600584.SH,603228.SH", help="Comma-separated A-share or HK symbols.")
+        symbols = st.text_input("Symbols", "002463.SZ,600584.SH,603228.SH", help="Comma-separated A-share or HK symbols.", key="market_symbols")
     with col2:
-        provider = st.selectbox("Data provider", ["akshare", "aktools"], index=0)
+        provider = st.selectbox("Data provider", ["akshare", "aktools"], index=0, key="market_provider")
     with col3:
-        force_live = st.checkbox("Force realtime fetch", value=False)
+        force_live = st.checkbox("Force realtime fetch", value=False, key="market_force_live")
 
-    allow_demo = st.checkbox("Allow demo fallback", value=True)
+    allow_demo = st.checkbox("Allow demo fallback", value=True, key="market_allow_demo")
     col4, col5 = st.columns(2)
     refresh = col4.button("Refresh quotes", type="primary", width="stretch")
     start_job = col5.button("Start background snapshot", width="stretch")
@@ -275,10 +334,10 @@ def render_factor_lab() -> None:
     dashboard = _get("/product/dashboard") or {}
     watchlist = dashboard.get("watchlist", [])
     options = [item.get("symbol", "") for item in watchlist] or ["002463.SZ", "600584.SH"]
-    selected = st.multiselect("Symbols", options, default=options[:5])
+    selected = st.multiselect("Symbols", options, default=options[:5], key="factor_symbols")
     col1, col2 = st.columns(2)
-    start_date = col1.date_input("Start date", value=None)
-    end_date = col2.date_input("End date", value=None)
+    start_date = col1.date_input("Start date", value=None, key="factor_start_date")
+    end_date = col2.date_input("End date", value=None, key="factor_end_date")
 
     params = {"symbols": ",".join(selected)}
     if start_date:
@@ -286,7 +345,7 @@ def render_factor_lab() -> None:
     if end_date:
         params["end_date"] = end_date.strftime("%Y%m%d")
 
-    if st.button("Compute factors", type="primary"):
+    if st.button("Compute factors", type="primary", key="compute_factors_btn"):
         result = _post("/product/factors/compute", params=params)
     else:
         result = {"factors": dashboard.get("factors", []), "warnings": []}
@@ -314,20 +373,20 @@ def render_factor_lab() -> None:
 def render_backtest() -> None:
     st.subheader("Backtest")
     col1, col2, col3 = st.columns(3)
-    symbols = col1.text_input("Symbols", "002463.SZ,600584.SH")
-    start_date = col2.text_input("Start date", "20250101")
-    end_date = col3.text_input("End date", "20251231")
+    symbols = col1.text_input("Symbols", "002463.SZ,600584.SH", key="backtest_symbols")
+    start_date = col2.text_input("Start date", "20250101", key="backtest_start_date")
+    end_date = col3.text_input("End date", "20251231", key="backtest_end_date")
 
     col4, col5, col6, col7 = st.columns(4)
-    capital = col4.number_input("Initial capital", min_value=10000.0, value=1000000.0, step=10000.0)
-    commission = col5.number_input("Commission", min_value=0.0, value=0.0003, format="%.4f")
-    stamp = col6.number_input("Stamp duty", min_value=0.0, value=0.0010, format="%.4f")
-    slippage = col7.number_input("Slippage", min_value=0.0, value=0.0010, format="%.4f")
+    capital = col4.number_input("Initial capital", min_value=10000.0, value=1000000.0, step=10000.0, key="backtest_capital")
+    commission = col5.number_input("Commission", min_value=0.0, value=0.0003, format="%.4f", key="backtest_commission")
+    stamp = col6.number_input("Stamp duty", min_value=0.0, value=0.0010, format="%.4f", key="backtest_stamp")
+    slippage = col7.number_input("Slippage", min_value=0.0, value=0.0010, format="%.4f", key="backtest_slippage")
 
     if commission == 0 or stamp == 0 or slippage == 0:
         _banner("warn", "Backtest policy requires commission, stamp duty, and slippage.")
 
-    if st.button("Run backtest", type="primary"):
+    if st.button("Run backtest", type="primary", key="run_backtest_btn"):
         result = _post(
             "/product/jobs/backtest/start",
             params={
@@ -420,23 +479,25 @@ def render_configuration() -> None:
         "Data provider",
         ["akshare", "aktools"],
         index=0 if config.get("DEFAULT_DATA_PROVIDER", "akshare") == "akshare" else 1,
+        key="config_provider",
     )
-    log_level = st.selectbox("Log level", ["DEBUG", "INFO", "WARNING", "ERROR"], index=1)
-    max_single = st.slider("Max single stock position", 0.01, 0.50, float(config.get("MAX_SINGLE_STOCK_POSITION", 0.15)), 0.01)
-    max_sector = st.slider("Max sector position", 0.10, 1.00, float(config.get("MAX_SECTOR_POSITION", 0.60)), 0.05)
-    min_cash = st.slider("Minimum cash ratio", 0.0, 0.50, float(config.get("MIN_CASH_RATIO", 0.20)), 0.05)
+    log_level = st.selectbox("Log level", ["DEBUG", "INFO", "WARNING", "ERROR"], index=1, key="config_log_level")
+    max_single = st.slider("Max single stock position", 0.01, 0.50, float(config.get("MAX_SINGLE_STOCK_POSITION", 0.15)), 0.01, key="config_max_single")
+    max_sector = st.slider("Max sector position", 0.10, 1.00, float(config.get("MAX_SECTOR_POSITION", 0.60)), 0.05, key="config_max_sector")
+    min_cash = st.slider("Minimum cash ratio", 0.0, 0.50, float(config.get("MIN_CASH_RATIO", 0.20)), 0.05, key="config_min_cash")
 
     mode = st.selectbox(
         "Trading mode",
         ["LEVEL_0", "LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"],
         index=1,
+        key="config_trading_mode",
     )
     if mode == "LEVEL_3_AUTO":
         _banner("danger", "LEVEL_3_AUTO is blocked in Demo V1.")
     elif mode == "LEVEL_2_HUMAN_CONFIRM":
         _banner("warn", "LEVEL_2 requires explicit confirmation and keeps BROKER_ADAPTER=paper.")
 
-    if st.button("Save safe configuration", type="primary"):
+    if st.button("Save safe configuration", type="primary", key="save_config_btn"):
         updates = {
             "DEFAULT_DATA_PROVIDER": provider,
             "LOG_LEVEL": log_level,
@@ -450,9 +511,136 @@ def render_configuration() -> None:
         else:
             st.error("Some configuration updates failed.")
 
-    if st.button("Restore safe defaults"):
+    if st.button("Restore safe defaults", key="restore_defaults_btn"):
         st.write(_post("/product/config/restore-defaults"))
         st.rerun()
+
+
+BUG_WORKFLOW_STATES = ["open", "analyzing", "proposed", "approved", "fixing", "verified", "fixed"]
+
+
+def _render_status_steps(current_status: str) -> None:
+    """Render a horizontal step indicator for the bug workflow status machine."""
+    current_status = (current_status or "open").lower()
+    current_idx = BUG_WORKFLOW_STATES.index(current_status) if current_status in BUG_WORKFLOW_STATES else 0
+
+    items_html = []
+    for i, state in enumerate(BUG_WORKFLOW_STATES):
+        if i < current_idx:
+            dot_cls = "step-completed"
+            label_cls = "step-label-completed"
+        elif i == current_idx:
+            dot_cls = "step-current"
+            label_cls = "step-label-current"
+        else:
+            dot_cls = ""
+            label_cls = ""
+        items_html.append(
+            f'<div class="step-item">'
+            f'<div class="step-dot {dot_cls}">{i + 1}</div>'
+            f'<div class="step-label {label_cls}">{state}</div>'
+            f'</div>'
+        )
+        if i < len(BUG_WORKFLOW_STATES) - 1:
+            conn_cls = "step-connector-completed" if i < current_idx else ""
+            items_html.append(f'<div class="step-connector {conn_cls}"></div>')
+
+    st.markdown(
+        f'<div class="step-indicator">{"".join(items_html)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_analysis_report(report: dict[str, Any]) -> None:
+    """Render an expandable section for a bug's analysis report."""
+    with st.expander("🔍 Analysis Report", expanded=False):
+        root_cause = report.get("root_cause", "")
+        if root_cause:
+            st.markdown("**Root Cause:**")
+            st.write(root_cause)
+        affected_files = report.get("affected_files", [])
+        if affected_files:
+            st.markdown("**Affected Files:**")
+            if isinstance(affected_files, list):
+                for f in affected_files:
+                    st.markdown(f"- `{f}`")
+            else:
+                st.write(affected_files)
+        fix_steps = report.get("fix_steps", [])
+        if fix_steps:
+            st.markdown("**Fix Steps:**")
+            if isinstance(fix_steps, list):
+                for idx, step in enumerate(fix_steps, 1):
+                    st.markdown(f"{idx}. {step}")
+            else:
+                st.write(fix_steps)
+        risk_level = report.get("risk_level", "")
+        if risk_level:
+            risk_colors = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+            emoji = risk_colors.get(risk_level.lower(), "⚪")
+            st.markdown(f"**Risk Level:** {emoji} {risk_level}")
+        estimated_impact = report.get("estimated_impact", "")
+        if estimated_impact:
+            st.markdown(f"**Estimated Impact:** {estimated_impact}")
+        extra_keys = set(report.keys()) - {"root_cause", "affected_files", "fix_steps", "risk_level", "estimated_impact"}
+        if extra_keys:
+            st.markdown("**Additional Details:**")
+            st.json({k: report[k] for k in extra_keys})
+
+
+def _render_fix_proposal(proposal: dict[str, Any]) -> None:
+    """Render an expandable section for a bug's fix proposal."""
+    with st.expander("🔧 Fix Proposal", expanded=False):
+        fix_desc = proposal.get("fix_description", "")
+        if fix_desc:
+            st.markdown("**Fix Description:**")
+            st.write(fix_desc)
+        code_changes = proposal.get("code_changes", "")
+        if code_changes:
+            st.markdown("**Code Changes:**")
+            if isinstance(code_changes, (list, dict)):
+                st.json(code_changes)
+            else:
+                st.code(str(code_changes))
+        risk_level = proposal.get("risk_level", "")
+        if risk_level:
+            risk_colors = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+            emoji = risk_colors.get(risk_level.lower(), "⚪")
+            st.markdown(f"**Risk Level:** {emoji} {risk_level}")
+        test_suggestions = proposal.get("test_suggestions", "")
+        if test_suggestions:
+            st.markdown("**Test Suggestions:**")
+            if isinstance(test_suggestions, list):
+                for s in test_suggestions:
+                    st.markdown(f"- {s}")
+            else:
+                st.write(test_suggestions)
+        extra_keys = set(proposal.keys()) - {"fix_description", "code_changes", "risk_level", "test_suggestions"}
+        if extra_keys:
+            st.markdown("**Additional Details:**")
+            st.json({k: proposal[k] for k in extra_keys})
+
+
+def _render_fix_result(result: dict[str, Any]) -> None:
+    """Render the fix execution result (success/failure, test output, commit hash)."""
+    success = result.get("success", False)
+    if success:
+        st.success("✅ Fix applied successfully")
+    else:
+        st.error("❌ Fix failed")
+    test_output = result.get("test_output", "")
+    if test_output:
+        with st.expander("Test Output"):
+            st.code(str(test_output))
+    commit_hash = result.get("commit_hash", "")
+    if commit_hash:
+        st.markdown(f"**Commit:** `{commit_hash}`")
+    error_msg = result.get("error", "")
+    if error_msg:
+        st.error(f"Error: {error_msg}")
+    extra_keys = set(result.keys()) - {"success", "test_output", "commit_hash", "error"}
+    if extra_keys:
+        st.json({k: result[k] for k in extra_keys})
 
 
 def render_feedback() -> None:
@@ -469,20 +657,74 @@ def render_feedback() -> None:
         return
 
     for bug in bugs:
-        with st.expander(f"{bug.get('severity', '').upper()} {bug.get('bug_id')}: {bug.get('title')}"):
-            st.write(bug.get("summary"))
-            st.json(bug)
-            col1, col2, col3 = st.columns(3)
-            bug_id = bug.get("bug_id")
-            if col1.button("Mark triaged", key=f"triage_{bug_id}"):
-                st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "triaged"}))
-                st.rerun()
-            if col2.button("Mark fixed", key=f"fixed_{bug_id}"):
-                st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "fixed"}))
-                st.rerun()
-            if col3.button("Ignore", key=f"ignore_{bug_id}"):
-                st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "ignored"}))
-                st.rerun()
+        bug_id = bug.get("bug_id")
+        bug_status = (bug.get("status") or "open").lower()
+        severity = bug.get("severity", "").upper()
+        title = bug.get("title", "")
+
+        with st.expander(f"{severity} {bug_id}: {title}"):
+            # --- Bug Status Step Indicator ---
+            st.markdown("**Workflow Status**")
+            _render_status_steps(bug_status)
+
+            st.divider()
+
+            # --- Summary ---
+            summary = bug.get("summary", "")
+            if summary:
+                st.write(summary)
+
+            # --- Analysis Report ---
+            analysis_report = bug.get("analysis_report")
+            if analysis_report and isinstance(analysis_report, dict):
+                _render_analysis_report(analysis_report)
+
+            # --- Fix Proposal ---
+            fix_proposal = bug.get("fix_proposal")
+            if fix_proposal and isinstance(fix_proposal, dict):
+                _render_fix_proposal(fix_proposal)
+
+            # --- Fix Result ---
+            fix_result = bug.get("fix_result")
+            if fix_result and isinstance(fix_result, dict):
+                _render_fix_result(fix_result)
+
+            st.divider()
+
+            # --- Action Buttons ---
+            if bug_status == "proposed":
+                approve_col, reject_col = st.columns(2)
+                with approve_col:
+                    if st.button("✅ Approve", key=f"approve_{bug_id}", type="primary"):
+                        result = _post(f"/product/feedback/{bug_id}/approve", params={"comment": "Approved via dashboard"})
+                        if result:
+                            st.success("Bug fix approved!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to approve bug fix.")
+                with reject_col:
+                    if st.button("❌ Reject", key=f"reject_{bug_id}"):
+                        result = _post(f"/product/feedback/{bug_id}/reject", params={"comment": "Rejected via dashboard"})
+                        if result:
+                            st.warning("Bug fix rejected.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to reject bug fix.")
+            else:
+                col1, col2, col3 = st.columns(3)
+                if col1.button("Mark triaged", key=f"triage_{bug_id}"):
+                    st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "triaged"}))
+                    st.rerun()
+                if col2.button("Mark fixed", key=f"fixed_{bug_id}"):
+                    st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "fixed"}))
+                    st.rerun()
+                if col3.button("Ignore", key=f"ignore_{bug_id}"):
+                    st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "ignored"}))
+                    st.rerun()
+
+            # --- Raw Bug Data ---
+            with st.expander("Raw Bug Data"):
+                st.json(bug)
 
 
 def main() -> None:
@@ -492,7 +734,7 @@ def main() -> None:
     with st.sidebar:
         st.title("QuantAgent")
         st.caption("Product demo cockpit")
-        st.session_state["api_base"] = st.text_input("API base URL", st.session_state.get("api_base", DEFAULT_API_BASE))
+        st.session_state["api_base"] = st.text_input("API base URL", st.session_state.get("api_base", DEFAULT_API_BASE), key="sidebar_api_base")
         st.divider()
         st.caption("Safety invariant: live automatic trading is not exposed in this demo.")
 

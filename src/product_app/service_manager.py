@@ -72,6 +72,7 @@ class ServiceManager:
     def __init__(self, state_dir: str = "runtime/state"):
         self._state_dir = Path(state_dir)
         self._state_dir.mkdir(parents=True, exist_ok=True)
+        self._bug_watchdog = None
         self._jobs: dict[str, JobInfo] = {
             "quote_refresh": JobInfo("quote_refresh"),
             "watchlist_monitor": JobInfo("watchlist_monitor"),
@@ -79,6 +80,7 @@ class ServiceManager:
             "risk_snapshot": JobInfo("risk_snapshot"),
             "backtest": JobInfo("backtest"),
             "feedback_compaction": JobInfo("feedback_compaction"),
+            "bug_fix_agent": JobInfo("bug_fix_agent"),
         }
         self._load_state()
 
@@ -175,6 +177,9 @@ class ServiceManager:
             return {"status": "error", "message": f"作业 {job_name} 未在运行中"}
 
         job.state = JobState.CANCELLED
+        if job_name == "bug_fix_agent" and self._bug_watchdog is not None:
+            self._bug_watchdog.stop()
+            self._bug_watchdog = None
         job.last_run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._save_state()
         return {"status": "ok", "message": f"作业 {job_name} 已取消"}
@@ -215,6 +220,27 @@ class ServiceManager:
 
         elif job_name == "feedback_compaction":
             logger.info(f"[{now}] 反馈压缩作业执行")
+
+        elif job_name == "bug_fix_agent":
+            logger.info(f"[{now}] Bug 修复 Agent 作业执行")
+            from src.product_app.bug_watchdog import BugWatchdog
+            from src.product_app.bug_fix_workflow import BugFixWorkflow
+
+            workflow = BugFixWorkflow()
+
+            def _on_new_bug(bug_id: str, bug_report: dict) -> None:
+                """新 Bug 回调：触发自动分析流程"""
+                try:
+                    result = workflow.process_bug(bug_id)
+                    logger.info(f"Bug 自动处理结果: {result}")
+                except Exception as e:
+                    logger.error(f"Bug 自动处理失败 (bug_id={bug_id}): {e}")
+
+            watchdog = BugWatchdog(on_new_bug_callback=_on_new_bug)
+            watchdog.start()
+            # Store watchdog reference for later stop
+            self._bug_watchdog = watchdog
+            logger.info("Bug 修复 Agent 已启动，监控 feedback/bugs/open/ 目录")
 
     def _write_state_file(self, filename: str, data: dict):
         """写入状态文件"""

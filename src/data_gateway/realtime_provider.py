@@ -196,7 +196,17 @@ def map_hk_realtime_quotes(
 
 
 class AkShareRealtimeProvider:
-    """Fetch realtime A-share and HK quote snapshots through AkShare."""
+    """Fetch realtime A-share and HK quote snapshots through AkShare.
+
+    Features:
+    - Rate limiting between API calls to avoid anti-scraping blocks
+    - Retry with exponential backoff (up to 3 attempts) on empty results
+    - Per-symbol degradation: if bulk fetch fails, falls back to individual symbol queries
+    """
+
+    _MAX_RETRIES = 3
+    _RETRY_BASE_DELAY = 1.5       # seconds — base for exponential backoff
+    _SYMBOL_INTERVAL = 0.5         # seconds — delay between individual symbol fallback calls
 
     def __init__(self, request_interval: float = 2.0):
         self._request_interval = request_interval
@@ -208,6 +218,71 @@ class AkShareRealtimeProvider:
             time.sleep(self._request_interval - elapsed)
         self._last_request_time = time.time()
 
+    def _retry_with_backoff(self, fn, description: str, symbols: list[str]) -> pd.DataFrame:
+        """Call *fn* up to _MAX_RETRIES times with exponential backoff.
+
+        Returns the first non-empty DataFrame, or an empty DataFrame after exhausting
+        retries.
+        """
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            try:
+                self._rate_limit()
+                logger.info(f"{description} (attempt {attempt}/{self._MAX_RETRIES}) — {len(symbols)} symbols")
+                result = fn()
+                if result is not None and not result.empty:
+                    return result
+                if attempt < self._MAX_RETRIES:
+                    delay = self._RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"{description} returned empty on attempt {attempt}, "
+                        f"retrying in {delay:.1f}s …"
+                    )
+                    time.sleep(delay)
+            except Exception as exc:
+                if attempt < self._MAX_RETRIES:
+                    delay = self._RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"{description} failed on attempt {attempt}: {exc}, "
+                        f"retrying in {delay:.1f}s …"
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(f"{description} failed after {self._MAX_RETRIES} attempts: {exc}")
+        return pd.DataFrame()
+
+    def _fetch_a_shares_bulk(self, a_symbols: list[str]) -> pd.DataFrame:
+        """Primary path: fetch all A-shares in one bulk call."""
+        return self._retry_with_backoff(
+            lambda: map_a_share_realtime_quotes(ak.stock_zh_a_spot_em(), a_symbols),
+            "A-share bulk realtime",
+            a_symbols,
+        )
+
+    def _fetch_a_shares_per_symbol(self, a_symbols: list[str]) -> pd.DataFrame:
+        """Fallback path: fetch A-share quotes one symbol at a time.
+
+        Used when the bulk ``stock_zh_a_spot_em()`` call consistently returns empty
+        (often due to AkShare anti-scraping or API changes).  Each symbol is fetched
+        via ``stock_zh_a_spot_em()`` filtered to that symbol, with a small inter-symbol
+        delay.
+        """
+        frames: list[pd.DataFrame] = []
+        for i, sym in enumerate(a_symbols):
+            try:
+                if i > 0:
+                    time.sleep(self._SYMBOL_INTERVAL)
+                # stock_zh_a_spot_em returns all stocks; we filter in map_a_share_realtime_quotes
+                raw = ak.stock_zh_a_spot_em()
+                df = map_a_share_realtime_quotes(raw, [sym])
+                if not df.empty:
+                    frames.append(df)
+                    logger.debug(f"Per-symbol fallback: {sym} OK")
+                else:
+                    logger.warning(f"Per-symbol fallback: {sym} returned empty after filtering")
+            except Exception as exc:
+                logger.warning(f"Per-symbol fallback: {sym} failed: {exc}")
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
     def get_realtime_quotes(self, symbols: list[str]) -> pd.DataFrame:
         normalized = [normalize_quote_symbol(s) for s in symbols if str(s).strip()]
         a_symbols = [s for s in normalized if not _is_hk_symbol(s)]
@@ -215,20 +290,25 @@ class AkShareRealtimeProvider:
         frames: list[pd.DataFrame] = []
 
         if a_symbols:
-            try:
-                self._rate_limit()
-                logger.info(f"Fetching A-share realtime quotes for {len(a_symbols)} symbols")
-                frames.append(map_a_share_realtime_quotes(ak.stock_zh_a_spot_em(), a_symbols))
-            except Exception as exc:
-                logger.error(f"Failed to fetch A-share realtime quotes: {exc}")
+            # Try bulk fetch first, fall back to per-symbol on persistent empty
+            df = self._fetch_a_shares_bulk(a_symbols)
+            if df.empty and len(a_symbols) > 1:
+                logger.warning(
+                    f"Bulk A-share fetch returned empty after retries; "
+                    f"falling back to per-symbol fetch for {len(a_symbols)} symbols"
+                )
+                df = self._fetch_a_shares_per_symbol(a_symbols)
+            if not df.empty:
+                frames.append(df)
 
         if hk_symbols:
-            try:
-                self._rate_limit()
-                logger.info(f"Fetching HK realtime quotes for {len(hk_symbols)} symbols")
-                frames.append(map_hk_realtime_quotes(ak.stock_hk_spot_em(), hk_symbols))
-            except Exception as exc:
-                logger.error(f"Failed to fetch HK realtime quotes: {exc}")
+            df = self._retry_with_backoff(
+                lambda: map_hk_realtime_quotes(ak.stock_hk_spot_em(), hk_symbols),
+                "HK realtime",
+                hk_symbols,
+            )
+            if not df.empty:
+                frames.append(df)
 
         frames = [frame for frame in frames if frame is not None and not frame.empty]
         if not frames:

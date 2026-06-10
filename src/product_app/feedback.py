@@ -29,8 +29,20 @@ BUG_STATUS_OPEN = "open"
 BUG_STATUS_TRIAGED = "triaged"
 BUG_STATUS_FIXED = "fixed"
 BUG_STATUS_IGNORED = "ignored"
+BUG_STATUS_ANALYZING = "analyzing"
+BUG_STATUS_PROPOSED = "proposed"
+BUG_STATUS_APPROVED = "approved"
+BUG_STATUS_REJECTED = "rejected"
+BUG_STATUS_FIXING = "fixing"
+BUG_STATUS_FIX_FAILED = "fix_failed"
+BUG_STATUS_VERIFIED = "verified"
+BUG_STATUS_BLOCKED = "blocked"
 
-VALID_BUG_STATUSES = {BUG_STATUS_OPEN, BUG_STATUS_TRIAGED, BUG_STATUS_FIXED, BUG_STATUS_IGNORED}
+VALID_BUG_STATUSES = {
+    BUG_STATUS_OPEN, BUG_STATUS_TRIAGED, BUG_STATUS_FIXED, BUG_STATUS_IGNORED,
+    BUG_STATUS_ANALYZING, BUG_STATUS_PROPOSED, BUG_STATUS_APPROVED, BUG_STATUS_REJECTED,
+    BUG_STATUS_FIXING, BUG_STATUS_FIX_FAILED, BUG_STATUS_VERIFIED, BUG_STATUS_BLOCKED,
+}
 
 # 严重程度
 SEVERITY_CRITICAL = "critical"
@@ -51,6 +63,7 @@ _OPEN_DIR = _BUGS_DIR / "open"
 _TRIAGED_DIR = _BUGS_DIR / "triaged"
 _FIXED_DIR = _BUGS_DIR / "fixed"
 _IGNORED_DIR = _BUGS_DIR / "ignored"
+_ANALYSIS_DIR = _BUGS_DIR / "analysis"
 _INDEX_PATH = _FEEDBACK_DIR / "index.json"
 
 
@@ -79,6 +92,12 @@ class BugReport(BaseModel):
     dedupe_hash: str = Field(default="", description="去重哈希")
     related_log_files: list[str] = Field(default_factory=list, description="相关日志文件")
     occurrence_count: int = Field(default=1, description="出现次数")
+    analysis_report: Optional[dict[str, Any]] = Field(default=None, description="Agent analysis report")
+    fix_proposal: Optional[dict[str, Any]] = Field(default=None, description="Fix proposal from Agent")
+    approval_status: str = Field(default="pending", description="Approval status: pending/approved/rejected")
+    approval_comment: str = Field(default="", description="Approval comment")
+    fix_result: Optional[dict[str, Any]] = Field(default=None, description="Fix execution result")
+    git_commit_hash: str = Field(default="", description="Git commit hash for the fix")
 
 
 class BugIndexEntry(BaseModel):
@@ -180,7 +199,7 @@ class FeedbackService:
 
     def _ensure_dirs(self) -> None:
         """确保目录结构存在"""
-        for d in (_OPEN_DIR, _TRIAGED_DIR, _FIXED_DIR, _IGNORED_DIR):
+        for d in (_OPEN_DIR, _TRIAGED_DIR, _FIXED_DIR, _IGNORED_DIR, _ANALYSIS_DIR):
             d.mkdir(parents=True, exist_ok=True)
 
     # ----------------------------------------------------------
@@ -395,6 +414,44 @@ class FeedbackService:
             logger.error(f"更新 Bug 状态失败: {e}")
             return False
 
+    def update_bug_fields(self, bug_id: str, **fields) -> bool:
+        """更新 Bug 报告的指定字段并重新渲染 Markdown
+
+        参数:
+            bug_id: Bug 唯一标识
+            **fields: 需要更新的字段
+
+        返回:
+            更新是否成功
+        """
+        try:
+            source_dir, report = self._find_bug(bug_id)
+            if report is None:
+                logger.warning(f"未找到 Bug: {bug_id}")
+                return False
+
+            # 更新字段
+            for key, value in fields.items():
+                if hasattr(report, key):
+                    setattr(report, key, value)
+            report.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # 写回 JSON
+            json_path = source_dir / f"{bug_id}.json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                f.write(report.model_dump_json(indent=2, ensure_ascii=False))
+
+            # 重新渲染 Markdown
+            md_path = source_dir / f"{bug_id}.md"
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(self._render_markdown(report))
+
+            return True
+
+        except Exception as e:
+            logger.error(f"更新 Bug 字段失败 {bug_id}: {e}")
+            return False
+
     # ----------------------------------------------------------
     # 内部方法
     # ----------------------------------------------------------
@@ -465,12 +522,26 @@ class FeedbackService:
         return None, None
 
     def _status_to_dir(self, status: str) -> Optional[Path]:
-        """将状态映射到目录"""
+        """将状态映射到目录
+
+        中间状态（analyzing/proposed/approved/rejected/fixing/fix_failed/verified/blocked）
+        保留在当前目录（open 或 triaged），不移动文件。只有终态（fixed/ignored）才会
+        将文件移动到对应目录。
+        """
         mapping = {
             BUG_STATUS_OPEN: _OPEN_DIR,
             BUG_STATUS_TRIAGED: _TRIAGED_DIR,
             BUG_STATUS_FIXED: _FIXED_DIR,
             BUG_STATUS_IGNORED: _IGNORED_DIR,
+            # 中间状态：保留在 open 目录，不触发文件移动
+            BUG_STATUS_ANALYZING: _OPEN_DIR,
+            BUG_STATUS_PROPOSED: _OPEN_DIR,
+            BUG_STATUS_APPROVED: _OPEN_DIR,
+            BUG_STATUS_REJECTED: _OPEN_DIR,
+            BUG_STATUS_FIXING: _OPEN_DIR,
+            BUG_STATUS_FIX_FAILED: _OPEN_DIR,
+            BUG_STATUS_VERIFIED: _OPEN_DIR,
+            BUG_STATUS_BLOCKED: _OPEN_DIR,
         }
         return mapping.get(status)
 
@@ -596,6 +667,31 @@ class FeedbackService:
             for lf in report.related_log_files:
                 lines.append(f"- `{lf}`")
             lines.append("")
+
+        if report.analysis_report:
+            lines += ["## Agent 分析报告", "", "```json"]
+            lines.append(json.dumps(report.analysis_report, indent=2, ensure_ascii=False))
+            lines += ["```", ""]
+
+        if report.fix_proposal:
+            lines += ["## 修复方案", "", "```json"]
+            lines.append(json.dumps(report.fix_proposal, indent=2, ensure_ascii=False))
+            lines += ["```", ""]
+
+        if report.fix_result:
+            lines += ["## 修复结果", "", "```json"]
+            lines.append(json.dumps(report.fix_result, indent=2, ensure_ascii=False))
+            lines += ["```", ""]
+
+        if report.approval_status != "pending":
+            lines += ["## 审批信息", ""]
+            lines.append(f"- **审批状态**: {report.approval_status}")
+            if report.approval_comment:
+                lines.append(f"- **审批备注**: {report.approval_comment}")
+            lines.append("")
+
+        if report.git_commit_hash:
+            lines += ["## 修复提交", "", f"- **Git Commit**: `{report.git_commit_hash}`", ""]
 
         return "\n".join(lines)
 

@@ -39,6 +39,14 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _get_bug_fix_workflow():
+    """获取共享的 BugFixWorkflow 单例"""
+    from src.product_app.bug_fix_workflow import BugFixWorkflow
+    if not hasattr(_get_bug_fix_workflow, "_instance"):
+        _get_bug_fix_workflow._instance = BugFixWorkflow()
+    return _get_bug_fix_workflow._instance
+
+
 @router.get("/health")
 def product_health() -> dict[str, Any]:
     kill_switch = _risk_engine.kill_switch
@@ -302,3 +310,47 @@ def update_bug_status(bug_id: str, status: str = Query(...)) -> dict[str, Any]:
     if success:
         return {"status": "ok", "bug_id": bug_id, "new_status": status}
     return {"status": "error", "message": f"Failed to update bug status: {bug_id}"}
+
+
+@router.get("/feedback/{bug_id}/analysis")
+def get_bug_analysis(bug_id: str) -> dict[str, Any]:
+    """获取 Bug 分析报告和修复方案"""
+    workflow = _get_bug_fix_workflow()
+    status_info = workflow.get_bug_status(bug_id)
+    if status_info is None:
+        return {"status": "error", "message": f"Bug not found: {bug_id}"}
+    return {
+        "status": "ok",
+        "bug_id": bug_id,
+        "workflow_status": status_info,
+    }
+
+
+@router.post("/feedback/{bug_id}/approve")
+def approve_bug_fix(bug_id: str, comment: str = Query("", description="Approval comment")) -> dict[str, Any]:
+    """审批通过 Bug 修复方案"""
+    workflow = _get_bug_fix_workflow()
+    result = workflow.approve_fix(bug_id, comment=comment)
+    return result
+
+
+@router.post("/feedback/{bug_id}/reject")
+def reject_bug_fix(bug_id: str, comment: str = Query("", description="Rejection reason")) -> dict[str, Any]:
+    """拒绝 Bug 修复方案"""
+    workflow = _get_bug_fix_workflow()
+    result = workflow.reject_fix(bug_id, comment=comment)
+    return result
+
+
+@router.get("/feedback/{bug_id}/fix-status")
+def get_bug_fix_status(bug_id: str) -> dict[str, Any]:
+    """获取 Bug 修复进度"""
+    workflow = _get_bug_fix_workflow()
+    status_info = workflow.get_bug_status(bug_id)
+    if status_info is None:
+        return {"status": "error", "message": f"Bug not found: {bug_id}"}
+    return {
+        "status": "ok",
+        "bug_id": bug_id,
+        "fix_status": status_info,
+    }

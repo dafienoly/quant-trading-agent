@@ -16,6 +16,7 @@
 | 4 | 实盘盯盘与信号生成 | ✅ 已完成 | 2026-06-09 | 289/289 (含审计整改) |
 | 5 | 人工确认交易 | ✅ 已完成 | 2026-06-09 | 328/328 |
 | 5.5 | 产品交付 | ✅ 已完成 | 2026-06-09 | 364/364 + 84项E2E验收 |
+| 5.6 | BUG自动处理系统 | ✅ 已完成 | 2026-06-10 | 21/21 (集成测试) |
 | 6 | 小资金自动交易实验 | ⬜ 未开始 | - | - |
 
 ---
@@ -801,6 +802,149 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 .venv\Scripts\python.exe -m ruff check src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py tests\test_realtime_provider.py tests\test_product_market_data.py tests\test_product_realtime_api.py tests\test_product_service_manager_quotes.py tests\test_product_dashboard_source.py
 # All checks passed
 ```
+
+---
+
+## Phase 5.6: BUG 自动处理系统
+
+### 完成日期
+
+2026-06-10
+
+### 背景
+
+项目仍处于开发期，Bug 频繁产生且阻塞正常流程。原有的 Bug 收集系统（`feedback.py`）仅实现了提交、去重和状态管理，Bug 提交后需要人工逐个分析、定位、修复。Phase 5.6 将"Bug 收集"升级为"Bug 自动处理"，引入 AI Agent 作为 Bug 处理工程师，自动分析原因、制定修复方案，审批后自动执行修复。
+
+### 技术方案
+
+**LLM 引擎选型：DeepSeek API**
+
+| 资源 | 优势 | 劣势 | 结论 |
+|------|------|------|------|
+| Claude Code + DeepSeek | Claude 擅长代码理解 | Claude Code 需交互式环境 | 不适合后台自动化 |
+| DeepSeek API | 成本极低、代码能力强、适合批量自动化 | 长上下文略弱 | **采用** |
+
+理由：Bug 处理是后台自动化任务，需要 API 调用而非交互式会话；DeepSeek API 成本极低（约 0.001 元/千 token），代码能力强，可通过 OpenAI 兼容 SDK 直接调用。
+
+### 交付物清单
+
+#### 核心模块（3 个新增）
+
+| # | 文件 | 行数 | 说明 |
+|---|------|------|------|
+| 1 | `src/product_app/bug_fix_agent.py` | ~433 | BugFixAgent：DeepSeek API 封装，提供 analyze()、propose_fix()、execute_fix()，含重试机制、受限模块检查、diff 应用、pytest 验证 |
+| 2 | `src/product_app/bug_watchdog.py` | ~213 | BugWatchdog：文件监控 Hook，检测 feedback/bugs/open/ 新文件，支持 watchdog 库实时监控 + 轮询降级，防抖去重 |
+| 3 | `src/product_app/bug_fix_workflow.py` | ~496 | BugFixWorkflow：状态机编排，管理 open→analyzing→proposed→approved→fixing→verified→fixed 全流程，含 git stash/commit 回滚 |
+
+#### 扩展模块（4 个修改）
+
+| # | 文件 | 变更说明 |
+|---|------|---------|
+| 1 | `src/product_app/feedback.py` | BugReport 新增 6 字段（analysis_report/fix_proposal/approval_status/approval_comment/fix_result/git_commit_hash）+ 8 个新状态常量 + analysis 目录 |
+| 2 | `src/product_app/service_manager.py` | 新增 bug_fix_agent 作业 + BugWatchdog 启动/停止管理 |
+| 3 | `src/api/product_routes.py` | 新增 4 个 API 端点（analysis/approve/reject/fix-status） |
+| 4 | `src/ui_report/product_dashboard.py` | 反馈中心新增：状态机步骤指示器 + 分析报告/修复方案展示 + Approve/Reject 按钮 + 修复结果展示 |
+
+#### 测试文件（1 个新增）
+
+| # | 文件 | 测试数 | 覆盖范围 |
+|---|------|--------|---------|
+| 1 | `tests/test_bug_auto_fix.py` | 21 | BugFixAgent(8)/BugWatchdog(3)/BugFixWorkflow(6)/API端点(4) |
+
+#### 依赖更新
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| openai | >=1.0 | DeepSeek API 调用（OpenAI 兼容 SDK） |
+| watchdog | >=3.0 | 文件系统实时监控 |
+
+### 系统架构
+
+```
+feedback/bugs/open/  ──[BugWatchdog]──>  BugFixWorkflow  ──>  BugFixAgent.analyze()
+                                                    │                    │
+                                                    v                    v
+                                              状态机流转          DeepSeek API 分析
+                                                    │
+                                              [人工审批/API]
+                                                    │
+                                                    v
+                                          BugFixAgent.execute_fix()
+                                                    │
+                                              pytest 验证 + git commit
+```
+
+### Bug 状态机
+
+```
+open → analyzing → proposed → approved → fixing → verified → fixed
+                   │           │                           │
+                   v           v                           v
+                blocked    rejected                   fix_failed
+                              │                           │
+                              └──→ analyzing (重新分析)     └──→ fixing (重试)
+                                                              └──→ open (重置)
+```
+
+### API 端点（4 个新增）
+
+| # | 端点 | 方法 | 说明 |
+|---|------|------|------|
+| 1 | `/product/feedback/{bug_id}/analysis` | GET | 获取 Bug 分析报告和修复方案 |
+| 2 | `/product/feedback/{bug_id}/approve` | POST | 审批通过修复方案，自动执行修复 |
+| 3 | `/product/feedback/{bug_id}/reject` | POST | 拒绝修复方案，可重新触发分析 |
+| 4 | `/product/feedback/{bug_id}/fix-status` | GET | 获取 Bug 修复进度 |
+
+### 安全约束
+
+| # | 约束 | 实现方式 |
+|---|------|---------|
+| 1 | 修复方案必须审批后才能执行 | BugFixWorkflow.approve_fix() 为唯一执行入口 |
+| 2 | 禁止自动修改风控模块 | _is_blocked_module() 拦截 risk_engine/trading_log/backtest_report |
+| 3 | 修复前创建回滚点 | git stash 保存当前状态 |
+| 4 | 测试失败自动回滚 | pytest 不通过时 git stash pop 恢复 |
+| 5 | 修复成功自动提交 | git commit -m "fix(auto): {bug_id} - {title}" |
+| 6 | DeepSeek API Key 不硬编码 | 从环境变量 DEEPSEEK_API_KEY 读取 |
+
+### 测试结果
+
+```
+tests/test_bug_auto_fix.py — 21 passed
+```
+
+**通过率: 21/21 (100%)**
+
+### 验收标准检查
+
+| # | 验收标准 | 状态 | 验证方式 |
+|---|---------|------|---------|
+| 1 | 新 Bug 自动触发分析 | ✅ | BugWatchdog 监控 open/ 目录，新文件触发 process_bug() |
+| 2 | 分析报告自动生成 | ✅ | BugFixAgent.analyze() 调用 DeepSeek API 生成根因分析 |
+| 3 | 修复方案自动生成 | ✅ | BugFixAgent.propose_fix() 生成含代码 diff 的修复方案 |
+| 4 | 修复方案需人工审批 | ✅ | approve_fix()/reject_fix() 为唯一操作入口 |
+| 5 | 审批后自动执行修复 | ✅ | approve_fix() 自动调用 _execute_and_verify() |
+| 6 | 受限模块自动拦截 | ✅ | _is_blocked_module() 检查 risk_engine/trading_log/backtest_report |
+| 7 | 修复失败自动回滚 | ✅ | pytest 失败时 git stash pop 恢复原状态 |
+| 8 | 修复成功自动提交 | ✅ | git add -A + git commit |
+| 9 | 面板可视化修复进度 | ✅ | 步骤指示器 + 分析/方案展示 + 审批按钮 |
+| 10 | API 端点可查询修复状态 | ✅ | 4 个新端点全部可用 |
+
+### AGENTS.md 合规性
+
+| # | AGENTS.md 规则 | 状态 | 备注 |
+|---|---------------|------|------|
+| 1 | 2.1 人工确认原则 | ✅ | 修复方案必须审批后才能执行 |
+| 2 | 4.2 禁止修改风控模块 | ✅ | _is_blocked_module() 自动拦截 |
+| 3 | 4.1 禁止硬编码密钥 | ✅ | DEEPSEEK_API_KEY 从环境变量读取 |
+
+### 已知问题与限制
+
+| # | 问题 | 严重程度 | 处理计划 |
+|---|------|----------|---------|
+| 1 | DeepSeek API 不可用时自动分析失败 | 中 | 已有重试机制(3次)，失败后保留 open 状态等待人工处理 |
+| 2 | diff 应用为简单字符串替换，复杂 diff 可能失败 | 中 | 后续可引入更精确的 diff 解析库 |
+| 3 | BugWatchdog 轮询模式有 30 秒延迟 | 低 | 安装 watchdog 库后自动切换实时监控 |
+| 4 | 修复执行为同步阻塞 | 低 | 后续可改为异步执行 |
 
 ---
 

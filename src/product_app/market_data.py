@@ -8,7 +8,7 @@ consistent.
 from __future__ import annotations
 
 import traceback
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any
 
 import pandas as pd
@@ -22,6 +22,25 @@ from src.product_app.feedback import get_feedback_service
 
 def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def is_trading_hours() -> bool:
+    """Return True if the current time falls within A-share continuous auction hours.
+
+    A-share trading sessions (Beijing time):
+        Morning:  9:30 — 11:30
+        Afternoon: 13:00 — 15:00
+    """
+    now = datetime.now()
+    # Weekend check
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    morning_start = time(9, 30)
+    morning_end = time(11, 30)
+    afternoon_start = time(13, 0)
+    afternoon_end = time(15, 0)
+    return (morning_start <= t <= morning_end) or (afternoon_start <= t <= afternoon_end)
 
 
 def default_symbols() -> list[str]:
@@ -127,12 +146,18 @@ def fetch_product_quotes(
                 "messages": [],
             }
 
-        bug_id = write_data_feedback(
-            title="Realtime provider returned no quotes",
-            summary=f"{provider_name} returned no rows for {', '.join(normalized_symbols)}",
-            provider=provider_name,
-            symbols=normalized_symbols,
-        )
+        # Provider returned empty — decide whether to create a bug report.
+        # Outside trading hours, empty results are expected (no live quotes).
+        # During trading hours, this is a genuine data-source issue.
+        bug_id = None
+        if is_trading_hours():
+            bug_id = write_data_feedback(
+                title="Realtime provider returned no quotes",
+                summary=f"{provider_name} returned no rows for {', '.join(normalized_symbols)}",
+                provider=provider_name,
+                symbols=normalized_symbols,
+            )
+
         if allow_demo:
             return {
                 "status": "fallback_demo",
@@ -142,7 +167,10 @@ def fetch_product_quotes(
                 "timestamp": now_text(),
                 "symbols": normalized_symbols,
                 "quotes": demo_quote_records(),
-                "messages": ["Realtime provider returned no quotes; fallback demo data is displayed."],
+                "messages": [
+                    "Realtime provider returned no quotes; fallback demo data is displayed."
+                    + (" (non-trading hours, expected)" if not is_trading_hours() else "")
+                ],
                 "bug_id": bug_id,
             }
         return {
@@ -157,13 +185,17 @@ def fetch_product_quotes(
             "bug_id": bug_id,
         }
     except Exception as exc:
-        bug_id = write_data_feedback(
-            title="Realtime quote refresh failed",
-            summary=f"{provider_name} realtime quote refresh failed: {exc}",
-            provider=provider_name,
-            symbols=normalized_symbols,
-            exc=exc,
-        )
+        # Only file bug reports during trading hours — outside trading hours
+        # provider failures are expected (API maintenance, no live data).
+        bug_id = None
+        if is_trading_hours():
+            bug_id = write_data_feedback(
+                title="Realtime quote refresh failed",
+                summary=f"{provider_name} realtime quote refresh failed: {exc}",
+                provider=provider_name,
+                symbols=normalized_symbols,
+                exc=exc,
+            )
         if allow_demo:
             return {
                 "status": "fallback_demo",
