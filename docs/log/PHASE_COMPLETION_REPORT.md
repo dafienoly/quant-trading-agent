@@ -954,6 +954,39 @@ tests/test_bug_auto_fix.py — 21 passed
 
 ---
 
+## Cross-Phase: Agent 开发流程治理
+
+### 完成日期
+
+2026-06-10
+
+### 背景
+
+随着项目复杂度提升，原有约束文档已经覆盖产品目标、数据契约、风险策略、执行策略和自测要求，但缺少开发团队 Agent 的统一协作流程。为防止需求、架构、开发、自测、测试、Review、验收之间断链，本次新增跨阶段开发管线。
+
+### 完成交付
+
+| # | 文件 | 说明 |
+|---|---|---|
+| 1 | `docs/process/AGENT_DEVELOPMENT_PIPELINE.md` | PM、Architect、Developer、Tester、BugFix、Reviewer、Acceptance 的协作流程、交付物、阶段门禁 |
+| 2 | `docs/policy/SELF_TEST_CHECKLIST.md` | 按触碰范围分级的开发自测守则，覆盖文档、API、前端、数据、因子、回测、风控、执行、自动修复 |
+| 3 | `docs/design/AGENTS.md` | 新增开发协作流程硬约束，要求新 Phase/完整功能必须走需求文档、架构设计、自测、测试、Review、验收 |
+| 4 | `docs/log/DEVELOPMENT_LOG.md` | 记录流程治理背景、完成内容和后续 Agent 准则 |
+
+### 准入影响
+
+后续任一新阶段或完整功能，若缺少以下任一交付物，不得标记为完成：
+
+1. 需求文档。
+2. 架构设计文档。
+3. 开发报告和自测结果。
+4. 测试报告。
+5. 架构 Review 结论。
+6. 产品验收结论。
+7. 开发日志和阶段报告更新。
+
+---
+
 ## 审计检查清单
 
 以下为跨阶段通用审计项，每个 Phase 完成后需逐项确认：

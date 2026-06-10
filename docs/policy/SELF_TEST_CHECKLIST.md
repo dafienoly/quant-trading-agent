@@ -1,491 +1,383 @@
-# SELF_TEST_CHECKLIST.md — 开发完成后必须执行的自测流程
+# Self Test Checklist
 
-> 本文档为开发约束文档，所有开发者在完成功能开发后必须按此流程执行自测。
-> 未通过自测的代码不得提交，不得进入代码审查阶段。
-
----
-
-## 1. 总则
-
-### 1.1 适用范围
-
-- 所有涉及 `src/` 目录下代码变更的提交
-- 所有涉及 `tests/` 目录下测试变更的提交
-- 所有涉及配置文件（`.env`、`pyproject.toml`、Streamlit 配置等）变更的提交
-- 所有涉及 API 端点新增或修改的提交
-- 所有涉及 Streamlit Dashboard 面板新增或修改的提交
-
-### 1.2 自测流程总览
-
-```
-代码变更 → Step 1 静态检查 → Step 2 单元测试 → Step 3 API 端点测试 → Step 4 功能实现检查 → Step 5 浏览器 E2E 测试 → Step 6 安全检查 → 通过后方可提交
-```
-
-任何 Step 失败，必须修复后重新从 Step 1 开始。
-
-### 1.3 环境要求
-
-| 工具 | 安装命令 | 用途 |
-|------|---------|------|
-| Python ≥ 3.11 | — | 运行时 |
-| pytest | `pip install pytest` | 单元/集成测试 |
-| ruff | `pip install ruff` | 静态代码检查 |
-| Playwright | `pip install playwright && playwright install chromium` | 浏览器 E2E 测试 |
+> 本文档是 Developer Agent 的自测硬约束。任何代码、配置、前端、API、数据、交易逻辑变更，在交给测试工程师或架构师之前，必须按本文档完成自测，并在开发报告中记录命令、结果和未覆盖风险。
 
 ---
 
-## 2. Step 1: 静态代码检查
+## 1. 基本原则
 
-### 2.1 ruff 检查
-
-```bash
-ruff check src/ tests/
-```
-
-**通过标准**: 零错误（warning 允许但需评估）
-
-### 2.2 Streamlit Widget ID 冲突检查
-
-**规则**: 同一 Streamlit 页面中，所有 `st.selectbox`、`st.text_input`、`st.checkbox`、`st.slider`、`st.number_input`、`st.date_input`、`st.multiselect`、`st.button` 等 widget 必须提供唯一 `key` 参数。
-
-**检查方法**:
-
-```bash
-# 搜索缺少 key 的 widget 调用
-grep -n "st\.selectbox\|st\.text_input\|st\.checkbox\|st\.slider\|st\.number_input\|st\.date_input\|st\.multiselect\|st\.button" src/ui_report/*.py
-```
-
-**通过标准**: 所有 widget 调用均包含 `key=` 参数，且同一文件内 key 值唯一。
-
-### 2.3 硬编码密钥检查
-
-```bash
-# 搜索可能的硬编码密钥
-grep -rn "TOKEN\s*=\s*['\"]" src/
-grep -rn "API_KEY\s*=\s*['\"]" src/
-grep -rn "SECRET\s*=\s*['\"]" src/
-grep -rn "PASSWORD\s*=\s*['\"]" src/
-```
-
-**通过标准**: 无硬编码密钥，所有敏感配置从环境变量读取。
+1. 自测失败不得提交为“完成”。
+2. 不得删除失败测试来制造通过。
+3. 不得用 mock 成功替代真实应验证的 API / UI / 浏览器 smoke。
+4. 不得静默忽略 skipped、xfail、warning、外部服务失败。
+5. 不得把 Demo fallback 说成真实数据。
+6. 不得把 paper trading 说成实盘交易。
+7. 核心交易逻辑、风控、执行、回测、数据契约变更必须有测试。
+8. 每次自测必须说明：
+   - 触碰范围
+   - 执行命令
+   - 结果
+   - 未执行项及原因
+   - 剩余风险
 
 ---
 
-## 3. Step 2: 单元测试
+## 2. 自测分级
 
-### 3.1 运行完整测试套件
+Developer Agent 必须先判断本次变更级别。若多个级别同时命中，执行最高级别以及所有相关专项检查。
 
-```bash
-python -m pytest tests/ -q --tb=short
-```
-
-**通过标准**: 全部通过，0 failed。如有 skipped 需说明原因。
-
-### 3.2 新增代码覆盖率
-
-- 新增 Python 模块必须有对应测试文件
-- 新增函数/方法必须有至少 1 个测试用例
-- 新增 API 端点必须有对应测试
-
-**检查方法**:
-
-```bash
-# 确认新增模块有对应测试
-ls tests/test_*.py
-```
-
-### 3.3 测试独立性
-
-- 所有测试必须可独立运行，不依赖执行顺序
-- 不依赖外部服务（AkShare、DeepSeek API 等），使用 mock
-- 不依赖特定交易时段，使用 mock `is_trading_hours()`
+| 级别 | 触碰范围 | 最低自测要求 |
+|---|---|---|
+| L0 文档轻改 | 仅 README、日志、注释、无行为变化文档 | Markdown 链接/路径检查、拼写和引用自查 |
+| L1 普通代码 | 工具函数、非交易业务逻辑、非核心服务 | 相关 pytest + ruff + py_compile |
+| L2 API / 配置 / 后台服务 | FastAPI、配置中心、ServiceManager、反馈系统 | L1 + API smoke + 配置安全检查 |
+| L3 前端 / 产品入口 | Streamlit、用户工作流、页面交互 | L2 + Streamlit smoke + 浏览器渲染检查 |
+| L4 数据 / 因子 / 回测 | data_gateway、factor_engine、backtest_engine、strategy_engine | L1 + 数据契约专项 + 回测/因子专项 |
+| L5 风控 / 执行 / 订单 | risk_engine、execution_engine、真实/模拟订单路径 | L1 + 风控执行专项 + 负向测试 + 人工确认验证 |
+| L6 自动修复 / Agent 修改代码 | bug_fix_agent、bug_fix_workflow、自动 patch | L2 + 审批状态机 + 受限模块阻断 + 回滚验证 |
 
 ---
 
-## 4. Step 3: API 端点测试
+## 3. 通用自测步骤
 
-### 4.1 启动 FastAPI 服务
+### Step 1: 工作区检查
 
 ```bash
-python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8099
+git status --short --branch
+git diff --stat
 ```
 
-### 4.2 逐端点验证
+通过标准：
 
-对每个 API 端点（包括新增和修改的），验证：
+- 工作区只包含本次任务相关文件。
+- 没有无意生成的日志、缓存、截图、PID 文件被暂存。
+- 不得回滚用户或其他 Agent 的无关修改。
 
-| 检查项 | 要求 |
-|--------|------|
-| HTTP 状态码 | 200（正常）或预期的 4xx/5xx |
-| 响应格式 | JSON 格式正确 |
-| 必需字段 | 返回数据包含文档要求的字段 |
-| 边界条件 | 空参数、非法参数返回合理错误 |
+### Step 2: 静态检查
 
-**验证脚本**:
+对本次触碰的 Python 文件运行：
 
-```python
-import requests
-
-base = "http://localhost:8099"
-
-# 健康检查
-r = requests.get(f"{base}/product/health")
-assert r.status_code == 200
-assert r.json().get("status") in ("ok", "warn")
-
-# Dashboard
-r = requests.get(f"{base}/product/dashboard")
-assert r.status_code == 200
-assert "quotes" in r.json()
-
-# 配置
-r = requests.get(f"{base}/product/config")
-assert r.status_code == 200
-assert "config" in r.json()
-
-# ... 对每个端点重复验证
+```bash
+.venv\Scripts\python.exe -m ruff check <touched-python-files-and-tests>
+.venv\Scripts\python.exe -m py_compile <touched-src-python-files>
 ```
 
-**通过标准**: 所有端点返回预期状态码和数据结构。
+若项目环境不是 Windows，等价命令为：
 
-### 4.3 安全端点验证
+```bash
+python -m ruff check <touched-python-files-and-tests>
+python -m py_compile <touched-src-python-files>
+```
 
-- `POST /product/config` 不接受 `TOKEN`/`KEY`/`SECRET`/`PASSWORD` 等敏感字段
-- `POST /product/config/confirm-upgrade` 需要确认参数
-- `LEVEL_3_AUTO` 配置被阻断
-- 默认交易模式仍为 `LEVEL_1_SIGNAL_ONLY`
+通过标准：
+
+- ruff 无错误。
+- py_compile 无错误。
+- 若存在项目既有 lint 问题，本次报告必须说明“只对 touched scope 运行”，不得声称全量 ruff 通过。
+
+### Step 3: 相关测试
+
+```bash
+.venv\Scripts\python.exe -m pytest <related-test-files> -q --basetemp=runtime\pytest-tmp
+```
+
+通过标准：
+
+- 相关测试全部通过。
+- 新增功能必须有新增或更新测试。
+- 外部 API、交易时间、网络数据源必须 mock 或使用可控 fixture。
+
+### Step 4: 全量或阶段回归
+
+以下任一情况必须跑更大范围回归：
+
+- 修改公共模型、配置、数据契约、风险、执行、回测。
+- 修改被多个模块导入的函数。
+- 修改产品入口主流程。
+- 修复测试工程师报告的阻断 Bug。
+
+推荐命令：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests -q --tb=short --basetemp=runtime\pytest-tmp
+```
+
+若全量测试存在已知历史失败，开发报告必须列出：
+
+- 失败测试名
+- 是否与本次变更相关
+- 为什么不阻断
+- 相关 issue 或 Bug 报告路径
+
+### Step 5: 差异检查
+
+```bash
+git diff --check
+git diff --stat
+```
+
+通过标准：
+
+- 无 trailing whitespace 或 conflict marker。
+- diff 范围符合任务。
 
 ---
 
-## 4. Step 4: 功能实现检查
+## 4. 专项自测清单
 
-> **此步骤对照需求文档和设计文档，逐个功能点验证实现是否完整、正确。** 仅通过 API 端点测试不能证明功能逻辑正确，必须从用户视角验证每个功能的行为。
+### 4.1 文档变更
 
-### 4.1 检查原则
+适用：`README.md`、`docs/`。
 
-- **对照需求文档**: 以 `ROADMAP_AND_CONSTRAINTS.md` 各 Phase 验收标准、`AGENTS.md` 功能规则、`ARCHITECTURE.md` 模块职责为基准
-- **逐功能点验证**: 每个需求条目至少有 1 个验证用例
-- **从用户视角**: 验证用户可感知的行为，而非仅验证代码存在
-- **正向 + 反向**: 每个功能既验证正常路径，也验证异常/边界路径
+必须检查：
 
-### 4.2 功能检查清单模板
+1. 新增文档路径是否被相关索引或 AGENTS 文档引用。
+2. 文档中命令是否能在当前项目结构下执行。
+3. 不得出现 `TODO`、`TBD`、占位章节，除非明确标为后续计划。
+4. 如果修改流程规则，必须更新 `docs/log/DEVELOPMENT_LOG.md`。
 
-对本次变更涉及的每个功能，填写以下检查表：
+推荐命令：
+
+```bash
+rg -n "TODO|TBD|待补充" docs README.md
+rg -n "AGENT_DEVELOPMENT_PIPELINE|SELF_TEST_CHECKLIST" docs README.md
+```
+
+### 4.2 API 变更
+
+适用：`src/api/`、产品 API 路由、配置端点。
+
+必须验证：
+
+1. 正常请求返回预期 HTTP 状态码。
+2. 非法参数返回可理解错误。
+3. 响应字段与文档一致。
+4. 配置端点不泄露密钥。
+5. 不新增绕过人工确认或风控的端点。
+
+Smoke 示例：
+
+```bash
+.venv\Scripts\python.exe -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000
+```
+
+另开终端：
+
+```bash
+curl http://127.0.0.1:8000/product/health
+curl http://127.0.0.1:8000/product/config
+```
+
+通过标准：
+
+- HTTP 200 或预期 4xx。
+- 返回 JSON。
+- `ENABLE_LIVE_TRADING`、密钥、Token、密码不明文泄露。
+
+### 4.3 Streamlit / Dashboard 变更
+
+适用：`src/ui_report/`。
+
+必须验证：
+
+1. 页面能启动。
+2. 所有本次修改 Tab 可打开。
+3. 页面没有 `stException`。
+4. 控件有稳定唯一 key 或不会产生重复 element id。
+5. 用户主流程可从页面完成。
+6. 交易相关 UI 不提供批量确认买入，不默认暴露 LEVEL_3 自动交易。
+
+Smoke 示例：
+
+```bash
+.venv\Scripts\python.exe -m streamlit run src\ui_report\product_dashboard.py --server.address 127.0.0.1 --server.port 8771 --server.headless true
+```
+
+HTTP 检查：
+
+```bash
+curl http://127.0.0.1:8771
+```
+
+浏览器检查必须覆盖：
+
+- 页面标题或主入口可见。
+- 修改的 Tab 可见。
+- 修改的按钮、输入框、表格可见。
+- 控件点击后无前端异常。
+
+### 4.4 数据源 / 行情变更
+
+适用：`src/data_gateway/`、实时行情、AkShare、AkTools。
+
+必须验证：
+
+1. `symbol` 规范化正确。
+2. A 股、港股、港股通市场标识正确。
+3. 内部 `volume` 单位为股；若数据源返回手，必须转换并记录 `source_volume_unit`。
+4. 保留或明确区分 raw price 与 adjusted price。
+5. 返回 `currency`、`timezone`、`data_source`、`updated_at`、`data_version`。
+6. 数据源异常时默认不允许真实交易，并生成可追踪反馈。
+7. Demo fallback 必须显式标注。
+
+推荐命令：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py -q --basetemp=runtime\pytest-tmp
+```
+
+### 4.5 因子 / 策略变更
+
+适用：`src/factor_engine/`、`src/strategy_engine/`。
+
+必须验证：
+
+1. 因子命名符合 `FACTOR_RESEARCH_GUIDE.md`。
+2. Alpha、Risk、Theme、Timing 因子类型明确。
+3. LLM 不直接输出数值因子，只能输出结构化标签，再由规则映射。
+4. 无未来函数。
+5. 信号包含解释、风险提示、止损/止盈或不适用原因。
+6. 股票池过滤器不可绕过。
+
+推荐命令：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase2.py tests/test_audit_phase2.py -q --basetemp=runtime\pytest-tmp
+```
+
+### 4.6 回测变更
+
+适用：`src/backtest_engine/`。
+
+必须验证：
+
+1. 手续费、滑点、印花税。
+2. 涨跌停无法成交。
+3. 停牌无法成交。
+4. 样本外测试。
+5. 不同市场环境测试。
+6. 指标完整：年化收益、最大回撤、Sharpe、Calmar、胜率、盈亏比、换手、超额收益。
+
+推荐命令：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase3.py tests/test_audit_phase3.py -q --basetemp=runtime\pytest-tmp
+```
+
+### 4.7 风控 / 执行 / 订单变更
+
+适用：`src/risk_engine/`、`src/execution_engine/`、订单 API。
+
+必须验证：
+
+1. Risk Agent 一票否决。
+2. 默认不真实自动下单。
+3. 非交易时间禁止真实委托，但允许信号和订单草稿。
+4. A 股默认 LIMIT，不默认 MARKET。
+5. 订单超时状态：`PENDING_ACK`、告警、暂停新订单。
+6. 不允许买创业板、科创板、ST、退市整理股。
+7. 不允许批量确认买入订单。
+8. 所有真实订单可追溯。
+
+推荐命令：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase4_risk_engine.py tests/test_phase5_order_checker.py tests/test_phase5_execution.py tests/test_phase5_e2e.py -q --basetemp=runtime\pytest-tmp
+```
+
+### 4.8 Bug 自动处理变更
+
+适用：`src/product_app/bug_fix_agent.py`、`bug_fix_workflow.py`、`bug_watchdog.py`。
+
+必须验证：
+
+1. 修复方案必须人工审批。
+2. `risk_engine`、`execution_engine`、交易日志、回测报告核心逻辑受限。
+3. 测试失败自动回滚。
+4. DeepSeek / OpenAI API Key 只来自环境变量。
+5. 自动修复只运行相关测试时，不得漏掉核心安全测试。
+
+推荐命令：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_bug_auto_fix.py -q --basetemp=runtime\pytest-tmp
+```
+
+---
+
+## 5. 开发报告自测模板
+
+Developer Agent 必须在 `docs/dev_reports/` 中记录：
 
 ```markdown
-### 功能: [功能名称]
+# <Feature> Development Report
 
-**需求来源**: [文档名] §[章节号]
+## Scope
 
-**需求描述**: [原文摘录或转述]
+- Requirements: `docs/requirements/...`
+- Architecture: `docs/design/...`
+- Changed files:
+  - `src/...`
+  - `tests/...`
 
-**验证用例**:
+## Self Test Level
 
-| # | 用例描述 | 输入/操作 | 预期结果 | 实际结果 | 通过 |
-|---|---------|----------|---------|---------|------|
-| 1 | 正常路径 | ... | ... | ... | ☐ |
-| 2 | 边界条件 | ... | ... | ... | ☐ |
-| 3 | 异常路径 | ... | ... | ... | ☐ |
+- Level: L3 Frontend / API / Service
+- Reason: touched `src/ui_report`, `src/api`, `src/product_app`
 
-**结论**: ☐ 功能完整实现 / ☐ 部分实现（说明缺失项）/ ☐ 未实现
-```
+## Commands
 
-### 4.3 各 Phase 功能检查要点
+| Command | Result |
+|---|---|
+| `.venv\Scripts\python.exe -m ruff check ...` | PASS |
+| `.venv\Scripts\python.exe -m pytest ...` | PASS |
+| API smoke | PASS |
+| Browser smoke | PASS |
 
-以下列出各 Phase 的核心功能检查要点，开发者应根据本次变更涉及的 Phase 选取对应检查项。
+## Skipped / Not Run
 
-#### Phase 1: 数据层与股票池
+- None
 
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 1.1 | 拉取指定股票日线数据 | ROADMAP §Phase1 验收1 | 调用数据接口，验证返回字段完整（OHLCV） |
-| 1.2 | 拉取指数数据 | ROADMAP §Phase1 验收2 | 调用数据接口，验证指数代码可查询 |
-| 1.3 | 生成可交易股票池 | ROADMAP §Phase1 验收3 | 验证排除 300/301/688/689/ST/停牌/低成交额 |
-| 1.4 | 输出数据质量报告 | ROADMAP §Phase1 验收4 | 验证报告包含缺失率、延迟、异常值统计 |
-| 1.5 | 识别停牌/ST/涨跌停 | ROADMAP §Phase1 验收5 | 验证标记正确性 |
+## Safety Confirmation
 
-#### Phase 2: 因子与策略评分
+- Default live trading remains disabled.
+- Risk Agent veto was not bypassed.
+- No secrets committed.
+- No batch buy confirmation introduced.
 
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 2.1 | 4 类因子分生成 | ROADMAP §Phase2 验收1 | 验证 policy/sentiment/fundamental/trend 分值输出 |
-| 2.2 | 总评分计算 | ROADMAP §Phase2 验收2 | 验证权重 0.25/0.30/0.20/0.25 |
-| 2.3 | 买入/卖出/持有信号 | ROADMAP §Phase2 验收3 | 验证信号类型和触发条件 |
-| 2.4 | 信号解释文本 | ROADMAP §Phase2 验收4 | 验证每个信号包含可读解释 |
-| 2.5 | 信号无未来数据 | ROADMAP §Phase2 验收5 | 验证信号仅使用 T-1 及更早数据 |
+## Residual Risk
 
-#### Phase 3: 回测与评估
-
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 3.1 | 回测结果可复现 | ROADMAP §Phase3 验收1 | 相同参数运行两次，结果一致 |
-| 3.2 | 包含交易成本 | ROADMAP §Phase3 验收2 | 验证手续费/印花税/滑点已扣除 |
-| 3.3 | 包含涨跌停限制 | ROADMAP §Phase3 验收4 | 验证涨停无法买入、跌停无法卖出 |
-| 3.4 | 完整回测报告 | ROADMAP §Phase3 验收5 | 验证年化收益/最大回撤/夏普/胜率等指标 |
-
-#### Phase 4: 实盘盯盘与信号生成
-
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 4.1 | 实时行情获取 | ROADMAP §Phase4 验收1 | 验证行情数据实时更新 |
-| 4.2 | 持仓盈亏监控 | ROADMAP §Phase4 验收2 | 验证持仓盈亏计算正确 |
-| 4.3 | 候选股信号触发 | ROADMAP §Phase4 验收3 | 验证信号触发逻辑 |
-| 4.4 | 不自动真实下单 | ROADMAP §Phase4 验收6 | 验证 LEVEL_1 模式无自动下单路径 |
-
-#### Phase 5: 人工确认交易
-
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 5.1 | 未确认不能下单 | ROADMAP §Phase5 验收1 | 验证订单草稿需人工确认后才执行 |
-| 5.2 | 风控不通过不能下单 | ROADMAP §Phase5 验收2 | 验证风控拒绝时订单被阻止 |
-| 5.3 | 非交易时间不能下单 | ROADMAP §Phase5 验收4 | 验证非交易时段下单被拒绝 |
-| 5.4 | 所有订单有日志 | ROADMAP §Phase5 验收5 | 验证订单生命周期有完整记录 |
-
-#### Phase 5.5: 产品化交付
-
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 5.5.1 | 一键环境检查 | ROADMAP §Phase5.5 验收1 | 运行 bootstrap.py，验证 5 项检查 |
-| 5.5.2 | 一键启动 | ROADMAP §Phase5.5 验收2 | 运行 start_product.py，验证 API+Dashboard 启动 |
-| 5.5.3 | 统一产品入口 | ROADMAP §Phase5.5 验收3 | 浏览器打开 Dashboard，验证 9 Tab 可访问 |
-| 5.5.4 | 配置中心可查看修改 | ROADMAP §Phase5.5 验收4 | 验证配置读取/修改/恢复默认 |
-| 5.5.5 | 完整使用流程可跑通 | ROADMAP §Phase5.5 验收5 | 行情→因子→回测→信号→订单确认全流程 |
-| 5.5.6 | 自动 BUG 报告 | ROADMAP §Phase5.5 验收6 | 触发异常，验证 feedback/bugs/open/ 生成报告 |
-| 5.5.7 | 默认不启用真实交易 | ROADMAP §Phase5.5 验收7 | 验证 LEVEL_3 阻断、BROKER_ADAPTER=paper |
-
-#### Phase 5.6: BUG 自动处理
-
-| # | 功能点 | 需求来源 | 验证方法 |
-|---|--------|---------|---------|
-| 5.6.1 | Bug 自动分析 | ROADMAP §Phase5.6 验收1 | 创建 Bug，验证 Watchdog 自动触发分析 |
-| 5.6.2 | 修复方案需人工审批 | ROADMAP §Phase5.6 验收2 | 验证 proposed 状态下才能 approve/reject |
-| 5.6.3 | 修复后自动 pytest | ROADMAP §Phase5.6 验收3 | 验证 execute_fix 调用 _run_tests |
-| 5.6.4 | 修复失败自动回滚 | ROADMAP §Phase5.6 验收4 | 验证测试失败时原始文件恢复 |
-| 5.6.5 | 禁止修改风控/日志/回测模块 | ROADMAP §Phase5.6 验收5 | 验证 _is_blocked_module 拦截 |
-
-### 4.4 AGENTS.md 规则合规性检查
-
-对照 `AGENTS.md` 中的 Agent 规则，验证本次变更是否遵守：
-
-| # | AGENTS.md 规则 | 验证方法 |
-|---|---------------|---------|
-| 1 | 不允许直接跳过验证 | 新增功能有对应测试 |
-| 2 | 不允许默认自动下单 | 默认交易模式未变更 |
-| 3 | 风控第一 | 风控模块未被绕过 |
-| 4 | 数据约束 | 无未来数据、无静默填充 |
-| 5 | LLM 输出结构化 | LLM 输出落到 summary/evidence/confidence/risk/suggestion 字段 |
-| 6 | BugFix Agent 约束 | 修复需审批、受限模块拦截、pytest 验证 |
-
-### 4.5 功能回归检查
-
-每次变更后，验证未修改的功能仍正常工作：
-
-```bash
-# 运行完整测试套件（已在 Step 2 执行，此处关注功能级回归）
-python -m pytest tests/ -q --tb=short
-
-# 启动服务，手动验证核心功能流程
-# 1. 行情数据可获取
-# 2. 信号可生成
-# 3. 订单草稿可创建
-# 4. 风控检查正常
-# 5. 配置可读取
+- ...
 ```
 
 ---
 
-## 5. Step 5: 浏览器端到端测试（Playwright）
+## 6. 失败处理
 
-> **此步骤为强制要求，不得跳过。** Phase 5.6 审计发现用户打开网页即报错但自测未发现的问题，根因是缺乏浏览器端到端测试。
+若任一自测失败：
 
-### 5.1 前置条件
-
-```bash
-# 安装 Playwright（如未安装）
-pip install playwright
-playwright install chromium
-```
-
-### 5.2 启动服务
-
-```bash
-# 终端 1: FastAPI
-python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8099
-
-# 终端 2: Streamlit
-python -m streamlit run src/ui_report/product_dashboard.py --server.port 8502 --server.headless true
-```
-
-### 5.3 运行浏览器 E2E 测试
-
-```bash
-python tests/test_browser_e2e.py
-```
-
-### 5.4 浏览器 E2E 测试必须覆盖的检查项
-
-| # | 检查项 | 说明 |
-|---|--------|------|
-| 1 | Streamlit 健康检查 | `GET /_stcore/health` 返回 `ok` |
-| 2 | 页面加载无崩溃 | 无 `StreamlitDuplicateElementId` 异常 |
-| 3 | 无 Streamlit 异常元素 | 页面无 `[data-testid="stException"]` 元素 |
-| 4 | 所有 Tab 可点击 | 每个 Tab 点击后无异常 |
-| 5 | 页面内容非空 | 页面渲染了实际内容 |
-
-### 5.5 手动浏览器验证（补充）
-
-在 Playwright 自动测试之外，开发者还需手动打开浏览器验证：
-
-1. 打开 `http://localhost:8502`
-2. 确认页面正常加载，无红色错误提示
-3. 逐个点击每个 Tab，确认无报错
-4. 在"配置中心" Tab 确认默认交易模式为 `LEVEL_1_SIGNAL_ONLY`
-5. 在"订单确认" Tab 确认无自动下单入口
-
-### 5.6 截图存档
-
-每次自测必须保存浏览器截图至 `runtime/` 目录：
-
-```bash
-# Playwright 自动保存
-runtime/dashboard_test.png
-runtime/dashboard_final.png
-```
+1. 停止提交。
+2. 记录失败命令和错误摘要。
+3. 判断是否为本次变更引入。
+4. 本次引入则修复并重新运行相关测试。
+5. 非本次引入则创建或引用 Bug 报告，并说明为何不阻断。
+6. 对核心交易安全相关失败，不允许以“历史问题”放行。
 
 ---
 
-## 6. Step 6: 安全检查
+## 7. 提交前最终清单
 
-### 6.1 交易安全
+提交前必须逐项确认：
 
-| 检查项 | 要求 |
-|--------|------|
-| 默认交易模式 | `LEVEL_1_SIGNAL_ONLY` |
-| 实盘交易开关 | `ENABLE_LIVE_TRADING=false` |
-| 人工确认 | `REQUIRE_HUMAN_CONFIRMATION=true` |
-| 券商适配器 | `BROKER_ADAPTER=paper` |
-| LEVEL_3 阻断 | 配置中心不提供 LEVEL_3_AUTO 入口 |
-
-### 6.2 风控完整性
-
-| 检查项 | 要求 |
-|--------|------|
-| Kill Switch 可用 | `/product/health` 中 `kill_switch.active=false` |
-| 风控模块未被修改 | `risk_engine/` 目录无未授权变更 |
-| 执行引擎未被修改 | `execution_engine/` 目录无未授权变更 |
-
-### 6.3 数据安全
-
-| 检查项 | 要求 |
-|--------|------|
-| 无硬编码密钥 | `.env` 不在 git 跟踪中 |
-| Bug 报告脱敏 | `feedback/bugs/` 中无明文密钥 |
-| 配置掩码 | `/product/config` 返回的敏感字段已掩码 |
-
----
-
-## 7. 自测结果记录
-
-### 7.1 自测报告模板
-
-每次自测完成后，在 `docs/audit/` 目录下记录自测结果：
-
-```markdown
-# 自测报告 — [日期] — [功能描述]
-
-## 自测环境
-- Python 版本:
-- 操作系统:
-- 交易时段: (交易中/非交易时段)
-
-## Step 1: 静态检查
-- [ ] ruff check: 通过/失败
-- [ ] Widget ID 冲突: 通过/失败
-- [ ] 硬编码密钥: 通过/失败
-
-## Step 2: 单元测试
-- [ ] pytest: ___ passed, ___ failed, ___ skipped
-- [ ] 新增代码有对应测试: 是/否
-
-## Step 3: API 端点测试
-- [ ] 所有端点 200 OK: 是/否
-- [ ] 安全端点验证: 通过/失败
-
-## Step 4: 功能实现检查
-- [ ] 对照需求文档逐功能验证: ___/___ 功能通过
-- [ ] AGENTS.md 规则合规: 通过/失败
-- [ ] 功能回归检查: 通过/失败
-- [ ] 功能检查清单已填写: 是/否
-
-## Step 5: 浏览器 E2E 测试
-- [ ] Playwright 测试: ___/___ PASS
-- [ ] 手动浏览器验证: 通过/失败
-- [ ] 截图已保存: 是/否
-
-## Step 6: 安全检查
-- [ ] 交易安全: 通过/失败
-- [ ] 风控完整性: 通过/失败
-- [ ] 数据安全: 通过/失败
-
-## 结论
-- [ ] 可以提交
-- [ ] 需修复后重测
-```
-
-### 7.2 提交前确认
-
-在 `git commit` 前，确认：
-
-```
-□ Step 1-6 全部通过
-□ 功能检查清单已填写（对照需求文档逐功能验证）
-□ 自测报告已填写
-□ 浏览器截图已保存
-□ 无硬编码密钥
-□ 默认安全配置未变更
-```
-
----
-
-## 8. 常见问题
-
-### Q1: Playwright 安装失败（网络问题）
-
-```bash
-# 使用镜像
-set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
-playwright install chromium
-```
-
-### Q2: 非交易时段如何测试行情相关功能
-
-使用 Demo 模式（默认在非交易时段自动启用）：
-
-```bash
-set DEMO_MODE=true
-```
-
-### Q3: 端口被占用
-
-```bash
-# 检查端口占用
-netstat -ano | findstr :8099
-netstat -ano | findstr :8502
-
-# 使用其他端口
-python -m uvicorn src.api.app:app --port 8098
-python -m streamlit run src/ui_report/product_dashboard.py --server.port 8503
-```
-
-### Q4: Streamlit 首次加载慢
-
-Streamlit 首次加载需要 10-20 秒，Playwright 测试中需设置足够等待时间（建议 15-20 秒）。
-
----
-
-## 9. 版本历史
-
-| 版本 | 日期 | 变更说明 |
-|------|------|---------|
-| 1.1 | 2026-06-10 | 新增 Step 4 功能实现检查，对照需求文档逐功能验证 |
-| 1.0 | 2026-06-10 | 初始版本，基于 Phase 5.6 审计教训建立 |
+- [ ] 已阅读需求文档和架构文档。
+- [ ] 已按触碰范围选择自测级别。
+- [ ] 新功能有测试。
+- [ ] 相关测试通过。
+- [ ] 静态检查通过。
+- [ ] API / UI / 浏览器 smoke 已按需执行。
+- [ ] 没有密钥、Token、Cookie、券商账号。
+- [ ] 没有绕过 Risk Agent。
+- [ ] 没有启用默认真实自动下单。
+- [ ] 文档和开发日志已更新。
+- [ ] `git diff --check` 通过。
+- [ ] 工作区只包含本次任务相关文件。

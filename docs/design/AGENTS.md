@@ -420,7 +420,70 @@ Agent 禁止执行以下操作：
 
 ---
 
-## 7. 交易安全声明
+## 7. 开发协作流程硬约束
+
+所有参与开发的 Agent，除遵守本文件前述交易安全规则外，还必须遵守：
+
+- `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`
+- `docs/policy/SELF_TEST_CHECKLIST.md`
+
+### 7.1 标准开发管线
+
+任何新 Phase、完整新功能、核心模块变更，必须按以下顺序推进：
+
+1. 用户提出目标和约束。
+2. Product Manager Agent 输出需求文档。
+3. Architect Agent 输出架构设计文档。
+4. Developer Agent 按架构设计 TDD 开发并自测。
+5. Test Engineer Agent 完整测试并输出测试报告。
+6. Developer Agent 根据测试报告修复缺陷并补回归测试。
+7. Architect Reviewer 进行代码 Review。
+8. Product Manager Agent 对照需求文档做功能性全量验收。
+9. 负责人更新开发日志、阶段报告和用户文档。
+
+不得从用户需求直接跳到核心代码开发；不得在没有需求文档和架构设计的情况下开发新阶段或完整功能。
+
+### 7.2 交付物要求
+
+完整功能至少需要以下交付物：
+
+| 阶段 | 必须交付 |
+|---|---|
+| 需求 | `docs/requirements/YYYY-MM-DD-<feature>-requirements.md` |
+| 架构 | `docs/design/YYYY-MM-DD-<feature>-architecture.md` |
+| 开发 | `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md` |
+| 测试 | `docs/test_reports/YYYY-MM-DD-<feature>-test-report.md` |
+| Review | `docs/review/YYYY-MM-DD-<feature>-architecture-review.md` |
+| 验收 | `docs/acceptance/YYYY-MM-DD-<feature>-acceptance.md` |
+| 日志 | `docs/log/DEVELOPMENT_LOG.md` 和 `docs/log/PHASE_COMPLETION_REPORT.md` |
+
+### 7.3 开发 Agent 禁止项
+
+开发团队 Agent 不得：
+
+1. 修改需求目标而不更新需求文档。
+2. 修改架构边界而不更新架构设计文档。
+3. 跳过 `SELF_TEST_CHECKLIST.md`。
+4. 将测试工程师发现的阻断 Bug 标为非阻断。
+5. 在 Review 未通过时进入产品验收。
+6. 在产品验收未通过时声明功能完成。
+7. 以“时间不够”或“测试太慢”为由跳过交易安全相关测试。
+8. 用 Demo fallback、mock 或 paper trading 冒充真实能力。
+
+### 7.4 失败回退规则
+
+- 需求不清：退回 Product Manager Agent。
+- 架构不合理：退回 Architect Agent。
+- 自测失败：Developer Agent 继续修复。
+- 测试失败：Developer Agent 修复后交回 Test Engineer Agent。
+- Review 失败：Developer Agent 修复或 Architect Agent 重写设计。
+- 产品验收失败：根据失败原因退回 PM、Architect 或 Developer。
+
+任一门禁失败，不得进入下一阶段。
+
+---
+
+## 8. 交易安全声明
 
 本系统只能作为辅助决策工具。
 
