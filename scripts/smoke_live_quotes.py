@@ -204,7 +204,7 @@ def main() -> int:
     succeeded = len(quotes)
     if succeeded < args.min_success:
         print(
-            f"PARTIAL: Got {succeeded}/{args.symbols_requested} quotes, "
+            f"PARTIAL: Got {succeeded}/{report['symbols_requested']} quotes, "
             f"need at least {args.min_success}"
         )
         report["status"] = "partial"
@@ -213,7 +213,7 @@ def main() -> int:
 
     # Full pass
     print(
-        f"PASSED: {succeeded}/{args.symbols_requested} quotes from "
+        f"PASSED: {succeeded}/{report['symbols_requested']} quotes from "
         f"{report['provider']} ({report['latency_ms']:.0f}ms)"
     )
     report["status"] = "passed"
