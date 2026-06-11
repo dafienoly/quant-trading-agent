@@ -1,0 +1,21 @@
+{
+  "bug_id": "BUG_20260609_DCHSE4",
+  "created_at": "2026-06-09 18:07:26",
+  "updated_at": "2026-06-09 19:52:03",
+  "status": "triaged",
+  "severity": "low",
+  "component": "test",
+  "title": "E2E测试Bug",
+  "summary": "端到端测试自动提交的Bug报告",
+  "user_action": "",
+  "endpoint_or_page": "",
+  "exception_type": "",
+  "exception_message": "",
+  "sanitized_traceback": "",
+  "runtime_context": {},
+  "config_snapshot_masked": {},
+  "reproduction_steps": [],
+  "dedupe_hash": "f718e9aa5f000176",
+  "related_log_files": [],
+  "occurrence_count": 3
+}

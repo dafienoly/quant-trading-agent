@@ -1,0 +1,21 @@
+{
+  "bug_id": "BUG_20260609_2RE36B",
+  "created_at": "2026-06-09 16:28:02",
+  "updated_at": "2026-06-09 16:28:02",
+  "status": "triaged",
+  "severity": "medium",
+  "component": "test_component",
+  "title": "测试Bug标题",
+  "summary": "这是一个测试Bug",
+  "user_action": "",
+  "endpoint_or_page": "",
+  "exception_type": "TestError",
+  "exception_message": "test error message",
+  "sanitized_traceback": "",
+  "runtime_context": {},
+  "config_snapshot_masked": {},
+  "reproduction_steps": [],
+  "dedupe_hash": "6e96039ed328d133",
+  "related_log_files": [],
+  "occurrence_count": 2
+}

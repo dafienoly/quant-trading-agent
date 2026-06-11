@@ -1,0 +1,45 @@
+{
+  "bug_id": "BUG_20260611_U5D5K3",
+  "created_at": "2026-06-11 08:57:36",
+  "updated_at": "2026-06-11 21:28:35",
+  "status": "open",
+  "severity": "high",
+  "component": "data_gateway",
+  "title": "All providers failed for daily_bars",
+  "summary": "All real data providers failed for capability=daily_bars, symbols=['600000.SH']. Fallback chain: ['eastmoney: empty_data', 'akshare: empty_data', 'aktools: empty_data']",
+  "user_action": "",
+  "endpoint_or_page": "/product/live-data/daily_bars",
+  "exception_type": "AllProvidersFailed",
+  "exception_message": "fallback_chain: ['eastmoney: empty_data', 'akshare: empty_data', 'aktools: empty_data']",
+  "sanitized_traceback": "",
+  "runtime_context": {
+    "capability": "daily_bars",
+    "symbols": [
+      "600000.SH"
+    ],
+    "fallback_chain": [
+      "eastmoney: empty_data",
+      "akshare: empty_data",
+      "aktools: empty_data"
+    ],
+    "DATA_FAIL_CLOSED": true,
+    "start_date": "2025-06-01",
+    "end_date": "2025-06-10",
+    "adjust": "qfq"
+  },
+  "config_snapshot_masked": {},
+  "reproduction_steps": [
+    "Call LiveDataService method for daily_bars",
+    "All providers in LIVE_DATA_PROVIDER_ORDER fail",
+    "DataHealthGate blocks signal and order draft"
+  ],
+  "dedupe_hash": "d9ed1c04affb17c4",
+  "related_log_files": [],
+  "occurrence_count": 27,
+  "analysis_report": null,
+  "fix_proposal": null,
+  "approval_status": "pending",
+  "approval_comment": "",
+  "fix_result": null,
+  "git_commit_hash": ""
+}

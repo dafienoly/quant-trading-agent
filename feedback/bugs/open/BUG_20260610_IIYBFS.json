@@ -1,0 +1,71 @@
+{
+  "bug_id": "BUG_20260610_IIYBFS",
+  "created_at": "2026-06-10 19:54:23",
+  "updated_at": "2026-06-11 21:28:37",
+  "status": "proposed",
+  "severity": "medium",
+  "component": "dashboard",
+  "title": "dashboard error",
+  "summary": "GET /product/quotes failed: HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=8)",
+  "user_action": "",
+  "endpoint_or_page": "product_dashboard",
+  "exception_type": "",
+  "exception_message": "GET /product/quotes failed: HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=8)",
+  "sanitized_traceback": "",
+  "runtime_context": {},
+  "config_snapshot_masked": {},
+  "reproduction_steps": [],
+  "dedupe_hash": "a4f1829bc8a8a9a2",
+  "related_log_files": [],
+  "occurrence_count": 10,
+  "analysis_report": {
+    "root_cause": "GET /product/quotes 请求超时，因为后端服务（localhost:8000）在8秒内未响应。可能原因包括：后端服务负载过高、数据库查询缓慢、网络延迟或服务崩溃。触发端点为product_dashboard，导致仪表盘页面加载失败。",
+    "affected_files": [
+      "src/dashboard/routes.py",
+      "src/product_quotes/service.py",
+      "src/dashboard/templates/product_dashboard.html"
+    ],
+    "fix_steps": [
+      "检查后端服务（product_quotes）的运行状态和资源使用情况（CPU、内存、数据库连接池等）。",
+      "优化product_quotes服务的数据库查询或API响应逻辑，减少响应时间。",
+      "在dashboard的请求代码中增加超时时间配置（例如从8秒增加到30秒）或实现重试机制。",
+      "添加熔断或降级策略，防止单个服务超时拖垮整个dashboard。",
+      "监控后端服务的响应时间，设置告警阈值。"
+    ],
+    "risk_level": "medium",
+    "estimated_impact": "影响dashboard页面中product quotes数据的加载，可能导致用户无法查看报价信息，但仪表盘其他功能可能正常运行。"
+  },
+  "fix_proposal": {
+    "fix_description": "针对dashboard中/product/quotes请求超时问题，优化后端服务响应性能、增加前端请求超时时间并添加重试机制、实现熔断降级策略，同时改进前端错误处理。",
+    "code_changes": [
+      {
+        "file_path": "src/dashboard/routes.py",
+        "change_type": "modify",
+        "diff": "--- a/src/dashboard/routes.py\n+++ b/src/dashboard/routes.py\n@@ -10,7 +10,13 @@\n import requests\n+from tenacity import retry, stop_after_attempt, wait_exponential\n+from requests.adapters import HTTPAdapter\n+from urllib3.util.retry import Retry\n \n @app.route('/product/quotes')\n+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))\n def get_product_quotes():\n-    response = requests.get('http://localhost:8000/product/quotes', timeout=8)\n+    session = requests.Session()\n+    retries = Retry(total=2, backoff_factor=1, status_forcelist=[500, 502, 503, 504])\n+    session.mount('http://', HTTPAdapter(max_retries=retries))\n+    response = session.get('http://localhost:8000/product/quotes', timeout=30)\n     return response.json()"
+      },
+      {
+        "file_path": "src/product_quotes/service.py",
+        "change_type": "modify",
+        "diff": "--- a/src/product_quotes/service.py\n+++ b/src/product_quotes/service.py\n@@ -5,7 +5,18 @@\n from database import get_db\n+from functools import lru_cache\n+import time\n \n def fetch_quotes(product_id):\n     db = get_db()\n-    quotes = db.query(\"SELECT * FROM quotes WHERE product_id = ?\", (product_id,))\n+    # 添加索引优化查询速度\n+    db.execute(\"CREATE INDEX IF NOT EXISTS idx_product_id ON quotes(product_id)\")\n+    quotes = db.query(\"SELECT * FROM quotes WHERE product_id = ?\", (product_id,))\n     return quotes\n+\n+# 添加缓存（示例，根据实际数据更新频率调整）\n+@lru_cache(maxsize=128)\n+def get_cached_quotes(product_id):\n+    return fetch_quotes(product_id)\n+\n+# 使用连接池（已假设database模块支持）"
+      },
+      {
+        "file_path": "src/dashboard/templates/product_dashboard.html",
+        "change_type": "modify",
+        "diff": "--- a/src/dashboard/templates/product_dashboard.html\n+++ b/src/dashboard/templates/product_dashboard.html\n@@ -20,3 +20,10 @@\n   </table>\n </div>\n+<!-- 添加超时或错误提示区域 -->\n+<div id=\"error-message\" style=\"display:none; color: red;\">\n+  加载报价数据失败，请稍后重试。如果持续超时，请联系管理员。\n+</div>\n+<script>\n+  // 在JavaScript中捕获错误并显示\n+  // 假设原有JS fetch失败时显示此div\n+</script>"
+      }
+    ],
+    "risk_level": "medium",
+    "estimated_impact": "影响dashboard页面中product quotes数据的加载，优化后降低超时概率，但若后端持续缓慢，可能导致用户看到错误提示或等待时间略长（重试+超时），仪表盘其他功能不受影响。",
+    "test_suggestions": [
+      "编写单元测试验证routes.py中重试机制在不同HTTP状态码下的行为（如503时重试，200时正常返回）。",
+      "集成测试模拟后端服务高延迟，验证前端超时时间设置（30秒）是否生效，以及重试次数是否符合预期。",
+      "压力测试product_quotes服务，验证数据库索引和缓存对查询性能的提升。",
+      "测试dashboard页面的错误提示显示逻辑，确保后端超时或服务不可用时前端正确展示错误消息。",
+      "监控告警测试，验证后端服务响应时间超过阈值时是否触发告警（需配合监控系统）。"
+    ]
+  },
+  "approval_status": "pending",
+  "approval_comment": "",
+  "fix_result": null,
+  "git_commit_hash": ""
+}

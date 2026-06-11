@@ -1,0 +1,42 @@
+{
+  "bug_id": "BUG_20260611_8YVE01",
+  "created_at": "2026-06-11 08:57:43",
+  "updated_at": "2026-06-11 21:28:36",
+  "status": "open",
+  "severity": "high",
+  "component": "data_gateway",
+  "title": "All providers failed for fundamentals",
+  "summary": "All real data providers failed for capability=fundamentals, symbols=['600000.SH']. Fallback chain: ['eastmoney: empty_data', \"akshare: 'AkShareProvider' object has no attribute 'get_fundamentals'\", \"aktools: 'AkToolsProvider' object has no attribute 'get_fundamentals'\"]",
+  "user_action": "",
+  "endpoint_or_page": "/product/live-data/fundamentals",
+  "exception_type": "AllProvidersFailed",
+  "exception_message": "fallback_chain: ['eastmoney: empty_data', \"akshare: 'AkShareProvider' object has no attribute 'get_fundamentals'\", \"aktools: 'AkToolsProvider' object has no attribute 'get_fundamentals'\"]",
+  "sanitized_traceback": "",
+  "runtime_context": {
+    "capability": "fundamentals",
+    "symbols": [
+      "600000.SH"
+    ],
+    "fallback_chain": [
+      "eastmoney: empty_data",
+      "akshare: 'AkShareProvider' object has no attribute 'get_fundamentals'",
+      "aktools: 'AkToolsProvider' object has no attribute 'get_fundamentals'"
+    ],
+    "DATA_FAIL_CLOSED": true
+  },
+  "config_snapshot_masked": {},
+  "reproduction_steps": [
+    "Call LiveDataService method for fundamentals",
+    "All providers in LIVE_DATA_PROVIDER_ORDER fail",
+    "DataHealthGate blocks signal and order draft"
+  ],
+  "dedupe_hash": "b426d3ac7e79d7c5",
+  "related_log_files": [],
+  "occurrence_count": 14,
+  "analysis_report": null,
+  "fix_proposal": null,
+  "approval_status": "pending",
+  "approval_comment": "",
+  "fix_result": null,
+  "git_commit_hash": ""
+}
