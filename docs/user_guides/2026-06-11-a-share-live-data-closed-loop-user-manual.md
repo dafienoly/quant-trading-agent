@@ -53,7 +53,36 @@
 
 ## 3. 启动方式
 
+### 3.0 必要环境变量
+
+复制 `.env.example` 为 `.env` 后，至少确认以下配置：
+
+```text
+AKTOOLS_BASE_URL=http://127.0.0.1:8080
+DEEPSEEK_API_KEY=你的 DeepSeek Key
+DEEPSEEK_API_BASE=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+LIVE_DATA_PROVIDER_ORDER=eastmoney,akshare,aktools
+ENABLE_DEMO_FALLBACK_FOR_LIVE_LOOP=false
+DATA_FAIL_CLOSED=true
+```
+
+`AKTOOLS_BASE_URL` 只告诉本项目去哪里访问 AkTools；它不会自动启动 AkTools 本地 HTTP 服务。`DEEPSEEK_API_KEY` 用于 feedback Bug 自动分析和修复方案生成；没有该 key 时，BugFix Agent 会拒绝启动，Open Bug 不会进入分析流程。
+
 ### 3.1 Windows PowerShell
+
+启动 AkTools 本地 HTTP 服务：
+
+```powershell
+.\.venv\Scripts\python.exe -m aktools --host 127.0.0.1 --port 8080
+```
+
+验证 AkTools：
+
+```powershell
+curl http://127.0.0.1:8080/version
+curl "http://127.0.0.1:8080/api/public/stock_zh_a_spot_em"
+```
 
 启动产品 Dashboard：
 
@@ -81,6 +110,19 @@ curl http://127.0.0.1:8000/product/health
 
 ### 3.2 WSL / Linux
 
+启动 AkTools 本地 HTTP 服务：
+
+```bash
+./.venv/bin/python -m aktools --host 127.0.0.1 --port 8080
+```
+
+验证 AkTools：
+
+```bash
+curl http://127.0.0.1:8080/version
+curl "http://127.0.0.1:8080/api/public/stock_zh_a_spot_em"
+```
+
 启动产品 Dashboard：
 
 ```bash
@@ -98,6 +140,28 @@ http://127.0.0.1:8771
 ```bash
 ./.venv/bin/python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000
 ```
+
+### 3.3 WSL 与 Windows 混合运行
+
+如果 API 在 WSL 中运行，AkTools 也建议在同一个 WSL 环境启动，并保持：
+
+```text
+AKTOOLS_BASE_URL=http://127.0.0.1:8080
+```
+
+如果 AkTools 跑在 Windows、API 跑在 WSL，则 WSL 内的 `127.0.0.1` 指向 WSL 自己，不是 Windows。此时应把 `.env` 改成 Windows Host 地址，例如：
+
+```bash
+AKTOOLS_BASE_URL=http://$(grep nameserver /etc/resolv.conf | awk '{print $2}'):8080
+```
+
+更稳定的做法是让 AkTools 监听 `0.0.0.0`：
+
+```powershell
+.\.venv\Scripts\python.exe -m aktools --host 0.0.0.0 --port 8080
+```
+
+然后在 WSL 的 `.env` 中使用 Windows Host IP。
 
 ---
 
@@ -303,8 +367,28 @@ LEVEL_1_SIGNAL_ONLY
 - 是否在 A股交易时段。
 - 网络是否能访问 Eastmoney / AkShare。
 - AkTools 本地服务是否启动。
+- `.env` 中 `AKTOOLS_BASE_URL` 是否指向 API 进程能访问的地址。
 - `docs/test_reports/` 下 smoke JSON 的 `fallback_chain`。
 - `feedback/bugs/open/` 中对应 bug。
+
+AkTools 相关错误通常有两类：
+
+| 错误 | 常见原因 | 处理 |
+|---|---|---|
+| `Connection refused` | AkTools HTTP 服务未启动 | 先运行 `python -m aktools --host 127.0.0.1 --port 8080` |
+| `ConnectTimeout` | API 进程访问不到 AkTools 地址 | 检查 WSL/Windows 网络边界和 `AKTOOLS_BASE_URL` |
+
+项目调用路径是：
+
+```text
+Quant API -> AkToolsProvider -> AKTOOLS_BASE_URL/api/public/<akshare_function>
+```
+
+例如实时 A股行情会访问：
+
+```text
+http://127.0.0.1:8080/api/public/stock_zh_a_spot_em
+```
 
 ### 8.3 主题池为空
 
@@ -338,6 +422,37 @@ VALIDATION PASSED
 - 选择了不允许的交易模式。
 
 先查看数据源诊断和 feedback bug。
+
+### 8.5 Feedback Bug 一直 Open
+
+Open Bug 只代表“系统已经记录了问题”，不代表自动修复 Agent 已经处理。
+
+自动修复链路如下：
+
+```text
+open -> analyzing -> proposed -> approved -> fixing -> verified -> fixed
+```
+
+要让 Open Bug 被处理，需要满足：
+
+1. `.env` 中配置了 `DEEPSEEK_API_KEY`。
+2. API 服务正在运行。
+3. Dashboard 的“反馈”页中点击“启动修复 Agent”，或调用：
+
+```powershell
+curl -X POST http://127.0.0.1:8000/product/jobs/bug_fix_agent/start
+```
+
+4. Bug 被分析后进入 `proposed`。
+5. 用户在“反馈”页审批修复方案，或调用：
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/product/feedback/BUG_ID/approve?comment=approved"
+```
+
+审批后系统才会尝试自动修改代码、运行测试并提交修复。涉及风控、交易、成交、回测报告等受限模块时，自动修复会被阻断，需要开发工程师按管线处理。
+
+如果“启动修复 Agent”后显示 `DEEPSEEK_API_KEY is required before starting bug_fix_agent`，说明 `.env` 未配置 DeepSeek Key，或 API 服务启动时没有加载到该环境变量。配置后需要重启 API。
 
 ---
 
@@ -377,4 +492,3 @@ WSL / Linux：
   "is_demo": false
 }
 ```
-

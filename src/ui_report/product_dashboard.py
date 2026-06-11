@@ -184,14 +184,20 @@ def _format_pct(value: Any) -> str:
 def _card(label: str, value: str, note: str = "") -> None:
     st.markdown(
         f"""
-        <div class="status-card">
+<div class="status-card">
           <div class="status-label">{label}</div>
           <div class="status-value">{value}</div>
           <div class="status-note">{note}</div>
         </div>
-        """,
+""",
         unsafe_allow_html=True,
     )
+
+
+def _job_by_name(jobs_data: dict[str, Any] | None, name: str) -> dict[str, Any] | None:
+    if not jobs_data:
+        return None
+    return next((job for job in jobs_data.get("jobs", []) if job.get("name") == name), None)
 
 
 def _banner(kind: str, text: str) -> None:
@@ -644,7 +650,35 @@ def render_feedback() -> None:
         _banner("danger", t("feedback_unavailable"))
         return
 
-    _card(t("open_bugs"), str(data.get("count", 0)), data.get("export_path", "feedback/bugs/open"))
+    jobs_data = _get("/product/jobs") or {}
+    bug_agent_job = _job_by_name(jobs_data, "bug_fix_agent")
+    agent_state = bug_agent_job.get("state", t("unknown")) if bug_agent_job else t("unknown")
+    agent_note = ""
+    if bug_agent_job:
+        agent_note = bug_agent_job.get("error_message") or bug_agent_job.get("last_result") or bug_agent_job.get("last_run_at", "")
+
+    agent_col, bug_col = st.columns(2)
+    with agent_col:
+        _card(t("bug_fix_agent"), str(agent_state), agent_note)
+    with bug_col:
+        _card(t("open_bugs"), str(data.get("count", 0)), data.get("export_path", "feedback/bugs/open"))
+
+    start_col, stop_col = st.columns(2)
+    if start_col.button(t("start_bug_fix_agent"), key="start_bug_fix_agent", type="primary"):
+        result = _post("/product/jobs/bug_fix_agent/start")
+        if result and result.get("status") == "ok":
+            st.success(result.get("message", t("ok")))
+            st.rerun()
+        else:
+            st.error(f"{t('agent_start_failed')}: {result}")
+    if stop_col.button(t("stop_bug_fix_agent"), key="stop_bug_fix_agent"):
+        result = _post("/product/jobs/bug_fix_agent/stop")
+        if result and result.get("status") == "ok":
+            st.success(result.get("message", t("ok")))
+            st.rerun()
+        else:
+            st.error(f"{t('agent_stop_failed')}: {result}")
+
     bugs = data.get("bugs", [])
     if not bugs:
         st.info(t("no_open_bugs"))

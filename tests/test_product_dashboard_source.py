@@ -4,7 +4,9 @@ from pathlib import Path
 
 
 def test_product_dashboard_has_readable_product_sections():
-    source = Path("src/ui_report/product_dashboard.py").read_text(encoding="utf-8")
+    dashboard_source = Path("src/ui_report/product_dashboard.py").read_text(encoding="utf-8")
+    i18n_source = Path("src/ui_report/i18n.py").read_text(encoding="utf-8")
+    source = dashboard_source + "\n" + i18n_source
 
     for label in (
         "System",
@@ -18,6 +20,8 @@ def test_product_dashboard_has_readable_product_sections():
         "Feedback",
         "Data provider",
         "Force realtime fetch",
+        "BugFix Agent",
+        "Start BugFix Agent",
     ):
         assert label in source
 

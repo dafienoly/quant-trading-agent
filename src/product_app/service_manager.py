@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -137,6 +138,13 @@ class ServiceManager:
         job.error_message = ""
 
         if job_name == "bug_fix_agent":
+            if not os.environ.get("DEEPSEEK_API_KEY", "").strip():
+                message = "DEEPSEEK_API_KEY is required before starting bug_fix_agent"
+                job.state = JobState.FAILED
+                job.error_message = message
+                job.last_run_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._save_state()
+                return {"status": "error", "message": message}
             return self._start_persistent_job(job_name, job, params or {})
 
         # 在线程中执行作业

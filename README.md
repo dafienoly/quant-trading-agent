@@ -258,6 +258,8 @@ cp .env.example .env
 | `REQUIRE_HUMAN_CONFIRMATION` | `true` | 是否需要人工确认 |
 | `DATA_SOURCE` | `sina` | 数据源 |
 | `DEFAULT_DATA_PROVIDER` | `akshare` | 产品行情默认数据源（akshare/aktools） |
+| `AKTOOLS_BASE_URL` | `http://127.0.0.1:8080` | AkTools 本地 HTTP 服务地址 |
+| `DEEPSEEK_API_KEY` | 空 | BugFix Agent 分析和生成修复方案所需 Key |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 | `API_PORT` | `8000` | API 服务端口 |
 | `STREAMLIT_PORT` | `8501` | 仪表板端口 |
@@ -267,6 +269,33 @@ cp .env.example .env
 | `BROKER_ADAPTER` | `paper` | 券商适配器（paper 为模拟） |
 
 完整配置项参见 `.env.example` 文件。
+
+### AkTools 本地服务
+
+本项目通过 HTTP 接入 AkTools。仅安装 `aktools` 包不等于服务已经可用，需要单独启动：
+
+```bash
+python -m aktools --host 127.0.0.1 --port 8080
+```
+
+验证：
+
+```bash
+curl http://127.0.0.1:8080/version
+curl "http://127.0.0.1:8080/api/public/stock_zh_a_spot_em"
+```
+
+如 API 和 AkTools 分别运行在 WSL/Windows 两侧，请把 `.env` 中的 `AKTOOLS_BASE_URL` 改成 API 进程可访问的地址。
+
+### Feedback 自动修复
+
+Feedback 自动修复分两步：后台 `bug_fix_agent` 先把 Open Bug 分析到 `proposed`，用户审批后才会执行修复和测试。启动前必须配置 `DEEPSEEK_API_KEY`：
+
+```bash
+curl -X POST http://127.0.0.1:8000/product/jobs/bug_fix_agent/start
+```
+
+也可以在 Dashboard 的“反馈 / Feedback”页启动或停止 BugFix Agent。
 
 ---
 

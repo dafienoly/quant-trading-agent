@@ -1064,6 +1064,7 @@ class TestServiceManagerBugFixAgent:
     def test_bug_fix_agent_job_stays_running_until_stopped(self, tmp_path, monkeypatch):
         """测试 bug_fix_agent 启动后保持 RUNNING，并可正常停止 watchdog"""
         instances = []
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
 
         class _FakeWatchdog:
             def __init__(self, on_new_bug_callback=None):
@@ -1104,3 +1105,16 @@ class TestServiceManagerBugFixAgent:
         assert stop_result["status"] == "ok"
         assert manager.get_job_status("bug_fix_agent")["state"] == JobState.CANCELLED.value
         assert instances[0].is_running() is False
+
+    def test_bug_fix_agent_requires_deepseek_key(self, tmp_path, monkeypatch):
+        """缺少 DeepSeek Key 时同步拒绝启动，避免用户误判 Agent 正在处理。"""
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+        manager = ServiceManager(state_dir=str(tmp_path / "state"))
+        result = manager.start_job("bug_fix_agent")
+
+        status = manager.get_job_status("bug_fix_agent")
+        assert result["status"] == "error"
+        assert "DEEPSEEK_API_KEY" in result["message"]
+        assert status["state"] == JobState.FAILED.value
+        assert "DEEPSEEK_API_KEY" in status["error_message"]
