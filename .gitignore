@@ -16,10 +16,10 @@ venv/
 env/
 
 # 数据目录（不提交行情数据）
-data/raw/
-data/cleaned/
-data/backtest_results/
-data/trade_records/
+data/
+
+# pip 离线包缓存
+.pip_packages/
 
 # Trae/Claude IDE
 .claude/
