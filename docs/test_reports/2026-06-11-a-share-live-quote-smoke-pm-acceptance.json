@@ -1,0 +1,20 @@
+{
+  "status": "failed",
+  "run_at": "2026-06-11T20:32:38.666468+08:00",
+  "trading_session": "closed",
+  "symbols_requested": 10,
+  "symbols_succeeded": 0,
+  "is_demo": false,
+  "provider": "",
+  "fallback_chain": [
+    "eastmoney: empty_data",
+    "akshare_realtime: empty_data",
+    "aktools: empty_data"
+  ],
+  "latency_ms": 0.0,
+  "data_status": "FAILED",
+  "updated_at_min": "",
+  "updated_at_max": "",
+  "feedback_bug_id": "BUG_20260611_UB37C1",
+  "quotes_sample": []
+}
