@@ -610,6 +610,46 @@ def get_signal_status(signal_id: str) -> dict[str, Any]:
 
 
 # ============================================================
+# LLM / Runtime Status API (F-006/F-007/F-013)
+# ============================================================
+
+@router.get("/llm/status")
+def get_llm_status() -> dict[str, Any]:
+    from src.llm.model_router import ModelRouter
+
+    config = ModelRouter().get_config()
+    return {
+        "status": "ok",
+        "provider": config.provider,
+        "model": config.model,
+        "api_base": config.api_base,
+        "api_key_env": config.api_key_env,
+        "api_key_present": config.api_key_present,
+        "trade_decision_enabled": False,
+    }
+
+
+@router.get("/runtime/services")
+def get_runtime_services() -> dict[str, Any]:
+    from src.product_app.service_manager import get_service_manager
+
+    manager = get_service_manager()
+    jobs = manager.list_jobs()
+    return {
+        "status": "ok",
+        "services": {
+            "api": {"status": "running", "url": "/product/health"},
+            "bug_fix_agent": {
+                "status": next(
+                    (j.get("state") for j in jobs.get("jobs", []) if j.get("name") == "bug_fix_agent"),
+                    "not_started",
+                ),
+            },
+        },
+    }
+
+
+# ============================================================
 # Live Factor & Backtest API (Architecture §6.4)
 # ============================================================
 

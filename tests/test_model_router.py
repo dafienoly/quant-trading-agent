@@ -34,3 +34,23 @@ def test_model_router_reports_missing_key(monkeypatch):
     config = ModelRouter().get_config()
 
     assert config.api_key_present is False
+
+
+def test_llm_status_endpoint(monkeypatch):
+    from fastapi.testclient import TestClient
+    from src.api.app import app
+
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("LLM_API_KEY_ENV", "DEEPSEEK_API_KEY")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+
+    client = TestClient(app)
+    response = client.get("/product/llm/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "deepseek"
+    assert body["model"] == "deepseek-v4-flash"
+    assert body["api_key_present"] is True
+    assert body["trade_decision_enabled"] is False
