@@ -182,7 +182,7 @@ class TestLiveDataService:
             service = LiveDataService()
             # 替换 hub 为 mock
             service._realtime_hub = mock_hub
-            service._daily_hub = mock_hub
+            service._daily_bars_hub = mock_hub
             service._fundamentals_hub = mock_hub
             return service
 
@@ -255,7 +255,7 @@ class TestLiveDataService:
             data=valid_df,
             fallback_chain=["eastmoney: ok"],
         )
-        service._daily_hub.fetch_with_fallback.return_value = daily_result
+        service._daily_bars_hub.fetch_with_fallback.return_value = daily_result
 
         result = service.get_daily_bars(["600000.SH"], "2025-06-09", "2025-06-10")
         assert result["status"] == "ok"
@@ -294,12 +294,15 @@ class TestLiveDataService:
         assert "data_missing_report" in result
 
     def test_build_research_context(self):
-        """研究上下文包含健康决策"""
+        """研究上下文包含健康决策和 quotes 数据"""
         service = self._make_service()
         result = service.build_research_context(["600000.SH"], "2025-06-09", "2025-06-10")
         assert "health" in result
         assert "daily_bars" in result
         assert "fundamentals" in result
+        assert "quotes" in result
+        assert "quotes" in result.get("chosen_provider", {})
+        assert "quotes" in result.get("fallback_chain", {})
 
 
 # ============================================================
@@ -364,7 +367,7 @@ class TestLiveDataAPI:
             mock_service = MagicMock()
             mock_service._provider_order = ["eastmoney", "akshare", "aktools"]
             mock_service._realtime_hub.get_health.return_value = []
-            mock_service._daily_hub.get_health.return_value = []
+            mock_service._daily_bars_hub.get_health.return_value = []
             mock_service._fundamentals_hub.get_health.return_value = []
             mock_lds.return_value = mock_service
 

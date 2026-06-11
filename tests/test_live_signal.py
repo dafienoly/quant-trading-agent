@@ -217,6 +217,19 @@ class TestLiveSignalOrchestrator:
     def _make_mock_lds(self):
         """创建 mock LiveDataService"""
         mock_lds = MagicMock()
+        mock_lds.get_realtime_quotes.return_value = {
+            "status": "ok",
+            "data_status": "OK",
+            "is_demo": False,
+            "chosen_provider": "eastmoney",
+            "fallback_chain": ["eastmoney: ok"],
+            "quotes": [],
+            "provider_health_report": {},
+            "data_quality_report": {},
+            "data_missing_report": {},
+            "data_delay_report": {"provider": "eastmoney", "elapsed_ms": 100, "max_delay_seconds": 0.1},
+            "feedback_bug_id": "",
+        }
         mock_lds.get_daily_bars.return_value = {
             "status": "ok",
             "data_status": "OK",
@@ -279,6 +292,66 @@ class TestLiveSignalOrchestrator:
                 end_date="2025-06-10",
             )
             assert result.get("status") == "blocked" or result.get("signal_status") == "blocked"
+
+    def test_signal_blocked_when_quotes_failed_daily_ok(self):
+        """S1 回归：实时行情 FAILED 但日线/基本面 OK 时信号必须被阻断"""
+        from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
+        mock_lds = self._make_mock_lds()
+        # 只有 quotes 失败
+        mock_lds.get_realtime_quotes.return_value["data_status"] = "FAILED"
+        mock_lds.get_realtime_quotes.return_value["status"] = "failed"
+        # daily_bars 和 fundamentals 保持 OK
+
+        with patch("src.product_app.live_data_service.LiveDataService") as mock_lds_cls:
+            mock_lds_cls.return_value = mock_lds
+            orchestrator = LiveSignalOrchestrator()
+
+            result = orchestrator.generate_signal_draft(
+                symbols=["600000.SH"],
+                start_date="2025-01-01",
+                end_date="2025-06-10",
+            )
+            assert result.get("status") == "blocked"
+            assert result["evidence"]["quotes_status"] == "FAILED"
+
+    def test_signal_blocked_when_quotes_delay_exceeds_threshold(self):
+        """S2 回归：行情延迟超过模式阈值时信号被阻断"""
+        from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
+        mock_lds = self._make_mock_lds()
+        # 延迟 200s 超过 LEVEL_1_SIGNAL_ONLY 的 120s 阈值
+        mock_lds.get_realtime_quotes.return_value["data_delay_report"] = {
+            "provider": "eastmoney",
+            "elapsed_ms": 200000,
+            "max_delay_seconds": 200.0,
+        }
+
+        with patch("src.product_app.live_data_service.LiveDataService") as mock_lds_cls:
+            mock_lds_cls.return_value = mock_lds
+            orchestrator = LiveSignalOrchestrator()
+
+            result = orchestrator.generate_signal_draft(
+                symbols=["600000.SH"],
+                start_date="2025-01-01",
+                end_date="2025-06-10",
+                trading_mode="LEVEL_1_SIGNAL_ONLY",
+            )
+            assert result.get("status") == "blocked"
+            assert result["evidence"]["data_health"]["data_status"] == "WARN"
+
+    def test_signal_evidence_includes_quotes_provider_chain(self):
+        """信号证据包含 quotes provider chain"""
+        from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
+        with patch("src.product_app.live_data_service.LiveDataService") as mock_lds_cls:
+            mock_lds_cls.return_value = self._make_mock_lds()
+            orchestrator = LiveSignalOrchestrator()
+
+            result = orchestrator.generate_signal_draft(
+                symbols=["600000.SH"],
+                start_date="2025-01-01",
+                end_date="2025-06-10",
+            )
+            assert "quotes" in result["evidence"]["provider_chain"]
+            assert result["evidence"]["quotes_status"] == "OK"
 
     def test_signal_id_format(self):
         """信号 ID 格式正确"""

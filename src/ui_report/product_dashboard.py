@@ -727,6 +727,117 @@ def render_feedback() -> None:
                 st.json(bug)
 
 
+def render_live_data() -> None:
+    """Live Data Closed-Loop: 数据源诊断、实时行情、因子、回测、信号。"""
+    st.subheader("Live Data Closed-Loop")
+    st.caption("Real data only. No demo fallback. Data failure = blocked signal.")
+
+    # ── 数据源诊断 ──────────────────────────────────────────────
+    with st.expander("Provider Diagnosis", expanded=False):
+        if st.button("Run Diagnosis", key="live_diagnose_btn"):
+            diag = _post("/product/live-data/diagnose")
+            if diag:
+                for cap_name, cap_result in diag.get("results", {}).items():
+                    st.markdown(f"**{cap_name}**")
+                    st.json(cap_result)
+            else:
+                _banner("danger", "Diagnosis failed.")
+
+    # ── Provider 状态 ────────────────────────────────────────────
+    providers = _get("/product/live-data/providers")
+    if providers:
+        st.markdown("**Provider Status**")
+        rows = []
+        for cap_name, prov_dict in providers.get("realtime_quotes", {}).items():
+            rows.append({"Capability": "realtime", "Provider": cap_name, "Status": prov_dict.get("status", "unknown"), "Latency ms": prov_dict.get("latency_ms", 0)})
+        for cap_name, prov_dict in providers.get("daily_bars", {}).items():
+            rows.append({"Capability": "daily_bars", "Provider": cap_name, "Status": prov_dict.get("status", "unknown"), "Latency ms": prov_dict.get("latency_ms", 0)})
+        for cap_name, prov_dict in providers.get("fundamentals", {}).items():
+            rows.append({"Capability": "fundamentals", "Provider": cap_name, "Status": prov_dict.get("status", "unknown"), "Latency ms": prov_dict.get("latency_ms", 0)})
+        st.dataframe(_df(rows), hide_index=True)
+
+    # ── 实时行情 ────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("**Realtime Quotes (Live)**")
+    live_symbols = st.text_input("Symbols", "600000.SH,000001.SZ", key="live_symbols")
+    if st.button("Fetch Live Quotes", key="live_quotes_btn"):
+        result = _get("/product/live-data/quotes", params={"symbols": live_symbols})
+        if result:
+            data_status = result.get("data_status", "UNKNOWN")
+            if data_status == "FAILED":
+                _banner("danger", f"Realtime data FAILED. Provider: {result.get('chosen_provider', '')}. Signal generation is BLOCKED.")
+            elif data_status == "WARN":
+                _banner("warn", f"Realtime data partial. Provider: {result.get('chosen_provider', '')}.")
+            else:
+                _banner("safe", f"Realtime data OK. Provider: {result.get('chosen_provider', '')}.")
+            rows = []
+            for q in result.get("quotes", []):
+                rows.append({
+                    "Symbol": q.get("symbol"),
+                    "Name": q.get("name", ""),
+                    "Last": q.get("last_price", 0),
+                    "Change": _format_pct(q.get("pct_change")),
+                    "Volume": q.get("volume", 0),
+                    "Provider": result.get("chosen_provider", ""),
+                })
+            st.dataframe(_df(rows), hide_index=True)
+            with st.expander("Delay Report"):
+                st.json(result.get("data_delay_report", {}))
+        else:
+            _banner("danger", "Failed to fetch live quotes.")
+
+    # ── Live Signal Draft ────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("**Signal Draft (Live)**")
+    signal_symbols = st.text_input("Signal symbols", "600000.SH,000001.SZ", key="live_signal_symbols")
+    signal_start = st.text_input("Start date", "20250101", key="live_signal_start")
+    signal_end = st.text_input("End date", "20251231", key="live_signal_end")
+    signal_mode = st.selectbox("Trading mode", ["LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"], index=0, key="live_signal_mode")
+    if signal_mode == "LEVEL_3_AUTO":
+        _banner("danger", "LEVEL_3_AUTO is blocked in this demo.")
+    if st.button("Generate Signal Draft", type="primary", key="live_signal_btn"):
+        result = _post(
+            "/product/signal/draft",
+            params={
+                "symbols": signal_symbols,
+                "start_date": signal_start,
+                "end_date": signal_end,
+                "trading_mode": signal_mode,
+            },
+        )
+        if result:
+            status = result.get("status", "unknown")
+            if status == "blocked":
+                _banner("danger", f"Signal BLOCKED. Data health: {result.get('evidence', {}).get('data_health', {}).get('data_status', 'UNKNOWN')}")
+            else:
+                _banner("safe", f"Signal draft: {result.get('signal_type', 'hold')} (confidence: {result.get('confidence', 0):.4f})")
+            with st.expander("Signal Detail"):
+                st.json(result)
+        else:
+            _banner("danger", "Failed to generate signal draft.")
+
+    # ── Research Context ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("**Research Context (Live)**")
+    if st.button("Build Research Context", key="live_research_btn"):
+        result = _post(
+            "/product/live-data/research-context",
+            params={"symbols": live_symbols, "start_date": "20250101", "end_date": "20251231"},
+        )
+        if result:
+            health = result.get("health", {})
+            if health.get("data_status") == "FAILED":
+                _banner("danger", f"Data health FAILED. allow_signal={health.get('allow_signal')}")
+            elif health.get("data_status") == "WARN":
+                _banner("warn", f"Data health WARN. allow_signal={health.get('allow_signal')}")
+            else:
+                _banner("safe", f"Data health OK. allow_signal={health.get('allow_signal')}")
+            with st.expander("Full Context"):
+                st.json(result)
+        else:
+            _banner("danger", "Failed to build research context.")
+
+
 def main() -> None:
     st.set_page_config(page_title="QuantAgent Product Demo", layout="wide", initial_sidebar_state="expanded")
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
@@ -744,6 +855,7 @@ def main() -> None:
     tabs = st.tabs(
         [
             "System",
+            "Live Data",
             "Realtime Market",
             "Watchlist",
             "Factor Lab",
@@ -758,20 +870,22 @@ def main() -> None:
     with tabs[0]:
         render_system()
     with tabs[1]:
-        render_market()
+        render_live_data()
     with tabs[2]:
-        render_watchlist()
+        render_market()
     with tabs[3]:
-        render_factor_lab()
+        render_watchlist()
     with tabs[4]:
-        render_backtest()
+        render_factor_lab()
     with tabs[5]:
-        render_signals()
+        render_backtest()
     with tabs[6]:
-        render_human_confirmation()
+        render_signals()
     with tabs[7]:
-        render_configuration()
+        render_human_confirmation()
     with tabs[8]:
+        render_configuration()
+    with tabs[9]:
         render_feedback()
 
 

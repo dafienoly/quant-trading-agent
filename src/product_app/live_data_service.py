@@ -469,7 +469,8 @@ class LiveDataService:
         """
         normalized = [normalize_a_share_symbol(s) for s in symbols if str(s).strip()]
 
-        # 获取日线和财务数据
+        # 获取实时行情、日线和财务数据
+        quotes_result = self.get_realtime_quotes(normalized, allow_demo=False)
         daily_result = self.get_daily_bars(normalized, start_date, end_date)
         fundamentals_result = self.get_fundamentals(normalized)
 
@@ -477,40 +478,22 @@ class LiveDataService:
         from src.product_app.data_health_gate import DataHealthGate, DataHealthDecision
 
         health_gate = DataHealthGate()
+        # 从 quotes_result 提取 provider_delay 供 DataHealthGate 使用
+        quotes_for_gate = {
+            "data_status": quotes_result.get("data_status", "FAILED"),
+            "provider_delay": quotes_result.get("data_delay_report", {}).get("max_delay_seconds"),
+        }
         health_decision: DataHealthDecision = health_gate.evaluate(
-            quotes_result={"data_status": "OK"},  # build_research_context 不拉实时行情
+            quotes_result=quotes_for_gate,
             daily_bars_result={"data_status": daily_result["data_status"]},
             fundamentals_result={"data_status": fundamentals_result["data_status"]},
             is_demo=False,
             trading_mode="LEVEL_1_SIGNAL_ONLY",
         )
 
-        # 合并 missing report
-        combined_missing: dict[str, Any] = {
-            "daily_bars": daily_result.get("data_missing_report", {}),
-            "fundamentals": fundamentals_result.get("data_missing_report", {}),
-        }
-
-        # 合并 quality report
-        combined_quality: dict[str, Any] = {
-            "daily_bars": daily_result.get("data_quality_report", {}),
-            "fundamentals": fundamentals_result.get("data_quality_report", {}),
-        }
-
-        # 合并 delay report
-        combined_delay: dict[str, Any] = {
-            "daily_bars": daily_result.get("data_delay_report", {}),
-            "fundamentals": fundamentals_result.get("data_delay_report", {}),
-        }
-
-        # 合并 provider health
-        combined_health: dict[str, Any] = {
-            "daily_bars": daily_result.get("provider_health_report", {}),
-            "fundamentals": fundamentals_result.get("provider_health_report", {}),
-        }
-
         # 综合状态
         overall_data_status = self._merge_data_statuses(
+            quotes_result.get("data_status", "FAILED"),
             daily_result["data_status"],
             fundamentals_result["data_status"],
         )
@@ -525,6 +508,8 @@ class LiveDataService:
 
         # 收集 feedback bug id
         bug_ids = []
+        if quotes_result.get("feedback_bug_id"):
+            bug_ids.append(quotes_result["feedback_bug_id"])
         if daily_result.get("feedback_bug_id"):
             bug_ids.append(daily_result["feedback_bug_id"])
         if fundamentals_result.get("feedback_bug_id"):
@@ -537,6 +522,7 @@ class LiveDataService:
             "symbols": normalized,
             "start_date": normalize_trade_date(start_date),
             "end_date": normalize_trade_date(end_date),
+            "quotes": quotes_result.get("quotes", []),
             "daily_bars": daily_result.get("daily_bars", []),
             "fundamentals": fundamentals_result.get("fundamentals", []),
             "health": {
@@ -548,17 +534,35 @@ class LiveDataService:
                 "messages": health_decision.messages,
             },
             "chosen_provider": {
+                "quotes": quotes_result.get("chosen_provider", ""),
                 "daily_bars": daily_result.get("chosen_provider", ""),
                 "fundamentals": fundamentals_result.get("chosen_provider", ""),
             },
             "fallback_chain": {
+                "quotes": quotes_result.get("fallback_chain", []),
                 "daily_bars": daily_result.get("fallback_chain", []),
                 "fundamentals": fundamentals_result.get("fallback_chain", []),
             },
-            "provider_health_report": combined_health,
-            "data_quality_report": combined_quality,
-            "data_missing_report": combined_missing,
-            "data_delay_report": combined_delay,
+            "provider_health_report": {
+                "quotes": quotes_result.get("provider_health_report", {}),
+                "daily_bars": daily_result.get("provider_health_report", {}),
+                "fundamentals": fundamentals_result.get("provider_health_report", {}),
+            },
+            "data_quality_report": {
+                "quotes": quotes_result.get("data_quality_report", {}),
+                "daily_bars": daily_result.get("data_quality_report", {}),
+                "fundamentals": fundamentals_result.get("data_quality_report", {}),
+            },
+            "data_missing_report": {
+                "quotes": quotes_result.get("data_missing_report", {}),
+                "daily_bars": daily_result.get("data_missing_report", {}),
+                "fundamentals": fundamentals_result.get("data_missing_report", {}),
+            },
+            "data_delay_report": {
+                "quotes": quotes_result.get("data_delay_report", {}),
+                "daily_bars": daily_result.get("data_delay_report", {}),
+                "fundamentals": fundamentals_result.get("data_delay_report", {}),
+            },
             "feedback_bug_id": ", ".join(bug_ids) if bug_ids else "",
         }
 

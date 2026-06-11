@@ -120,33 +120,41 @@ class LiveSignalOrchestrator:
             )
         expires_at_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
 
-        # ── 1. 获取日线数据 ──────────────────────────────────────
+        # ── 1. 获取实时行情 ──────────────────────────────────────
         data_service = self._get_data_service()
+        quotes_result = data_service.get_realtime_quotes(symbols, allow_demo=False)
+
+        # ── 2. 获取日线数据 ──────────────────────────────────────
         daily_result = data_service.get_daily_bars(symbols, start_date, end_date)
 
-        # ── 2. 获取基本面数据 ────────────────────────────────────
+        # ── 3. 获取基本面数据 ────────────────────────────────────
         fundamentals_result = data_service.get_fundamentals(symbols)
 
-        # ── 3. 计算因子 ──────────────────────────────────────────
+        # ── 4. 计算因子 ──────────────────────────────────────────
         factor_result = self._compute_factors(
             daily_result, fundamentals_result, symbols
         )
 
-        # ── 4. 运行快速回测 ──────────────────────────────────────
+        # ── 5. 运行快速回测 ──────────────────────────────────────
         backtest_result = self._run_quick_backtest(
             daily_result, symbols, start_date, end_date
         )
 
-        # ── 5. 评估数据健康 ──────────────────────────────────────
+        # ── 6. 评估数据健康（使用真实行情结果）────────────────────
+        # 从 quotes_result 提取 provider_delay 供 DataHealthGate 使用
+        quotes_for_gate = {
+            "data_status": quotes_result.get("data_status", "FAILED"),
+            "provider_delay": quotes_result.get("data_delay_report", {}).get("max_delay_seconds"),
+        }
         health_decision = self._health_gate.evaluate(
-            quotes_result={"data_status": "OK"},
+            quotes_result=quotes_for_gate,
             daily_bars_result={"data_status": daily_result.get("data_status", "FAILED")},
             fundamentals_result={"data_status": fundamentals_result.get("data_status", "FAILED")},
             is_demo=False,
             trading_mode=trading_mode,
         )
 
-        # ── 6. 数据不健康 → 返回 blocked 信号 ────────────────────
+        # ── 7. 数据不健康 → 返回 blocked 信号 ────────────────────
         if not health_decision.allow_signal:
             logger.warning(
                 "LiveSignalOrchestrator: 数据健康门控阻断信号, "
@@ -168,13 +176,17 @@ class LiveSignalOrchestrator:
                         "allow_signal": health_decision.allow_signal,
                         "risk_level": health_decision.risk_level,
                         "messages": health_decision.messages,
+                        "delay_evidence": health_decision.evidence,
                     },
                     "factor_summary": factor_result.get("summary", {}),
                     "backtest_summary": backtest_result.get("summary", {}),
                     "provider_chain": {
+                        "quotes": quotes_result.get("fallback_chain", []),
                         "daily_bars": daily_result.get("fallback_chain", []),
                         "fundamentals": fundamentals_result.get("fallback_chain", []),
                     },
+                    "quotes_status": quotes_result.get("data_status", "UNKNOWN"),
+                    "feedback_bug_id": quotes_result.get("feedback_bug_id", ""),
                 },
                 "risk_check": {
                     "position_limit_ok": False,
@@ -214,13 +226,16 @@ class LiveSignalOrchestrator:
                     "allow_signal": health_decision.allow_signal,
                     "risk_level": health_decision.risk_level,
                     "messages": health_decision.messages,
+                    "delay_evidence": health_decision.evidence,
                 },
                 "factor_summary": factor_result.get("summary", {}),
                 "backtest_summary": backtest_result.get("summary", {}),
                 "provider_chain": {
+                    "quotes": quotes_result.get("fallback_chain", []),
                     "daily_bars": daily_result.get("fallback_chain", []),
                     "fundamentals": fundamentals_result.get("fallback_chain", []),
                 },
+                "quotes_status": quotes_result.get("data_status", "UNKNOWN"),
             },
             "risk_check": risk_check,
             "created_at": created_at,
