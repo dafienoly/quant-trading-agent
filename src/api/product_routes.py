@@ -360,3 +360,278 @@ def get_bug_fix_status(bug_id: str) -> dict[str, Any]:
         "bug_id": bug_id,
         "fix_status": status_info,
     }
+
+
+# ============================================================
+# Live Data Closed-Loop API (Phase B)
+# ============================================================
+
+def _get_live_data_service():
+    """获取共享的 LiveDataService 单例"""
+    from src.product_app.live_data_service import get_live_data_service
+    return get_live_data_service()
+
+
+def _get_diagnostics_service():
+    """获取共享的 ProviderDiagnosticsService 单例"""
+    from src.product_app.provider_diagnostics_service import ProviderDiagnosticsService
+    from src.product_app.live_data_service import get_live_data_service
+    if not hasattr(_get_diagnostics_service, "_instance"):
+        lds = get_live_data_service()
+        _get_diagnostics_service._instance = ProviderDiagnosticsService(
+            realtime_hub=lds._realtime_hub,
+            daily_bars_hub=lds._daily_bars_hub,
+            fundamentals_hub=lds._fundamentals_hub,
+        )
+    return _get_diagnostics_service._instance
+
+
+@router.get("/live-data/providers")
+def get_live_providers() -> dict[str, Any]:
+    """获取 provider 配置、能力和当前熔断状态"""
+    from src.data_gateway.provider_contracts import DataCapability
+
+    lds = _get_live_data_service()
+    health_realtime = lds._realtime_hub.get_health(DataCapability.REALTIME_QUOTES)
+    health_daily = lds._daily_bars_hub.get_health(DataCapability.DAILY_BARS)
+    health_fundamentals = lds._fundamentals_hub.get_health(DataCapability.FUNDAMENTALS)
+
+    def _health_to_dict(h_list):
+        return {
+            h.provider: {
+                "status": h.status,
+                "latency_ms": h.latency_ms,
+                "row_count": h.row_count,
+                "error": h.error,
+                "last_success_at": h.last_success_at,
+            }
+            for h in h_list
+        }
+
+    return {
+        "status": "ok",
+        "provider_order": lds._provider_order,
+        "realtime_quotes": _health_to_dict(health_realtime),
+        "daily_bars": _health_to_dict(health_daily),
+        "fundamentals": _health_to_dict(health_fundamentals),
+    }
+
+
+@router.post("/live-data/diagnose")
+def diagnose_live_providers(
+    symbols: str = Query("600000.SH,000001.SZ", description="Comma-separated symbols for diagnosis"),
+    capabilities: str = Query("realtime_quotes,daily_bars,fundamentals", description="Comma-separated capabilities"),
+) -> dict[str, Any]:
+    """执行数据源诊断"""
+    from src.data_gateway.provider_contracts import DataCapability
+
+    diag_service = _get_diagnostics_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    cap_list = []
+    cap_map = {
+        "realtime_quotes": DataCapability.REALTIME_QUOTES,
+        "daily_bars": DataCapability.DAILY_BARS,
+        "fundamentals": DataCapability.FUNDAMENTALS,
+    }
+    for cap_str in capabilities.split(","):
+        cap_str = cap_str.strip()
+        if cap_str in cap_map:
+            cap_list.append(cap_map[cap_str])
+
+    return diag_service.diagnose(symbols=symbol_list, capabilities=cap_list)
+
+
+@router.get("/live-data/quotes")
+def get_live_quotes(
+    symbols: str = Query("600000.SH,000001.SZ", description="Comma-separated symbols"),
+    pool_type: str = Query("watchlist", description="watchlist or theme_pool"),
+) -> dict[str, Any]:
+    """获取真实实时行情（live closed-loop）"""
+    lds = _get_live_data_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return lds.get_realtime_quotes(symbol_list, pool_type=pool_type, allow_demo=False)
+
+
+@router.get("/live-data/daily-bars")
+def get_live_daily_bars(
+    symbols: str = Query("600000.SH,000001.SZ", description="Comma-separated symbols"),
+    start_date: str = Query("20250101", description="Start date YYYYMMDD or YYYY-MM-DD"),
+    end_date: str = Query("20251231", description="End date YYYYMMDD or YYYY-MM-DD"),
+    adjust: str = Query("qfq", description="Adjustment type: qfq/hfq/empty"),
+) -> dict[str, Any]:
+    """获取真实历史日线（live closed-loop）"""
+    lds = _get_live_data_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return lds.get_daily_bars(symbol_list, start_date, end_date, adjust=adjust)
+
+
+@router.get("/live-data/fundamentals")
+def get_live_fundamentals(
+    symbols: str = Query("600000.SH,000001.SZ", description="Comma-separated symbols"),
+) -> dict[str, Any]:
+    """获取真实基础财务数据（live closed-loop）"""
+    lds = _get_live_data_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return lds.get_fundamentals(symbol_list)
+
+
+@router.post("/live-data/research-context")
+def build_research_context(
+    symbols: str = Query("600000.SH,000001.SZ", description="Comma-separated symbols"),
+    start_date: str = Query("20250101", description="Start date"),
+    end_date: str = Query("20251231", description="End date"),
+) -> dict[str, Any]:
+    """构建完整研究上下文（日线+财务+健康决策）"""
+    lds = _get_live_data_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return lds.build_research_context(symbol_list, start_date, end_date)
+
+
+# ============================================================
+# Stock Pool API (Phase C)
+# ============================================================
+
+def _get_stock_pool_service():
+    """获取 StockPoolService 单例"""
+    from src.product_app.stock_pool_service import get_stock_pool_service
+    return get_stock_pool_service()
+
+
+def _get_theme_pool_service():
+    """获取 ThemePoolService 单例"""
+    from src.product_app.stock_pool_service import get_theme_pool_service
+    return get_theme_pool_service()
+
+
+@router.get("/pools")
+def list_pools() -> dict[str, Any]:
+    """列出所有股票池"""
+    sps = _get_stock_pool_service()
+    tps = _get_theme_pool_service()
+    watchlist = sps.get_pool("default")
+    theme_pool = tps.get_theme_pool()
+    return {
+        "status": "ok",
+        "watchlist": watchlist,
+        "theme_pool": {
+            "pool_id": theme_pool.get("pool_id", ""),
+            "name": theme_pool.get("name", ""),
+            "stock_count": len(theme_pool.get("stocks", [])),
+            "tags": theme_pool.get("tags", []),
+        },
+    }
+
+
+@router.get("/pools/{pool_id}")
+def get_pool(pool_id: str) -> dict[str, Any]:
+    """获取指定股票池内容"""
+    if pool_id == "ai_semiconductor":
+        tps = _get_theme_pool_service()
+        return {"status": "ok", "pool": tps.get_theme_pool()}
+    sps = _get_stock_pool_service()
+    pool = sps.get_pool(pool_id)
+    return {"status": "ok", "pool": pool}
+
+
+@router.post("/pools/watchlist")
+def update_watchlist(
+    action: str = Query("add", description="add or remove"),
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    pool_id: str = Query("default", description="Pool ID"),
+) -> dict[str, Any]:
+    """添加或删除自选股"""
+    sps = _get_stock_pool_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if action == "add":
+        result = sps.add_symbols(pool_id, symbol_list)
+    elif action == "remove":
+        result = sps.remove_symbols(pool_id, symbol_list)
+    else:
+        return {"status": "error", "message": f"Unknown action: {action}"}
+    return result
+
+
+@router.post("/pools/validate")
+def validate_symbols(
+    symbols: str = Query(..., description="Comma-separated symbols to validate"),
+) -> dict[str, Any]:
+    """验证股票代码是否允许进入实盘闭环"""
+    sps = _get_stock_pool_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    validation = sps.validate_symbols(symbol_list)
+    return {
+        "status": "ok",
+        "validation": [v.__dict__ if hasattr(v, "__dict__") else v for v in validation],
+    }
+
+
+# ============================================================
+# Signal API (Phase D)
+# ============================================================
+
+def _get_live_signal_orchestrator():
+    """获取 LiveSignalOrchestrator 单例"""
+    from src.product_app.live_signal_orchestrator import get_live_signal_orchestrator
+    return get_live_signal_orchestrator()
+
+
+@router.post("/signal/draft")
+def generate_signal_draft(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    start_date: str = Query("20250101", description="Start date"),
+    end_date: str = Query("20251231", description="End date"),
+    trading_mode: str = Query("LEVEL_1_SIGNAL_ONLY", description="Trading mode"),
+) -> dict[str, Any]:
+    """生成信号草稿（含数据健康证据链）"""
+    orchestrator = _get_live_signal_orchestrator()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return orchestrator.generate_signal_draft(
+        symbols=symbol_list,
+        start_date=start_date,
+        end_date=end_date,
+        trading_mode=trading_mode,
+    )
+
+
+@router.get("/signal/{signal_id}")
+def get_signal_status(signal_id: str) -> dict[str, Any]:
+    """获取信号状态"""
+    orchestrator = _get_live_signal_orchestrator()
+    return orchestrator.get_signal_status(signal_id)
+
+
+# ============================================================
+# Search & Theme Evidence API (Phase E)
+# ============================================================
+
+def _get_search_provider_hub():
+    """获取 SearchProviderHub 单例"""
+    from src.product_app.search_provider_hub import get_search_provider_hub
+    return get_search_provider_hub()
+
+
+def _get_theme_evidence_service():
+    """获取 ThemeEvidenceService 单例"""
+    from src.product_app.theme_evidence_service import get_theme_evidence_service
+    return get_theme_evidence_service()
+
+
+@router.post("/search")
+def search_web(
+    query: str = Query(..., description="Search query"),
+    max_results: int = Query(5, description="Max results"),
+) -> dict[str, Any]:
+    """搜索互联网信息（受预算控制）"""
+    hub = _get_search_provider_hub()
+    return hub.search(query, max_results=max_results)
+
+
+@router.get("/theme-evidence")
+def get_theme_evidence(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    theme_tag: str = Query(None, description="Optional theme tag filter"),
+) -> dict[str, Any]:
+    """获取主题证据（主题池+搜索新闻）"""
+    service = _get_theme_evidence_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return service.get_theme_evidence(symbol_list, theme_tag=theme_tag)

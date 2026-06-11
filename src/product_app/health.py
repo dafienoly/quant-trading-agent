@@ -8,8 +8,6 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from loguru import logger
-
 from src.config.settings import ENABLE_LIVE_TRADING, MAX_TRADING_LEVEL
 
 
@@ -91,7 +89,7 @@ class HealthService:
         if risk_file.exists():
             try:
                 with open(risk_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                    json.load(f)
                 return HealthStatus("risk_engine", "OK", "风控引擎正常")
             except Exception:
                 pass

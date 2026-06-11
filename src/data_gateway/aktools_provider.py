@@ -18,6 +18,7 @@ DEFAULT_AKTOOLS_URL = os.getenv("AKTOOLS_BASE_URL", "http://127.0.0.1:8080")
 
 
 class AkToolsProvider(MarketDataProvider):
+    name = "aktools"
 
     def __init__(self, base_url: str = DEFAULT_AKTOOLS_URL, timeout: float = 30.0):
         self._base_url = base_url.rstrip("/")

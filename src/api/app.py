@@ -12,7 +12,6 @@ from typing import Any
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 
 from src.config.settings import ENABLE_LIVE_TRADING, MAX_TRADING_LEVEL
-from src.risk_engine.models import KillSwitchState, RiskDecision, RiskLevel
 from src.risk_engine.runtime import RuntimeRiskEngine
 
 

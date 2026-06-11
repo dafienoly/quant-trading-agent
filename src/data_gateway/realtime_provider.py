@@ -203,6 +203,7 @@ class AkShareRealtimeProvider:
     - Retry with exponential backoff (up to 3 attempts) on empty results
     - Per-symbol degradation: if bulk fetch fails, falls back to individual symbol queries
     """
+    name = "akshare_realtime"
 
     _MAX_RETRIES = 3
     _RETRY_BASE_DELAY = 1.5       # seconds — base for exponential backoff
