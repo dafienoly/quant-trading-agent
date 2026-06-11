@@ -8,6 +8,8 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from src.ui_report.i18n import t
+
 DEFAULT_API_BASE = "http://localhost:8000"
 API_TIMEOUT = 8
 
@@ -198,7 +200,7 @@ def _banner(kind: str, text: str) -> None:
 
 
 def render_system() -> None:
-    st.subheader("System")
+    st.subheader(t("system"))
     health = _get("/product/health")
     dashboard = _get("/product/dashboard")
 
@@ -213,40 +215,40 @@ def render_system() -> None:
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        _card("API", health.get("api_status", "unknown"), health.get("timestamp", ""))
+        _card(t("api"), health.get("api_status", "unknown"), health.get("timestamp", ""))
     with col2:
-        _card("Data provider", health.get("data_source", "unknown"), "demo fallback is explicit")
+        _card(t("data_provider"), health.get("data_source", "unknown"), t("demo_fallback_explicit"))
     with col3:
-        _card("Risk", health.get("risk_status", "UNKNOWN"), "Risk Agent keeps veto power")
+        _card(t("risk"), health.get("risk_status", "UNKNOWN"), t("risk_veto"))
     with col4:
-        _card("Trading mode", health.get("trading_mode", "UNKNOWN"), "LEVEL_3 is not exposed")
+        _card(t("trading_mode"), health.get("trading_mode", "UNKNOWN"), t("level_3_not_exposed"))
 
     if dashboard:
         account = dashboard.get("account", {})
-        st.markdown("### Paper Account")
+        st.markdown(f"### {t('paper_account')}")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total assets", f"{account.get('total_assets', 0):,.0f}")
-        c2.metric("Cash", f"{account.get('cash', 0):,.0f}")
-        c3.metric("Market value", f"{account.get('market_value', 0):,.0f}")
-        c4.metric("Daily PnL", f"{account.get('daily_pnl', 0):,.0f}", f"{account.get('daily_pnl_pct', 0):.2%}")
+        c1.metric(t("total_assets"), f"{account.get('total_assets', 0):,.0f}")
+        c2.metric(t("cash"), f"{account.get('cash', 0):,.0f}")
+        c3.metric(t("market_value"), f"{account.get('market_value', 0):,.0f}")
+        c4.metric(t("daily_pnl"), f"{account.get('daily_pnl', 0):,.0f}", f"{account.get('daily_pnl_pct', 0):.2%}")
 
 
 def render_market() -> None:
-    st.subheader("Realtime Market")
-    st.caption("Fetch live snapshots from AkShare or AkTools. Demo fallback is clearly labeled.")
+    st.subheader(t("realtime_market"))
+    st.caption(t("realtime_market_caption"))
 
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        symbols = st.text_input("Symbols", "002463.SZ,600584.SH,603228.SH", help="Comma-separated A-share or HK symbols.", key="market_symbols")
+        symbols = st.text_input(t("symbols"), "002463.SZ,600584.SH,603228.SH", help=t("symbols_help"), key="market_symbols")
     with col2:
-        provider = st.selectbox("Data provider", ["akshare", "aktools"], index=0, key="market_provider")
+        provider = st.selectbox(t("data_provider_select"), ["akshare", "aktools"], index=0, key="market_provider")
     with col3:
-        force_live = st.checkbox("Force realtime fetch", value=False, key="market_force_live")
+        force_live = st.checkbox(t("force_realtime_fetch"), value=False, key="market_force_live")
 
-    allow_demo = st.checkbox("Allow demo fallback", value=True, key="market_allow_demo")
+    allow_demo = st.checkbox(t("allow_demo_fallback"), value=True, key="market_allow_demo")
     col4, col5 = st.columns(2)
-    refresh = col4.button("Refresh quotes", type="primary", width="stretch")
-    start_job = col5.button("Start background snapshot", width="stretch")
+    refresh = col4.button(t("refresh_quotes"), type="primary", width="stretch")
+    start_job = col5.button(t("start_bg_snapshot"), width="stretch")
 
     params = {
         "symbols": symbols,
@@ -257,9 +259,9 @@ def render_market() -> None:
     if start_job:
         job_result = _post("/product/jobs/quote_refresh/start", params=params)
         if job_result and job_result.get("status") == "ok":
-            st.success(f"quote_refresh started: {job_result.get('job_id')}")
+            st.success(f"quote_refresh {t('bg_snapshot_started')}: {job_result.get('job_id')}")
         else:
-            _banner("danger", f"quote_refresh failed to start: {job_result}")
+            _banner("danger", f"quote_refresh {t('bg_snapshot_failed')}: {job_result}")
 
     result = _get("/product/quotes", params=params)
     jobs = _get("/product/jobs") or {}
@@ -272,14 +274,14 @@ def render_market() -> None:
         )
 
     if not result:
-        _banner("danger", "Unable to fetch quote data.")
+        _banner("danger", t("unable_fetch_quotes"))
         return
 
     status = result.get("status", "unknown")
     if result.get("is_demo"):
-        _banner("warn", f"Showing demo data. Status: {status}. {' '.join(result.get('messages', []))}")
+        _banner("warn", f"{t('showing_demo_data')}. {t('status')}: {status}. {' '.join(result.get('messages', []))}")
     else:
-        _banner("safe", f"Showing realtime data from {result.get('provider')}. Updated at {result.get('timestamp')}.")
+        _banner("safe", t("showing_realtime_data").format(provider=result.get('provider'), timestamp=result.get('timestamp')))
 
     rows = []
     for quote in result.get("quotes", []):
@@ -301,14 +303,14 @@ def render_market() -> None:
 
 
 def render_watchlist() -> None:
-    st.subheader("Watchlist")
+    st.subheader(t("watchlist"))
     dashboard = _get("/product/dashboard")
     if not dashboard:
-        _banner("danger", "Dashboard data is unavailable.")
+        _banner("danger", t("dashboard_unavailable"))
         return
 
     if dashboard.get("trading_mode") == "LEVEL_1_SIGNAL_ONLY":
-        _banner("safe", "LEVEL_1 signal-only mode: watchlist alerts cannot create orders.")
+        _banner("safe", t("level1_signal_only"))
 
     rows = []
     for item in dashboard.get("watchlist", []):
@@ -326,18 +328,18 @@ def render_watchlist() -> None:
 
     risk = dashboard.get("risk", {})
     if not risk.get("risk_pass", True):
-        _banner("danger", "Risk blocked: " + " / ".join(risk.get("messages", [])))
+        _banner("danger", t("risk_blocked") + ": " + " / ".join(risk.get("messages", [])))
 
 
 def render_factor_lab() -> None:
-    st.subheader("Factor Lab (Live)")
-    st.caption("Technical factors computed from live daily bars. No demo fallback.")
-    symbols = st.text_input("Symbols", "600000.SH,000001.SZ", key="factor_symbols")
+    st.subheader(t("factor_lab"))
+    st.caption(t("factor_lab_caption"))
+    symbols = st.text_input(t("symbols"), "600000.SH,000001.SZ", key="factor_symbols")
     col1, col2 = st.columns(2)
-    start_date = col1.text_input("Start date", "20250101", key="factor_start_date")
-    end_date = col2.text_input("End date", "20251231", key="factor_end_date")
+    start_date = col1.text_input(t("start_date"), "20250101", key="factor_start_date")
+    end_date = col2.text_input(t("end_date"), "20251231", key="factor_end_date")
 
-    if st.button("Compute live factors", type="primary", key="compute_factors_btn"):
+    if st.button(t("compute_live_factors"), type="primary", key="compute_factors_btn"):
         result = _post(
             "/product/live-factors/compute",
             params={"symbols": symbols, "start_date": start_date, "end_date": end_date},
@@ -345,11 +347,11 @@ def render_factor_lab() -> None:
         if result:
             data_status = result.get("data_status", "UNKNOWN")
             if data_status == "FAILED":
-                _banner("danger", f"Factor computation failed. Data status: {data_status}")
+                _banner("danger", f"{t('factor_compute_failed')} Data status: {data_status}")
             elif data_status == "WARN":
-                _banner("warn", f"Factor computation partial. Data status: {data_status}")
+                _banner("warn", f"{t('factor_compute_partial')} Data status: {data_status}")
             else:
-                _banner("safe", f"Factors computed. Data status: {data_status}. Provider: {result.get('data_health', {}).get('chosen_provider', '')}")
+                _banner("safe", f"{t('factor_compute_ok')} Data status: {data_status}")
             rows = []
             for factor in result.get("factors", []):
                 rows.append({
@@ -362,21 +364,21 @@ def render_factor_lab() -> None:
                     "BOLL_Mid": factor.get("boll_middle"),
                 })
             st.dataframe(_df(rows), hide_index=True)
-            with st.expander("Data Health"):
+            with st.expander(t("data_health")):
                 st.json(result.get("data_health", {}))
         else:
-            _banner("danger", "Failed to compute live factors.")
+            _banner("danger", t("failed_to_compute"))
 
 
 def render_backtest() -> None:
-    st.subheader("Backtest (Live)")
-    st.caption("Quick backtest on live daily bars. No demo fallback.")
+    st.subheader(t("backtest"))
+    st.caption(t("backtest_caption"))
     col1, col2, col3 = st.columns(3)
-    symbols = col1.text_input("Symbols", "600000.SH,000001.SZ", key="backtest_symbols")
-    start_date = col2.text_input("Start date", "20250101", key="backtest_start_date")
-    end_date = col3.text_input("End date", "20251231", key="backtest_end_date")
+    symbols = col1.text_input(t("symbols"), "600000.SH,000001.SZ", key="backtest_symbols")
+    start_date = col2.text_input(t("start_date"), "20250101", key="backtest_start_date")
+    end_date = col3.text_input(t("end_date"), "20251231", key="backtest_end_date")
 
-    if st.button("Run live backtest", type="primary", key="run_backtest_btn"):
+    if st.button(t("run_live_backtest"), type="primary", key="run_backtest_btn"):
         result = _post(
             "/product/live-backtests/run",
             params={"symbols": symbols, "start_date": start_date, "end_date": end_date},
@@ -385,56 +387,56 @@ def render_backtest() -> None:
             bt_status = result.get("status", "unknown")
             data_status = result.get("data_status", "UNKNOWN")
             if bt_status == "failed" or data_status == "FAILED":
-                _banner("danger", f"Backtest failed. Data status: {data_status}")
+                _banner("danger", f"{t('backtest_failed')} Data status: {data_status}")
             elif bt_status == "insufficient_data":
-                _banner("warn", "Insufficient data for backtest (need at least 20 trading days).")
+                _banner("warn", t("backtest_insufficient_data"))
             else:
-                _banner("safe", f"Backtest completed. Strategy: {result.get('strategy', '')}. Data status: {data_status}")
+                _banner("safe", f"{t('backtest_completed')} Strategy: {result.get('strategy', '')}. Data status: {data_status}")
                 results = result.get("results", {})
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Total return", f"{results.get('total_return', 0):.2%}")
-                c2.metric("Max drawdown", f"{results.get('max_drawdown', 0):.2%}")
-                c3.metric("Sharpe", f"{results.get('sharpe_ratio', 0):.2f}")
-                c4.metric("Win rate", f"{results.get('win_rate', 0):.2%}")
-            with st.expander("Data Health"):
+                c1.metric(t("total_return"), f"{results.get('total_return', 0):.2%}")
+                c2.metric(t("max_drawdown"), f"{results.get('max_drawdown', 0):.2%}")
+                c3.metric(t("sharpe"), f"{results.get('sharpe_ratio', 0):.2f}")
+                c4.metric(t("win_rate"), f"{results.get('win_rate', 0):.2%}")
+            with st.expander(t("data_health")):
                 st.json(result.get("health", {}))
         else:
-            _banner("danger", "Failed to run live backtest.")
+            _banner("danger", t("failed_to_run_backtest"))
 
 
 def render_signals() -> None:
-    st.subheader("Signals")
+    st.subheader(t("signals"))
     dashboard = _get("/product/dashboard")
     if not dashboard:
-        _banner("danger", "Signal data is unavailable.")
+        _banner("danger", t("signal_unavailable"))
         return
 
     rows = []
     for signal in dashboard.get("signals", []):
         rows.append(
             {
-                "Signal": signal.get("signal_type"),
+                t("signal"): signal.get("signal_type"),
                 "Symbol": signal.get("symbol"),
                 "Name": signal.get("stock_name"),
-                "Score": signal.get("score"),
-                "Trigger": signal.get("price_trigger"),
-                "Stop": signal.get("stop_loss_price"),
-                "Take profit": signal.get("take_profit_price"),
-                "Reason": signal.get("reason"),
-                "Risk note": signal.get("risk_note"),
+                t("score"): signal.get("score"),
+                t("trigger"): signal.get("price_trigger"),
+                t("stop"): signal.get("stop_loss_price"),
+                t("take_profit"): signal.get("take_profit_price"),
+                t("reason"): signal.get("reason"),
+                t("risk_note"): signal.get("risk_note"),
             }
         )
     st.dataframe(_df(rows), width="stretch", hide_index=True)
 
 
 def render_human_confirmation() -> None:
-    st.subheader("Human Confirmation")
-    _banner("warn", "Buy orders require per-order confirmation. Batch buy confirmation is forbidden.")
+    st.subheader(t("human_confirmation"))
+    _banner("warn", t("buy_orders_warning"))
     pending = _get("/orders/pending") or {"orders": []}
     orders = pending.get("orders", [])
 
     if not orders:
-        st.info("No pending orders.")
+        st.info(t("no_pending_orders"))
         return
 
     for order in orders:
@@ -442,22 +444,22 @@ def render_human_confirmation() -> None:
         with st.expander(title):
             st.json(order)
             col1, col2, col3 = st.columns(3)
-            if col1.button("Confirm this order", key=f"confirm_{order.get('order_id')}", type="primary"):
+            if col1.button(t("confirm_order"), key=f"confirm_{order.get('order_id')}", type="primary"):
                 st.write(_post(f"/orders/{order.get('order_id')}/confirm"))
                 st.rerun()
-            if col2.button("Reject", key=f"reject_{order.get('order_id')}"):
+            if col2.button(t("reject"), key=f"reject_{order.get('order_id')}"):
                 st.write(_post(f"/orders/{order.get('order_id')}/reject"))
                 st.rerun()
-            if col3.button("Cancel", key=f"cancel_{order.get('order_id')}"):
+            if col3.button(t("cancel"), key=f"cancel_{order.get('order_id')}"):
                 st.write(_post(f"/orders/{order.get('order_id')}/cancel"))
                 st.rerun()
 
 
 def render_configuration() -> None:
-    st.subheader("Configuration")
+    st.subheader(t("configuration"))
     config_data = _get("/product/config")
     if not config_data:
-        _banner("danger", "Configuration API is unavailable.")
+        _banner("danger", t("config_unavailable"))
         return
 
     validation = config_data.get("validation", {})
@@ -468,28 +470,28 @@ def render_configuration() -> None:
 
     config = config_data.get("config", {})
     provider = st.selectbox(
-        "Data provider",
+        t("data_provider_select"),
         ["akshare", "aktools"],
         index=0 if config.get("DEFAULT_DATA_PROVIDER", "akshare") == "akshare" else 1,
         key="config_provider",
     )
-    log_level = st.selectbox("Log level", ["DEBUG", "INFO", "WARNING", "ERROR"], index=1, key="config_log_level")
-    max_single = st.slider("Max single stock position", 0.01, 0.50, float(config.get("MAX_SINGLE_STOCK_POSITION", 0.15)), 0.01, key="config_max_single")
-    max_sector = st.slider("Max sector position", 0.10, 1.00, float(config.get("MAX_SECTOR_POSITION", 0.60)), 0.05, key="config_max_sector")
-    min_cash = st.slider("Minimum cash ratio", 0.0, 0.50, float(config.get("MIN_CASH_RATIO", 0.20)), 0.05, key="config_min_cash")
+    log_level = st.selectbox(t("log_level"), ["DEBUG", "INFO", "WARNING", "ERROR"], index=1, key="config_log_level")
+    max_single = st.slider(t("max_single_position"), 0.01, 0.50, float(config.get("MAX_SINGLE_STOCK_POSITION", 0.15)), 0.01, key="config_max_single")
+    max_sector = st.slider(t("max_sector_position"), 0.10, 1.00, float(config.get("MAX_SECTOR_POSITION", 0.60)), 0.05, key="config_max_sector")
+    min_cash = st.slider(t("min_cash_ratio"), 0.0, 0.50, float(config.get("MIN_CASH_RATIO", 0.20)), 0.05, key="config_min_cash")
 
     mode = st.selectbox(
-        "Trading mode",
+        t("trading_mode"),
         ["LEVEL_0", "LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"],
         index=1,
         key="config_trading_mode",
     )
     if mode == "LEVEL_3_AUTO":
-        _banner("danger", "LEVEL_3_AUTO is blocked in Demo V1.")
+        _banner("danger", t("level3_blocked"))
     elif mode == "LEVEL_2_HUMAN_CONFIRM":
-        _banner("warn", "LEVEL_2 requires explicit confirmation and keeps BROKER_ADAPTER=paper.")
+        _banner("warn", t("level2_warning"))
 
-    if st.button("Save safe configuration", type="primary", key="save_config_btn"):
+    if st.button(t("save_safe_config"), type="primary", key="save_config_btn"):
         updates = {
             "DEFAULT_DATA_PROVIDER": provider,
             "LOG_LEVEL": log_level,
@@ -499,11 +501,11 @@ def render_configuration() -> None:
         }
         results = [_post("/product/config", params={"key": key, "value": value}) for key, value in updates.items()]
         if all(result and result.get("success") for result in results):
-            st.success("Configuration saved.")
+            st.success(t("config_saved"))
         else:
-            st.error("Some configuration updates failed.")
+            st.error(t("config_failed"))
 
-    if st.button("Restore safe defaults", key="restore_defaults_btn"):
+    if st.button(t("restore_safe_defaults"), key="restore_defaults_btn"):
         st.write(_post("/product/config/restore-defaults"))
         st.rerun()
 
@@ -545,7 +547,7 @@ def _render_status_steps(current_status: str) -> None:
 
 def _render_analysis_report(report: dict[str, Any]) -> None:
     """Render an expandable section for a bug's analysis report."""
-    with st.expander("🔍 Analysis Report", expanded=False):
+    with st.expander(f"🔍 {t('analysis_report')}", expanded=False):
         root_cause = report.get("root_cause", "")
         if root_cause:
             st.markdown("**Root Cause:**")
@@ -582,7 +584,7 @@ def _render_analysis_report(report: dict[str, Any]) -> None:
 
 def _render_fix_proposal(proposal: dict[str, Any]) -> None:
     """Render an expandable section for a bug's fix proposal."""
-    with st.expander("🔧 Fix Proposal", expanded=False):
+    with st.expander(f"🔧 {t('fix_proposal')}", expanded=False):
         fix_desc = proposal.get("fix_description", "")
         if fix_desc:
             st.markdown("**Fix Description:**")
@@ -636,16 +638,16 @@ def _render_fix_result(result: dict[str, Any]) -> None:
 
 
 def render_feedback() -> None:
-    st.subheader("Feedback")
+    st.subheader(t("feedback"))
     data = _get("/product/feedback")
     if not data:
-        _banner("danger", "Feedback API is unavailable.")
+        _banner("danger", t("feedback_unavailable"))
         return
 
-    _card("Open bugs", str(data.get("count", 0)), data.get("export_path", "feedback/bugs/open"))
+    _card(t("open_bugs"), str(data.get("count", 0)), data.get("export_path", "feedback/bugs/open"))
     bugs = data.get("bugs", [])
     if not bugs:
-        st.info("No open bug reports.")
+        st.info(t("no_open_bugs"))
         return
 
     for bug in bugs:
@@ -656,7 +658,7 @@ def render_feedback() -> None:
 
         with st.expander(f"{severity} {bug_id}: {title}"):
             # --- Bug Status Step Indicator ---
-            st.markdown("**Workflow Status**")
+            st.markdown(f"**{t('workflow_status')}**")
             _render_status_steps(bug_status)
 
             st.divider()
@@ -687,81 +689,81 @@ def render_feedback() -> None:
             if bug_status == "proposed":
                 approve_col, reject_col = st.columns(2)
                 with approve_col:
-                    if st.button("✅ Approve", key=f"approve_{bug_id}", type="primary"):
-                        result = _post(f"/product/feedback/{bug_id}/approve", params={"comment": "Approved via dashboard"})
+                    if st.button(f"✅ {t('approve')}", key=f"approve_{bug_id}", type="primary"):
+                        result = _post(f"/product/feedback/{bug_id}/approve", params={"comment": t("approve_comment")})
                         if result:
-                            st.success("Bug fix approved!")
+                            st.success(t("approve_success"))
                             st.rerun()
                         else:
-                            st.error("Failed to approve bug fix.")
+                            st.error(t("approve_failed"))
                 with reject_col:
-                    if st.button("❌ Reject", key=f"reject_{bug_id}"):
-                        result = _post(f"/product/feedback/{bug_id}/reject", params={"comment": "Rejected via dashboard"})
+                    if st.button(f"❌ {t('reject')}", key=f"reject_{bug_id}"):
+                        result = _post(f"/product/feedback/{bug_id}/reject", params={"comment": t("reject_comment")})
                         if result:
-                            st.warning("Bug fix rejected.")
+                            st.warning(t("reject_success"))
                             st.rerun()
                         else:
-                            st.error("Failed to reject bug fix.")
+                            st.error(t("reject_failed"))
             else:
                 col1, col2, col3 = st.columns(3)
-                if col1.button("Mark triaged", key=f"triage_{bug_id}"):
+                if col1.button(t("mark_triaged"), key=f"triage_{bug_id}"):
                     st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "triaged"}))
                     st.rerun()
-                if col2.button("Mark fixed", key=f"fixed_{bug_id}"):
+                if col2.button(t("mark_fixed"), key=f"fixed_{bug_id}"):
                     st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "fixed"}))
                     st.rerun()
-                if col3.button("Ignore", key=f"ignore_{bug_id}"):
+                if col3.button(t("ignore"), key=f"ignore_{bug_id}"):
                     st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "ignored"}))
                     st.rerun()
 
             # --- Raw Bug Data ---
-            with st.expander("Raw Bug Data"):
+            with st.expander(t("raw_bug_data")):
                 st.json(bug)
 
 
 def render_live_data() -> None:
     """Live Data Closed-Loop: 数据源诊断、实时行情、因子、回测、信号。"""
-    st.subheader("Live Data Closed-Loop")
-    st.caption("Real data only. No demo fallback. Data failure = blocked signal.")
+    st.subheader(t("live_data"))
+    st.caption(t("live_data_caption"))
 
-    # ── 数据源诊断 ──────────────────────────────────────────────
-    with st.expander("Provider Diagnosis", expanded=False):
-        if st.button("Run Diagnosis", key="live_diagnose_btn"):
+    # ── Provider Diagnosis ───────────────────────────────────────
+    with st.expander(t("provider_diagnosis"), expanded=False):
+        if st.button(t("run_diagnosis"), key="live_diagnose_btn"):
             diag = _post("/product/live-data/diagnose")
             if diag:
                 for cap_name, cap_result in diag.get("results", {}).items():
                     st.markdown(f"**{cap_name}**")
                     st.json(cap_result)
             else:
-                _banner("danger", "Diagnosis failed.")
+                _banner("danger", t("diagnosis_failed"))
 
-    # ── Provider 状态 ────────────────────────────────────────────
+    # ── Provider Status ──────────────────────────────────────────
     providers = _get("/product/live-data/providers")
     if providers:
-        st.markdown("**Provider Status**")
+        st.markdown(f"**{t('provider_status')}**")
         rows = []
         for cap_name, prov_dict in providers.get("realtime_quotes", {}).items():
-            rows.append({"Capability": "realtime", "Provider": cap_name, "Status": prov_dict.get("status", "unknown"), "Latency ms": prov_dict.get("latency_ms", 0)})
+            rows.append({"Capability": "realtime", t("provider"): cap_name, t("status"): prov_dict.get("status", "unknown"), t("latency_ms"): prov_dict.get("latency_ms", 0)})
         for cap_name, prov_dict in providers.get("daily_bars", {}).items():
-            rows.append({"Capability": "daily_bars", "Provider": cap_name, "Status": prov_dict.get("status", "unknown"), "Latency ms": prov_dict.get("latency_ms", 0)})
+            rows.append({"Capability": "daily_bars", t("provider"): cap_name, t("status"): prov_dict.get("status", "unknown"), t("latency_ms"): prov_dict.get("latency_ms", 0)})
         for cap_name, prov_dict in providers.get("fundamentals", {}).items():
-            rows.append({"Capability": "fundamentals", "Provider": cap_name, "Status": prov_dict.get("status", "unknown"), "Latency ms": prov_dict.get("latency_ms", 0)})
+            rows.append({"Capability": "fundamentals", t("provider"): cap_name, t("status"): prov_dict.get("status", "unknown"), t("latency_ms"): prov_dict.get("latency_ms", 0)})
         st.dataframe(_df(rows), hide_index=True)
 
-    # ── 实时行情 ────────────────────────────────────────────────
+    # ── Realtime Quotes ──────────────────────────────────────────
     st.markdown("---")
-    st.markdown("**Realtime Quotes (Live)**")
-    live_symbols = st.text_input("Symbols", "600000.SH,000001.SZ", key="live_symbols")
-    if st.button("Fetch Live Quotes", key="live_quotes_btn"):
+    st.markdown(f"**{t('realtime_quotes_title')}**")
+    live_symbols = st.text_input(t("symbols"), "600000.SH,000001.SZ", key="live_symbols")
+    if st.button(t("fetch_live_quotes"), key="live_quotes_btn"):
         result = _get("/product/live-data/quotes", params={"symbols": live_symbols})
         if result:
             data_status = result.get("data_status", "UNKNOWN")
             if data_status == "FAILED":
-                _banner("danger", f"Realtime data FAILED. Provider: {result.get('chosen_provider', '')}. Signal generation is BLOCKED.")
+                _banner("danger", f"{t('realtime_failed_blocked')} Provider: {result.get('chosen_provider', '')}.")
             elif data_status == "WARN":
-                _banner("warn", f"Realtime data partial. Provider: {result.get('chosen_provider', '')}.")
+                _banner("warn", f"{t('realtime_partial')} Provider: {result.get('chosen_provider', '')}.")
             else:
-                _banner("safe", f"Realtime data OK. Provider: {result.get('chosen_provider', '')}.")
+                _banner("safe", f"{t('realtime_ok')} Provider: {result.get('chosen_provider', '')}.")
             rows = []
             for q in result.get("quotes", []):
                 rows.append({
@@ -770,22 +772,22 @@ def render_live_data() -> None:
                     "Last": q.get("last_price", 0),
                     "Change": _format_pct(q.get("pct_change")),
                     "Volume": q.get("volume", 0),
-                    "Provider": result.get("chosen_provider", ""),
+                    t("provider"): result.get("chosen_provider", ""),
                 })
             st.dataframe(_df(rows), hide_index=True)
-            with st.expander("Delay Report"):
+            with st.expander(t("live_data")):
                 st.json(result.get("data_delay_report", {}))
         else:
-            _banner("danger", "Failed to fetch live quotes.")
+            _banner("danger", t("failed_to_build"))
 
     # ── Live Signal Draft ────────────────────────────────────────
     st.markdown("---")
-    st.markdown("**Signal Draft (Live)**")
-    signal_symbols = st.text_input("Signal symbols", "600000.SH,000001.SZ", key="live_signal_symbols")
-    signal_start = st.text_input("Start date", "20250101", key="live_signal_start")
-    signal_end = st.text_input("End date", "20251231", key="live_signal_end")
-    signal_mode = st.selectbox("Trading mode", ["LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM"], index=0, key="live_signal_mode")
-    if st.button("Generate Signal Draft", type="primary", key="live_signal_btn"):
+    st.markdown(f"**{t('signal_draft')}**")
+    signal_symbols = st.text_input(t("symbols"), "600000.SH,000001.SZ", key="live_signal_symbols")
+    signal_start = st.text_input(t("start_date"), "20250101", key="live_signal_start")
+    signal_end = st.text_input(t("end_date"), "20251231", key="live_signal_end")
+    signal_mode = st.selectbox(t("trading_mode"), ["LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM"], index=0, key="live_signal_mode")
+    if st.button(t("generate_signal_draft"), type="primary", key="live_signal_btn"):
         result = _post(
             "/product/signal/draft",
             params={
@@ -798,18 +800,18 @@ def render_live_data() -> None:
         if result:
             status = result.get("status", "unknown")
             if status == "blocked":
-                _banner("danger", f"Signal BLOCKED. Data health: {result.get('evidence', {}).get('data_health', {}).get('data_status', 'UNKNOWN')}")
+                _banner("danger", f"{t('signal_blocked')} Data health: {result.get('evidence', {}).get('data_health', {}).get('data_status', 'UNKNOWN')}")
             else:
-                _banner("safe", f"Signal draft: {result.get('signal_type', 'hold')} (confidence: {result.get('confidence', 0):.4f})")
-            with st.expander("Signal Detail"):
+                _banner("safe", f"{t('signal_draft_info')}: {result.get('signal_type', 'hold')} (confidence: {result.get('confidence', 0):.4f})")
+            with st.expander(t("signal_draft_info")):
                 st.json(result)
         else:
-            _banner("danger", "Failed to generate signal draft.")
+            _banner("danger", t("failed_to_build"))
 
     # ── Research Context ─────────────────────────────────────────
     st.markdown("---")
-    st.markdown("**Research Context (Live)**")
-    if st.button("Build Research Context", key="live_research_btn"):
+    st.markdown(f"**{t('research_context')}**")
+    if st.button(t("build_research_context"), key="live_research_btn"):
         result = _post(
             "/product/live-data/research-context",
             params={"symbols": live_symbols, "start_date": "20250101", "end_date": "20251231"},
@@ -817,43 +819,45 @@ def render_live_data() -> None:
         if result:
             health = result.get("health", {})
             if health.get("data_status") == "FAILED":
-                _banner("danger", f"Data health FAILED. allow_signal={health.get('allow_signal')}")
+                _banner("danger", f"{t('data_health_failed')} allow_signal={health.get('allow_signal')}")
             elif health.get("data_status") == "WARN":
-                _banner("warn", f"Data health WARN. allow_signal={health.get('allow_signal')}")
+                _banner("warn", f"{t('data_health_warn')} allow_signal={health.get('allow_signal')}")
             else:
-                _banner("safe", f"Data health OK. allow_signal={health.get('allow_signal')}")
-            with st.expander("Full Context"):
+                _banner("safe", f"{t('data_health_ok')} allow_signal={health.get('allow_signal')}")
+            with st.expander(t("data_health")):
                 st.json(result)
         else:
-            _banner("danger", "Failed to build research context.")
+            _banner("danger", t("failed_to_build"))
 
 
 def main() -> None:
-    st.set_page_config(page_title="QuantAgent Product Demo", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title=t("page_title"), layout="wide", initial_sidebar_state="expanded")
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
     with st.sidebar:
-        st.title("QuantAgent")
-        st.caption("Product demo cockpit")
-        st.session_state["api_base"] = st.text_input("API base URL", st.session_state.get("api_base", DEFAULT_API_BASE), key="sidebar_api_base")
+        st.title(t("sidebar_title"))
+        st.caption(t("sidebar_caption"))
+        st.session_state["api_base"] = st.text_input(t("sidebar_api_label"), st.session_state.get("api_base", DEFAULT_API_BASE), key="sidebar_api_base")
+        lang = st.selectbox(t("language"), ["中文", "English"], index=0 if st.session_state.get("ui_language", "zh") == "zh" else 1, key="sidebar_lang_selector")
+        st.session_state["ui_language"] = "zh" if lang == "中文" else "en"
         st.divider()
-        st.caption("Safety invariant: live automatic trading is not exposed in this demo.")
+        st.caption(t("safety_invariant"))
 
-    st.title("Quant Trading Agent")
-    st.caption("Integrated entry for market data, watchlist, factors, backtests, signals, human confirmation, configuration, and feedback.")
+    st.title(t("app_title"))
+    st.caption(t("app_subtitle"))
 
     tabs = st.tabs(
         [
-            "System",
-            "Live Data",
-            "Realtime Market",
-            "Watchlist",
-            "Factor Lab",
-            "Backtest",
-            "Signals",
-            "Human Confirmation",
-            "Configuration",
-            "Feedback",
+            t("tab_system"),
+            t("tab_live_data"),
+            t("tab_realtime_market"),
+            t("tab_watchlist"),
+            t("tab_factor_lab"),
+            t("tab_backtest"),
+            t("tab_signals"),
+            t("tab_human_confirmation"),
+            t("tab_configuration"),
+            t("tab_feedback"),
         ]
     )
 

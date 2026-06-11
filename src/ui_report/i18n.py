@@ -1,0 +1,380 @@
+"""轻量级中英文翻译字典。
+
+使用方式：
+    from src.ui_report.i18n import t
+    st.subheader(t("live_data"))
+"""
+from __future__ import annotations
+
+TEXT: dict[str, dict[str, str]] = {
+    "zh": {
+        # ── 页面标题 / 侧边栏 ──
+        "page_title": "量化交易 Agent 控制台",
+        "app_title": "量化交易 Agent",
+        "app_subtitle": "集成了行情、看板、因子、回测、信号、人工确认、配置与反馈",
+        "sidebar_title": "量化 Agent",
+        "sidebar_caption": "产品演示控制台",
+        "sidebar_api_label": "API 地址",
+        "safety_invariant": "安全不变量：本演示不暴露自动交易功能",
+        "language": "语言",
+
+        # ── Tab 名称 ──
+        "tab_system": "系统",
+        "tab_live_data": "实时数据",
+        "tab_realtime_market": "实时行情",
+        "tab_watchlist": "看板",
+        "tab_factor_lab": "因子实验室",
+        "tab_backtest": "回测",
+        "tab_signals": "信号",
+        "tab_human_confirmation": "人工确认",
+        "tab_configuration": "配置",
+        "tab_feedback": "反馈",
+
+        # ── System ──
+        "system": "系统",
+        "paper_account": "模拟账户",
+        "total_assets": "总资产",
+        "cash": "现金",
+        "market_value": "市值",
+        "daily_pnl": "当日盈亏",
+        "api": "API",
+        "data_provider": "数据源",
+        "risk": "风控",
+        "trading_mode": "交易模式",
+        "demo_fallback_explicit": "演示降级已标注",
+        "risk_veto": "风控拥有一票否决权",
+        "level_3_not_exposed": "LEVEL_3 未开放",
+
+        # ── Realtime Market ──
+        "realtime_market": "实时行情",
+        "realtime_market_caption": "从 AkShare 或 AkTools 获取实时快照。演示降级会清晰标注。",
+        "symbols": "股票代码",
+        "symbols_help": "逗号分隔的 A 股或港股代码",
+        "data_provider_select": "数据源",
+        "force_realtime_fetch": "强制实时拉取",
+        "allow_demo_fallback": "允许演示降级",
+        "refresh_quotes": "刷新行情",
+        "start_bg_snapshot": "启动后台快照",
+        "bg_snapshot_started": "后台快照已启动",
+        "bg_snapshot_failed": "后台快照启动失败",
+        "unable_fetch_quotes": "无法获取行情数据",
+        "showing_demo_data": "当前显示演示数据",
+        "showing_realtime_data": "来自 {provider} 的实时数据，更新于 {timestamp}",
+
+        # ── Watchlist ──
+        "watchlist": "看板",
+        "dashboard_unavailable": "看板数据不可用",
+        "level1_signal_only": "LEVEL_1 仅信号模式：看板提醒不能创建订单",
+        "risk_blocked": "风控阻断",
+
+        # ── Factor Lab ──
+        "factor_lab": "因子实验室",
+        "factor_lab_caption": "基于实时日线计算技术因子。无演示降级。",
+        "start_date": "开始日期",
+        "end_date": "结束日期",
+        "compute_live_factors": "计算实时因子",
+        "factor_compute_failed": "因子计算失败",
+        "factor_compute_partial": "因子计算部分完成",
+        "factor_compute_ok": "因子计算完成",
+        "failed_to_compute": "实时因子计算失败",
+
+        # ── Backtest ──
+        "backtest": "回测",
+        "backtest_caption": "基于实时日线的快速回测。无演示降级。",
+        "run_live_backtest": "运行实时回测",
+        "backtest_failed": "回测失败",
+        "backtest_insufficient_data": "数据不足（至少需要 20 个交易日）",
+        "backtest_completed": "回测完成",
+        "failed_to_run_backtest": "回测运行失败",
+        "total_return": "总收益",
+        "max_drawdown": "最大回撤",
+        "sharpe": "夏普比率",
+        "win_rate": "胜率",
+        "data_health": "数据健康",
+
+        # ── Signals ──
+        "signals": "信号",
+        "signal_unavailable": "信号数据不可用",
+        "signal": "信号",
+        "score": "评分",
+        "trigger": "触发价",
+        "stop": "止损",
+        "take_profit": "止盈",
+        "reason": "原因",
+        "risk_note": "风险提示",
+
+        # ── Human Confirmation ──
+        "human_confirmation": "人工确认",
+        "buy_orders_warning": "买入订单需要逐笔确认。禁止批量确认买入。",
+        "no_pending_orders": "没有待处理的订单",
+        "confirm_order": "确认此订单",
+        "reject": "拒绝",
+        "cancel": "取消",
+
+        # ── Configuration ──
+        "configuration": "配置",
+        "config_unavailable": "配置 API 不可用",
+        "save_safe_config": "保存安全配置",
+        "config_saved": "配置已保存",
+        "config_failed": "部分配置更新失败",
+        "restore_safe_defaults": "恢复安全默认",
+        "max_single_position": "单票最大仓位",
+        "max_sector_position": "板块最大仓位",
+        "min_cash_ratio": "最低现金比例",
+        "log_level": "日志级别",
+        "level3_blocked": "LEVEL_3_AUTO 在当前演示中已阻断",
+        "level2_warning": "LEVEL_2 需要逐笔确认，且保持 BROKER_ADAPTER=paper",
+
+        # ── Feedback ──
+        "feedback": "反馈",
+        "feedback_unavailable": "反馈 API 不可用",
+        "open_bugs": "未关闭 Bug",
+        "no_open_bugs": "没有未关闭的 Bug",
+        "workflow_status": "工作流状态",
+        "approve": "通过",
+        "approve_comment": "已通过控制台批准",
+        "approve_success": "Bug 修复已批准",
+        "approve_failed": "批准失败",
+        "reject_comment": "已通过控制台拒绝",
+        "reject_success": "Bug 修复已拒绝",
+        "reject_failed": "拒绝失败",
+        "mark_triaged": "标记为已分类",
+        "mark_fixed": "标记为已修复",
+        "ignore": "忽略",
+        "raw_bug_data": "原始 Bug 数据",
+        "analysis_report": "分析报告",
+        "fix_proposal": "修复方案",
+        "fix_result": "修复结果",
+
+        # ── Live Data ──
+        "live_data": "实时数据",
+        "live_data_caption": "仅真实数据。无演示降级。数据失败时信号将阻断。",
+        "provider_diagnosis": "数据源诊断",
+        "run_diagnosis": "运行诊断",
+        "diagnosis_failed": "诊断失败",
+        "provider_status": "数据源状态",
+        "realtime_quotes": "实时行情",
+        "realtime_quotes_title": "实时行情（真实）",
+        "fetch_live_quotes": "获取实时行情",
+        "realtime_failed_blocked": "实时行情失败，信号生成已阻断",
+        "realtime_partial": "实时行情部分可用",
+        "realtime_ok": "实时行情正常",
+        "signal_draft": "信号草稿（真实）",
+        "generate_signal_draft": "生成信号草稿",
+        "signal_blocked": "信号已阻断",
+        "signal_draft_info": "信号草稿",
+        "research_context": "研究上下文（真实）",
+        "build_research_context": "构建研究上下文",
+        "data_health_failed": "数据健康失败",
+        "data_health_warn": "数据健康警告",
+        "data_health_ok": "数据健康正常",
+        "failed_to_build": "构建研究上下文失败",
+
+        # ── 通用 ──
+        "ok": "正常",
+        "warn": "警告",
+        "failed": "失败",
+        "blocked": "已阻断",
+        "rejected": "已拒绝",
+        "unknown": "未知",
+        "status": "状态",
+        "provider": "数据源",
+        "updated_at": "更新时间",
+        "latency_ms": "延迟(ms)",
+    },
+    "en": {
+        # ── Page / Sidebar ──
+        "page_title": "QuantAgent Product Demo",
+        "app_title": "Quant Trading Agent",
+        "app_subtitle": "Integrated entry for market data, watchlist, factors, backtests, signals, human confirmation, configuration, and feedback",
+        "sidebar_title": "QuantAgent",
+        "sidebar_caption": "Product demo cockpit",
+        "sidebar_api_label": "API base URL",
+        "safety_invariant": "Safety invariant: live automatic trading is not exposed in this demo.",
+        "language": "Language",
+
+        # ── Tab names ──
+        "tab_system": "System",
+        "tab_live_data": "Live Data",
+        "tab_realtime_market": "Realtime Market",
+        "tab_watchlist": "Watchlist",
+        "tab_factor_lab": "Factor Lab",
+        "tab_backtest": "Backtest",
+        "tab_signals": "Signals",
+        "tab_human_confirmation": "Human Confirmation",
+        "tab_configuration": "Configuration",
+        "tab_feedback": "Feedback",
+
+        # ── System ──
+        "system": "System",
+        "paper_account": "Paper Account",
+        "total_assets": "Total assets",
+        "cash": "Cash",
+        "market_value": "Market value",
+        "daily_pnl": "Daily PnL",
+        "api": "API",
+        "data_provider": "Data provider",
+        "risk": "Risk",
+        "trading_mode": "Trading mode",
+        "demo_fallback_explicit": "demo fallback is explicit",
+        "risk_veto": "Risk Agent keeps veto power",
+        "level_3_not_exposed": "LEVEL_3 is not exposed",
+
+        # ── Realtime Market ──
+        "realtime_market": "Realtime Market",
+        "realtime_market_caption": "Fetch live snapshots from AkShare or AkTools. Demo fallback is clearly labeled.",
+        "symbols": "Symbols",
+        "symbols_help": "Comma-separated A-share or HK symbols.",
+        "data_provider_select": "Data provider",
+        "force_realtime_fetch": "Force realtime fetch",
+        "allow_demo_fallback": "Allow demo fallback",
+        "refresh_quotes": "Refresh quotes",
+        "start_bg_snapshot": "Start background snapshot",
+        "bg_snapshot_started": "Background snapshot started",
+        "bg_snapshot_failed": "Background snapshot failed to start",
+        "unable_fetch_quotes": "Unable to fetch quote data.",
+        "showing_demo_data": "Showing demo data",
+        "showing_realtime_data": "Showing realtime data from {provider}. Updated at {timestamp}.",
+
+        # ── Watchlist ──
+        "watchlist": "Watchlist",
+        "dashboard_unavailable": "Dashboard data is unavailable.",
+        "level1_signal_only": "LEVEL_1 signal-only mode: watchlist alerts cannot create orders.",
+        "risk_blocked": "Risk blocked",
+
+        # ── Factor Lab ──
+        "factor_lab": "Factor Lab",
+        "factor_lab_caption": "Technical factors computed from live daily bars. No demo fallback.",
+        "start_date": "Start date",
+        "end_date": "End date",
+        "compute_live_factors": "Compute live factors",
+        "factor_compute_failed": "Factor computation failed.",
+        "factor_compute_partial": "Factor computation partial.",
+        "factor_compute_ok": "Factors computed.",
+        "failed_to_compute": "Failed to compute live factors.",
+
+        # ── Backtest ──
+        "backtest": "Backtest",
+        "backtest_caption": "Quick backtest on live daily bars. No demo fallback.",
+        "run_live_backtest": "Run live backtest",
+        "backtest_failed": "Backtest failed.",
+        "backtest_insufficient_data": "Insufficient data for backtest (need at least 20 trading days).",
+        "backtest_completed": "Backtest completed.",
+        "failed_to_run_backtest": "Failed to run live backtest.",
+        "total_return": "Total return",
+        "max_drawdown": "Max drawdown",
+        "sharpe": "Sharpe",
+        "win_rate": "Win rate",
+        "data_health": "Data Health",
+
+        # ── Signals ──
+        "signals": "Signals",
+        "signal_unavailable": "Signal data is unavailable.",
+        "signal": "Signal",
+        "score": "Score",
+        "trigger": "Trigger",
+        "stop": "Stop",
+        "take_profit": "Take profit",
+        "reason": "Reason",
+        "risk_note": "Risk note",
+
+        # ── Human Confirmation ──
+        "human_confirmation": "Human Confirmation",
+        "buy_orders_warning": "Buy orders require per-order confirmation. Batch buy confirmation is forbidden.",
+        "no_pending_orders": "No pending orders.",
+        "confirm_order": "Confirm this order",
+        "reject": "Reject",
+        "cancel": "Cancel",
+
+        # ── Configuration ──
+        "configuration": "Configuration",
+        "config_unavailable": "Configuration API is unavailable.",
+        "save_safe_config": "Save safe configuration",
+        "config_saved": "Configuration saved.",
+        "config_failed": "Some configuration updates failed.",
+        "restore_safe_defaults": "Restore safe defaults",
+        "max_single_position": "Max single stock position",
+        "max_sector_position": "Max sector position",
+        "min_cash_ratio": "Minimum cash ratio",
+        "log_level": "Log level",
+        "level3_blocked": "LEVEL_3_AUTO is blocked in Demo V1.",
+        "level2_warning": "LEVEL_2 requires explicit confirmation and keeps BROKER_ADAPTER=paper.",
+
+        # ── Feedback ──
+        "feedback": "Feedback",
+        "feedback_unavailable": "Feedback API is unavailable.",
+        "open_bugs": "Open bugs",
+        "no_open_bugs": "No open bug reports.",
+        "workflow_status": "Workflow Status",
+        "approve": "Approve",
+        "approve_comment": "Approved via dashboard",
+        "approve_success": "Bug fix approved!",
+        "approve_failed": "Failed to approve bug fix.",
+        "reject_comment": "Rejected via dashboard",
+        "reject_success": "Bug fix rejected.",
+        "reject_failed": "Failed to reject bug fix.",
+        "mark_triaged": "Mark triaged",
+        "mark_fixed": "Mark fixed",
+        "ignore": "Ignore",
+        "raw_bug_data": "Raw Bug Data",
+        "analysis_report": "Analysis Report",
+        "fix_proposal": "Fix Proposal",
+        "fix_result": "Fix Result",
+
+        # ── Live Data ──
+        "live_data": "Live Data",
+        "live_data_caption": "Real data only. No demo fallback. Data failure = blocked signal.",
+        "provider_diagnosis": "Provider Diagnosis",
+        "run_diagnosis": "Run Diagnosis",
+        "diagnosis_failed": "Diagnosis failed.",
+        "provider_status": "Provider Status",
+        "realtime_quotes": "Realtime Quotes",
+        "realtime_quotes_title": "Realtime Quotes (Live)",
+        "fetch_live_quotes": "Fetch Live Quotes",
+        "realtime_failed_blocked": "Realtime data FAILED. Signal generation is BLOCKED.",
+        "realtime_partial": "Realtime data partial.",
+        "realtime_ok": "Realtime data OK.",
+        "signal_draft": "Signal Draft (Live)",
+        "generate_signal_draft": "Generate Signal Draft",
+        "signal_blocked": "Signal BLOCKED.",
+        "signal_draft_info": "Signal draft",
+        "research_context": "Research Context (Live)",
+        "build_research_context": "Build Research Context",
+        "data_health_failed": "Data health FAILED.",
+        "data_health_warn": "Data health WARN.",
+        "data_health_ok": "Data health OK.",
+        "failed_to_build": "Failed to build research context.",
+
+        # ── Common ──
+        "ok": "OK",
+        "warn": "WARN",
+        "failed": "FAILED",
+        "blocked": "BLOCKED",
+        "rejected": "REJECTED",
+        "unknown": "UNKNOWN",
+        "status": "Status",
+        "provider": "Provider",
+        "updated_at": "Updated",
+        "latency_ms": "Latency ms",
+    },
+}
+
+
+def t(key: str, lang: str | None = None) -> str:
+    """返回当前语言的翻译文本。
+
+    Args:
+        key: 翻译键名。
+        lang: 语言代码 "zh" 或 "en"。为 None 时尝试从 session_state 获取，
+              否则返回 "zh"。
+
+    Returns:
+        翻译后的文本。如果键不存在，返回键名本身。
+    """
+    if lang is None:
+        try:
+            import streamlit as st
+            lang = st.session_state.get("ui_language", "zh")
+        except Exception:
+            lang = "zh"
+    return TEXT.get(lang, TEXT["zh"]).get(key, key)
