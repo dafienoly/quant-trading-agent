@@ -176,6 +176,12 @@ TEXT: dict[str, dict[str, str]] = {
         "data_health_ok": "数据健康正常",
         "failed_to_build": "构建研究上下文失败",
 
+        # ── AI Agent ──
+        "ai_factor_discovery": "AI 因子挖掘",
+        "ai_research_ranking": "AI 研究排序",
+        "ai_signal_explanation": "AI 信号解释",
+        "ai_research_disclaimer": "AI 输出仅用于研究和解释，不是买卖指令。",
+
         # ── 通用 ──
         "ok": "正常",
         "warn": "警告",
@@ -356,6 +362,12 @@ TEXT: dict[str, dict[str, str]] = {
         "data_health_warn": "Data health WARN.",
         "data_health_ok": "Data health OK.",
         "failed_to_build": "Failed to build research context.",
+
+        # ── AI Agent ──
+        "ai_factor_discovery": "AI Factor Discovery",
+        "ai_research_ranking": "AI Research Ranking",
+        "ai_signal_explanation": "AI Signal Explanation",
+        "ai_research_disclaimer": "AI output is research/explanation only. It is not a trading instruction.",
 
         # ── Common ──
         "ok": "OK",

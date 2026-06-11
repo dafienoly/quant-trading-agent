@@ -727,3 +727,77 @@ def get_theme_evidence(
     service = _get_theme_evidence_service()
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     return service.get_theme_evidence(symbol_list, theme_tag=theme_tag)
+
+
+# ============================================================
+# AI Research Agents API (F-008 / F-009 / F-010)
+# ============================================================
+
+def _get_model_router():
+    from src.llm.model_router import ModelRouter
+    return ModelRouter()
+
+
+@router.post("/ai/factors/discover")
+def ai_factor_discover(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    theme_pool: str = Query("", description="Optional theme pool ID"),
+) -> dict[str, Any]:
+    """AI 因子假设挖掘——LLM 输出结构化研究假设，不输出交易决策"""
+    from src.agent_orchestrator.factor_discovery_agent import FactorDiscoveryAgent
+
+    router = _get_model_router()
+    config = router.get_config()
+    if not config.api_key_present:
+        return {"status": "unavailable", "reason": "missing_api_key"}
+    agent = FactorDiscoveryAgent(router=router)
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    result = agent.discover(symbol_list, context={"theme_pool": theme_pool})
+    if isinstance(result, dict) and result.get("status") != "unavailable":
+        result["disclaimer"] = "AI output is research/explanation only. It is not a trading instruction."
+    return result
+
+
+@router.post("/ai/recommendations/research")
+def ai_recommendations(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    start_date: str = Query("20250101", description="Start date"),
+    end_date: str = Query("20251231", description="End date"),
+) -> dict[str, Any]:
+    """AI 研究推荐——对已有数据和因子排序，不输出买卖指令"""
+    from src.agent_orchestrator.recommendation_agent import RecommendationAgent
+
+    router = _get_model_router()
+    config = router.get_config()
+    if not config.api_key_present:
+        return {"status": "unavailable", "reason": "missing_api_key"}
+    agent = RecommendationAgent(router=router)
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    result = agent.recommend(symbol_list, context={"start_date": start_date, "end_date": end_date})
+    if isinstance(result, dict):
+        result["disclaimer"] = "Research ranking only. Not a trading instruction."
+    return result
+
+
+@router.post("/ai/signals/{signal_id}/explain")
+def ai_signal_explain(
+    signal_id: str,
+    symbols: str = Query("", description="Comma-separated symbols"),
+) -> dict[str, Any]:
+    """AI 信号解释——解释已有信号草稿，不改变信号类型"""
+    from src.agent_orchestrator.signal_explanation_agent import SignalExplanationAgent
+
+    router = _get_model_router()
+    config = router.get_config()
+    if not config.api_key_present:
+        return {"status": "unavailable", "reason": "missing_api_key"}
+
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    signal_draft = {"signal_id": signal_id, "signal_type": "hold"}
+    context = {"symbols": symbol_list}
+
+    agent = SignalExplanationAgent(router=router)
+    result = agent.explain(signal_draft, context=context)
+    if isinstance(result, dict) and result.get("status") != "unavailable":
+        result["disclaimer"] = "AI output is research/explanation only. It is not a trading instruction."
+    return result
