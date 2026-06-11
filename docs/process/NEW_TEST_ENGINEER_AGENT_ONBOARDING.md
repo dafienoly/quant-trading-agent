@@ -125,23 +125,19 @@ git diff --check
 - S3：非核心体验问题、文案错误、低风险边界问题。可记录后放行。
 - S4：建议项、重构项、性能优化项。不阻断。
 
-当前最重要的产品化测试方向：
-- 实盘数据必须真实跑通，不能把 demo fallback 当作验收通过。
-- 前端必须能支撑用户完成实时行情获取、盯盘、因子计算、回测和信号草稿生成。
-- 数据源失败时必须阻断信号和交易路径，并生成 feedback bug。
-- 测试报告必须能让 Architect Reviewer 和 PM Acceptance Agent 直接复核。
+当前长期产品化测试方向：
+- 用户主流程必须可演示、可使用、可验收。
+- 真实数据、demo 数据、mock 数据和 paper trading 必须明确区分。
+- 数据异常、风控失败、执行异常和外部依赖失败必须覆盖 fail-closed 路径。
+- 测试报告必须让 Architect Reviewer 和 PM Acceptance Agent 能直接复核。
 
-如果你接到的是 A-share live-data closed-loop acceptance fix 测试任务，请优先阅读：
-- `docs/acceptance/2026-06-11-a-share-live-data-closed-loop-acceptance.md`
-- `docs/design/2026-06-11-a-share-live-data-closed-loop-acceptance-fix-architecture.md`
-- 对应的 `docs/dev_reports/2026-06-11-a-share-live-data-closed-loop-acceptance-fix-report.md`
+如果你接到具体阶段或具体功能测试任务，请优先阅读本次任务对应的：
+- `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
+- `docs/design/YYYY-MM-DD-<feature>-architecture.md`
+- `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md`
+- 如果是复测或验收整改，再读对应的 `docs/acceptance/`、`docs/review/`、历史 `docs/test_reports/` 和 `feedback/bugs/`
 
-这轮任务的关键测试目标是：
-1. `ai_semiconductor` 主题股票池存在，包含 100-300 个 A股主板标的。
-2. `ai_chip` 和 `optical_module` 标签存在且能筛出非空股票列表。
-3. 实盘行情 smoke 脚本能证明至少 10 个主板标的返回非 demo 实时行情。
-4. provider、fallback_chain、latency、updated_at、data_health 被记录。
-5. 数据源失败时系统 fail-closed，信号生成被阻断，并生成 feedback bug。
+本阶段的特殊验收目标、特定脚本、特定数据文件、特定接口 smoke 要求，必须以当前架构设计文档为准，不要写入或依赖本通用提示词。
 
 完成测试前，不要说“测试通过”。只有当命令、证据、缺陷、风险和最终结论都写入测试报告，才可以交付给 Architect Reviewer 或 PM Acceptance Agent。
 ```
@@ -164,9 +160,11 @@ Use this map when the new test engineer asks "what should I read first?"
 Historical reports should be read only when they are directly related to the
 assigned test cycle, regression, or bug fix.
 
+Stage-specific instructions must stay in the current architecture document under
+`docs/design/`, not in this onboarding prompt.
+
 ## Testing Mindset
 
 The Test Engineer Agent protects the handoff quality. A test report is complete
 only when another Agent can reproduce the result, understand what was not tested,
 and decide whether the feature can safely move forward.
-

@@ -78,20 +78,18 @@ git diff --check
 - 是否涉及真实交易能力。
 - 是否确认未绕过 Risk Agent、股票池过滤器、人工确认和数据异常 fail-closed。
 
-当前最重要的产品化方向：
-- 实盘数据必须真实跑通，不能依赖 demo fallback。
-- 用户需要能通过前端完成实时行情获取、盯盘、因子计算、回测和信号草稿生成。
-- 系统遇到错误要自动生成 feedback bug，方便后续开发持续修复。
-- 任何 live 数据失败时，交易信号必须阻断，而不是悄悄降级成虚假的成功。
+当前长期产品化方向：
+- 功能必须从用户视角可演示、可使用、可验收。
+- 真实数据、demo 数据、mock 数据和 paper trading 必须明确区分。
+- 系统遇到错误时，应按需求和架构要求生成可追踪 feedback。
+- 任何数据异常、风控失败或执行异常，都不能被包装成虚假的成功。
 
-如果你接到的是 A-share live-data closed-loop acceptance fix 任务，请优先阅读：
-- `docs/acceptance/2026-06-11-a-share-live-data-closed-loop-acceptance.md`
-- `docs/design/2026-06-11-a-share-live-data-closed-loop-acceptance-fix-architecture.md`
+如果你接到具体阶段或具体功能任务，请优先阅读本次任务对应的：
+- `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
+- `docs/design/YYYY-MM-DD-<feature>-architecture.md`
+- 如果是修复或复测，再读对应的 `docs/acceptance/`、`docs/review/`、`docs/test_reports/`、`docs/dev_reports/`
 
-这轮任务的关键验收目标是：
-1. 补齐 `ai_semiconductor` 主题股票池，100-300 个 A股主板标的，包含 `ai_chip` 和 `optical_module` 标签。
-2. 建立可重复执行的实盘行情 smoke 脚本，证明至少 10 个主板标的能返回非 demo 实时行情。
-3. 继续保持数据源失败时 fail-closed，信号生成被阻断，并生成 feedback bug。
+本阶段的特殊验收目标、特定脚本、特定数据文件、特定接口 smoke 要求，必须以当前架构设计文档为准，不要写入或依赖本通用提示词。
 
 完成任务前，不要说“已完成”。只有当代码、测试、报告、风险说明都齐全，并且自测命令有明确结果时，才可以交付给 Test Engineer Agent。
 ```
@@ -114,9 +112,11 @@ Use this map when the new engineer asks "what should I read first?"
 Historical audit, review, dev, and test reports should be read only when they are
 directly related to the assigned feature or bug fix.
 
+Stage-specific instructions must stay in the current architecture document under
+`docs/design/`, not in this onboarding prompt.
+
 ## Delivery Reminder
 
 A Developer Agent's output is incomplete unless it includes both code and a
 development report. The report is not paperwork; it is the handoff contract for
 the Test Engineer, Architect Reviewer, and PM Acceptance Agent.
-
