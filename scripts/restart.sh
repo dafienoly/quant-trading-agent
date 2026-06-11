@@ -2,7 +2,7 @@
 # ============================================================
 # 量化交易系统 - 一键重启 (Linux/macOS)
 # 先停止所有服务，再重新启动
-# 用法: bash scripts/restart.sh [--api-port 8000] [--streamlit-port 8501]
+# 用法: bash scripts/restart.sh [--api-port 8000] [--aktools-port 8080] [--streamlit-port 8771] [--with-aktools] [--with-bugfix] [--force]
 # ============================================================
 
 set -e

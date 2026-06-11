@@ -125,8 +125,8 @@ def main() -> None:
         # Even if PID file is corrupt, we already cleaned zombies
         sys.exit(1)
 
-    pid_keys = ["api_pid", "streamlit_pid"]
-    names = {"api_pid": "FastAPI", "streamlit_pid": "Streamlit"}
+    pid_keys = ["aktools_pid", "api_pid", "streamlit_pid"]
+    names = {"aktools_pid": "AkTools", "api_pid": "FastAPI", "streamlit_pid": "Streamlit"}
 
     all_ok = True
     for key in pid_keys:

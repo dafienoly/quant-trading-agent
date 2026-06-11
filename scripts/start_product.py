@@ -25,7 +25,8 @@ STARTUP_LOG = PROJECT_ROOT / "logs" / "product_startup.log"
 LIVE_TRADING_CONFIRM = PROJECT_ROOT / "runtime" / "live_trading_confirmed"
 
 DEFAULT_API_PORT = 8000
-DEFAULT_STREAMLIT_PORT = 8501
+DEFAULT_STREAMLIT_PORT = 8771
+DEFAULT_AKTOOLS_PORT = 8080
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +40,59 @@ def _log(msg: str) -> None:
     STARTUP_LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(STARTUP_LOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Platform helpers
+# ---------------------------------------------------------------------------
+
+def _popen_kwargs() -> dict:
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _build_service_commands(
+    *,
+    python_executable: str,
+    api_port: int,
+    aktools_port: int,
+    streamlit_port: int,
+) -> dict[str, list[str]]:
+    dashboard_path = "src/ui_report/product_dashboard.py"
+    return {
+        "aktools": [
+            python_executable,
+            "-m",
+            "uvicorn",
+            "src.integrations.aktools_compat_app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(aktools_port),
+        ],
+        "api": [
+            python_executable,
+            "-m",
+            "uvicorn",
+            "src.api.app:app",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(api_port),
+        ],
+        "streamlit": [
+            python_executable,
+            "-m",
+            "streamlit",
+            "run",
+            dashboard_path,
+            "--server.port",
+            str(streamlit_port),
+            "--server.headless",
+            "true",
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +224,41 @@ def _port_conflict_dedup_ok(port: int, service: str) -> bool:
     return True
 
 
+def _wait_http_ok(url: str, timeout_seconds: int = 30) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            import urllib.request
+            response = urllib.request.urlopen(url, timeout=2)
+            if response.status < 500:
+                return True
+        except Exception:
+            time.sleep(1)
+    return False
+
+
+def _start_bugfix_job(api_port: int) -> dict:
+    if not os.environ.get("DEEPSEEK_API_KEY", "").strip():
+        _log("WARNING: 缺少 DEEPSEEK_API_KEY，不启动 BugFix Agent")
+        return {"status": "skipped", "reason": "missing_DEEPSEEK_API_KEY"}
+    api_url = f"http://127.0.0.1:{api_port}"
+    _log("等待 API 就绪...")
+    if not _wait_http_ok(f"{api_url}/product/health", timeout_seconds=30):
+        _log("WARNING: API 未在 30s 内就绪，跳过 BugFix Agent 启动")
+        return {"status": "skipped", "reason": "api_not_ready"}
+    try:
+        import json
+        import urllib.request
+        req = urllib.request.Request(f"{api_url}/product/jobs/bug_fix_agent/start", method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        _log(f"BugFix Agent job: {result}")
+        return result
+    except Exception as exc:
+        _log(f"WARNING: 启动 BugFix Agent job 失败: {exc}")
+        return {"status": "failed", "reason": str(exc)}
+
+
 def _write_port_conflict_bug(port: int, service: str) -> None:
     """Write a feedback bug record for port conflict (deduped per hour)."""
     if not _port_conflict_dedup_ok(port, service):
@@ -237,7 +326,7 @@ def _start_process(cmd: list[str], name: str) -> subprocess.Popen | None:
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,  # Windows
+            **_popen_kwargs(),
         )
         _log(f"{name} 已启动, PID={proc.pid}")
         return proc
@@ -254,12 +343,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="量化交易系统一键启动")
     parser.add_argument("--api-port", type=int, default=DEFAULT_API_PORT, help="FastAPI 端口")
     parser.add_argument("--streamlit-port", type=int, default=DEFAULT_STREAMLIT_PORT, help="Streamlit 端口")
+    parser.add_argument("--aktools-port", type=int, default=DEFAULT_AKTOOLS_PORT, help="AkTools 端口")
+    parser.add_argument("--with-aktools", action="store_true", help="启动 AkTools 兼容服务")
+    parser.add_argument("--with-bugfix", action="store_true", help="启动 BugFix Agent job")
     parser.add_argument("--force", action="store_true", help="强制终止占用端口的旧进程后启动")
     parser.add_argument("--dry-run", action="store_true", help="仅打印计划，不实际启动")
     args = parser.parse_args()
 
     api_port = args.api_port
     streamlit_port = args.streamlit_port
+    aktools_port = args.aktools_port
 
     _log("=" * 60)
     _log("量化交易系统 - 产品启动")
@@ -303,6 +396,15 @@ def main() -> None:
             _write_port_conflict_bug(streamlit_port, "Streamlit")
             port_issues = True
 
+    if args.with_aktools and _port_in_use(aktools_port):
+        _log(f"检测到端口 {aktools_port} 已被占用 (AkTools)")
+        if _resolve_port_conflict(aktools_port, "AkTools", force):
+            _log(f"端口 {aktools_port} 已释放")
+            time.sleep(0.5)
+        else:
+            _write_port_conflict_bug(aktools_port, "AkTools")
+            port_issues = True
+
     if port_issues:
         _log("请释放占用端口或使用 --api-port / --streamlit-port 指定其他端口")
         sys.exit(1)
@@ -318,21 +420,19 @@ def main() -> None:
         return
 
     # --- Step 5: Start services ---
-    api_cmd = [
-        sys.executable, "-m", "uvicorn",
-        "src.api.app:app",
-        "--host", "0.0.0.0",
-        "--port", str(api_port),
-    ]
-    streamlit_cmd = [
-        sys.executable, "-m", "streamlit", "run",
-        str(PROJECT_ROOT / "src" / "ui_report" / "product_dashboard.py"),
-        "--server.port", str(streamlit_port),
-        "--server.headless", "true",
-    ]
+    cmds = _build_service_commands(
+        python_executable=sys.executable,
+        api_port=api_port,
+        aktools_port=aktools_port,
+        streamlit_port=streamlit_port,
+    )
 
-    api_proc = _start_process(api_cmd, "FastAPI")
-    streamlit_proc = _start_process(streamlit_cmd, "Streamlit")
+    aktools_proc = None
+    if args.with_aktools:
+        aktools_proc = _start_process(cmds["aktools"], "AkTools")
+
+    api_proc = _start_process(cmds["api"], "FastAPI")
+    streamlit_proc = _start_process(cmds["streamlit"], "Streamlit")
 
     if api_proc is None or streamlit_proc is None:
         # Clean up any started process
@@ -348,10 +448,13 @@ def main() -> None:
 
     # --- Step 6: Write PID file ---
     pid_data = {
+        "aktools_pid": aktools_proc.pid if aktools_proc else None,
         "api_pid": api_proc.pid,
         "streamlit_pid": streamlit_proc.pid,
+        "aktools_port": aktools_port if args.with_aktools else None,
         "api_port": api_port,
         "streamlit_port": streamlit_port,
+        "bug_fix_agent_requested": args.with_bugfix,
         "started_at": datetime.now().isoformat(),
     }
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -361,6 +464,10 @@ def main() -> None:
     # --- Step 7: Brief health wait ---
     _log("等待服务就绪...")
     time.sleep(3)
+
+    # --- Step 8: Start BugFix Agent job (if requested) ---
+    if args.with_bugfix:
+        _start_bugfix_job(api_port)
 
     # --- Done ---
     _log("=" * 60)
