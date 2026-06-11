@@ -635,13 +635,15 @@ def get_runtime_services() -> dict[str, Any]:
 
     manager = get_service_manager()
     jobs = manager.list_jobs()
+    # jobs can be a list (list_jobs return format) or a dict (legacy format)
+    jobs_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
     return {
         "status": "ok",
         "services": {
             "api": {"status": "running", "url": "/product/health"},
             "bug_fix_agent": {
                 "status": next(
-                    (j.get("state") for j in jobs.get("jobs", []) if j.get("name") == "bug_fix_agent"),
+                    (j.get("state") for j in jobs_list if j.get("name") == "bug_fix_agent"),
                     "not_started",
                 ),
             },

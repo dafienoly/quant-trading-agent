@@ -463,7 +463,7 @@ def main() -> None:
 
     # --- Step 7: Brief health wait ---
     _log("等待服务就绪...")
-    time.sleep(3)
+    time.sleep(12)
 
     # --- Step 8: Start BugFix Agent job (if requested) ---
     if args.with_bugfix:

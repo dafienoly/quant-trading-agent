@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 
 from scripts import start_product

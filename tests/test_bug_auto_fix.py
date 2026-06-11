@@ -1149,7 +1149,7 @@ class TestBugFixProposalValidation:
 
     def test_bugfix_blocks_restricted_modules(self, tmp_path, monkeypatch):
         """src/risk_engine/ 下的文件 → blocked"""
-        from src.product_app.bug_fix_workflow import BugFixWorkflow, _PROJECT_ROOT
+        from src.product_app.bug_fix_workflow import BugFixWorkflow
 
         monkeypatch.setattr("src.product_app.bug_fix_workflow._PROJECT_ROOT", tmp_path)
         restricted = tmp_path / "src" / "risk_engine" / "runtime.py"
@@ -1174,7 +1174,7 @@ class TestBugFixProposalValidation:
 
     def test_bugfix_allows_valid_modify(self, tmp_path, monkeypatch):
         """合法的 modify 通过验证"""
-        from src.product_app.bug_fix_workflow import BugFixWorkflow, _PROJECT_ROOT
+        from src.product_app.bug_fix_workflow import BugFixWorkflow
 
         monkeypatch.setattr("src.product_app.bug_fix_workflow._PROJECT_ROOT", tmp_path)
         target = tmp_path / "src" / "some_module" / "code.py"

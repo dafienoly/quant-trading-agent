@@ -12,7 +12,6 @@ import argparse
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 
 def classify_bug(bug: dict) -> str:
@@ -76,7 +75,7 @@ def _write_reports(summary: dict, output_dir: Path, ts: str) -> None:
     md_path = output_dir / f"feedback-bug-summary-{ts}.md"
     md_path.write_text("\n".join(md_lines), encoding="utf-8")
 
-    print(f"Summary written to:")
+    print("Summary written to:")
     print(f"  {json_path}")
     print(f"  {md_path}")
 
