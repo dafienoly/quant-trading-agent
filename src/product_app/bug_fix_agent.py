@@ -57,9 +57,12 @@ class BugFixAgent:
     """
 
     def __init__(self) -> None:
-        self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.api_base = os.environ.get("DEEPSEEK_API_BASE", "https://api.deepseek.com")
-        self.model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+        from src.llm.model_router import ModelRouter
+
+        config = ModelRouter().get_config()
+        self.api_key = os.environ.get(config.api_key_env, "")
+        self.api_base = config.api_base
+        self.model = config.model
         self.project_root = _PROJECT_ROOT
 
     # ----------------------------------------------------------
