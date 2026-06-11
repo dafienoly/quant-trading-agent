@@ -15,6 +15,14 @@ from loguru import logger
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _ANALYSIS_DIR = _PROJECT_ROOT / "feedback" / "bugs" / "analysis"
 
+_ALLOWED_ADD_PREFIXES = ("src/", "tests/", "scripts/", "docs/")
+_FORBIDDEN_PREFIXES = (".venv/", "runtime/", "logs/", "data/raw/", "feedback/bugs/fixed/")
+_RESTRICTED_PREFIXES = ("src/risk_engine/", "src/execution_engine/", "src/trading_log/")
+
+
+def _normalize_repo_path(path: str) -> str:
+    return path.replace(chr(92), "/").lstrip("/")
+
 # Bug 报告所在的状态目录
 _BUG_DIRS = [
     _PROJECT_ROOT / "feedback" / "bugs" / "open",
@@ -137,6 +145,18 @@ class BugFixWorkflow:
         self._update_bug_report(bug_id, fix_proposal=proposal)
         self._save_analysis_file(bug_id, "proposal", proposal)
 
+        # 校验提案路径
+        validation = self.validate_proposal(proposal)
+        if not validation["is_valid"]:
+            self._update_bug_report(bug_id, proposal_validation=validation)
+            self._transition(bug_id, "blocked")
+            logger.warning(f"Bug {bug_id} proposal validation failed: {validation['messages']}")
+            return {
+                "status": "blocked",
+                "bug_id": bug_id,
+                "proposal_validation": validation,
+            }
+
         # 转换到 proposed
         self._transition(bug_id, "proposed")
 
@@ -145,6 +165,48 @@ class BugFixWorkflow:
             "bug_id": bug_id,
             "analysis": analysis,
             "proposal": proposal,
+        }
+
+    def validate_proposal(self, proposal: dict) -> dict:
+        invalid_files: list[str] = []
+        blocked_files: list[str] = []
+        messages: list[str] = []
+        project_root = _PROJECT_ROOT.resolve()
+
+        for change in proposal.get("code_changes", []):
+            file_path = _normalize_repo_path(str(change.get("file_path", "")))
+            change_type = str(change.get("change_type", "modify")).lower()
+            if not file_path:
+                invalid_files.append(file_path)
+                messages.append("empty file_path")
+                continue
+            if file_path.startswith(_FORBIDDEN_PREFIXES):
+                blocked_files.append(file_path)
+                messages.append(f"forbidden path: {file_path}")
+                continue
+            if file_path.startswith(_RESTRICTED_PREFIXES):
+                blocked_files.append(file_path)
+                messages.append(f"restricted module: {file_path}")
+                continue
+
+            full_path = (project_root / file_path).resolve()
+            if not full_path.is_relative_to(project_root):
+                blocked_files.append(file_path)
+                messages.append(f"path escapes project root: {file_path}")
+                continue
+            if change_type in {"modify", "delete"} and not full_path.exists():
+                invalid_files.append(file_path)
+                messages.append(f"target file does not exist: {file_path}")
+                continue
+            if change_type == "add" and not file_path.startswith(_ALLOWED_ADD_PREFIXES):
+                blocked_files.append(file_path)
+                messages.append(f"add path not allowed: {file_path}")
+
+        return {
+            "is_valid": not invalid_files and not blocked_files,
+            "invalid_files": invalid_files,
+            "blocked_files": blocked_files,
+            "messages": messages,
         }
 
     def approve_fix(self, bug_id: str, comment: str = "") -> dict:

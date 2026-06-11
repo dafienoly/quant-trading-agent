@@ -1118,3 +1118,82 @@ class TestServiceManagerBugFixAgent:
         assert "DEEPSEEK_API_KEY" in result["message"]
         assert status["state"] == JobState.FAILED.value
         assert "DEEPSEEK_API_KEY" in status["error_message"]
+
+
+# ============================================================
+# Proposal Validation Tests
+# ============================================================
+
+class TestBugFixProposalValidation:
+    """BugFix 提案校验 —— 验证 path 合法性、受限模块阻断"""
+
+    def test_bugfix_blocks_modify_for_missing_file(self):
+        """modify 不存在的文件 → is_valid=False"""
+        from src.product_app.bug_fix_workflow import BugFixWorkflow
+
+        workflow = BugFixWorkflow()
+        proposal = {
+            "code_changes": [
+                {
+                    "file_path": "src/dashboard/routes.py",
+                    "change_type": "modify",
+                    "diff": "-old\n+new",
+                }
+            ]
+        }
+
+        result = workflow.validate_proposal(proposal)
+
+        assert result["is_valid"] is False
+        assert "src/dashboard/routes.py" in result["invalid_files"]
+
+    def test_bugfix_blocks_restricted_modules(self, tmp_path, monkeypatch):
+        """src/risk_engine/ 下的文件 → blocked"""
+        from src.product_app.bug_fix_workflow import BugFixWorkflow, _PROJECT_ROOT
+
+        monkeypatch.setattr("src.product_app.bug_fix_workflow._PROJECT_ROOT", tmp_path)
+        restricted = tmp_path / "src" / "risk_engine" / "runtime.py"
+        restricted.parent.mkdir(parents=True)
+        restricted.write_text("x = 1\n", encoding="utf-8")
+
+        workflow = BugFixWorkflow()
+        proposal = {
+            "code_changes": [
+                {
+                    "file_path": "src/risk_engine/runtime.py",
+                    "change_type": "modify",
+                    "diff": "-x = 1\n+x = 2",
+                }
+            ]
+        }
+
+        result = workflow.validate_proposal(proposal)
+
+        assert result["is_valid"] is False
+        assert "src/risk_engine/runtime.py" in result["blocked_files"]
+
+    def test_bugfix_allows_valid_modify(self, tmp_path, monkeypatch):
+        """合法的 modify 通过验证"""
+        from src.product_app.bug_fix_workflow import BugFixWorkflow, _PROJECT_ROOT
+
+        monkeypatch.setattr("src.product_app.bug_fix_workflow._PROJECT_ROOT", tmp_path)
+        target = tmp_path / "src" / "some_module" / "code.py"
+        target.parent.mkdir(parents=True)
+        target.write_text("x = 1\n", encoding="utf-8")
+
+        workflow = BugFixWorkflow()
+        proposal = {
+            "code_changes": [
+                {
+                    "file_path": "src/some_module/code.py",
+                    "change_type": "modify",
+                    "diff": "-x = 1\n+x = 2",
+                }
+            ]
+        }
+
+        result = workflow.validate_proposal(proposal)
+
+        assert result["is_valid"] is True
+        assert result["invalid_files"] == []
+        assert result["blocked_files"] == []
