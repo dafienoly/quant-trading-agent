@@ -428,3 +428,69 @@ class TestSignalAPI:
 
             response = client.get("/product/signal/SIG_20250610_001")
             assert response.status_code == 200
+
+    def test_level3_auto_rejected_by_api(self, client):
+        """LEVEL_3_AUTO 被服务端拒绝"""
+        response = client.post(
+            "/product/signal/draft?symbols=600000.SH&trading_mode=LEVEL_3_AUTO"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("status") == "rejected"
+        assert "LEVEL_3_AUTO" in data.get("message", "")
+
+    def test_live_factors_compute_endpoint(self, client):
+        """POST /product/live-factors/compute 返回 200"""
+        with patch("src.api.product_routes._get_live_factor_service") as mock_svc:
+            mock_service = MagicMock()
+            mock_service.get_factor_summary.return_value = {
+                "status": "ok",
+                "data_status": "OK",
+                "factors": [],
+                "data_health": {"chosen_provider": "eastmoney"},
+            }
+            mock_svc.return_value = mock_service
+
+            response = client.post(
+                "/product/live-factors/compute?symbols=600000.SH&start_date=20250101&end_date=20251231"
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert "factors" in data
+
+    def test_live_backtests_run_endpoint(self, client):
+        """POST /product/live-backtests/run 返回 200"""
+        with patch("src.api.product_routes._get_live_backtest_service") as mock_svc:
+            mock_service = MagicMock()
+            mock_service.get_backtest_summary.return_value = {
+                "status": "ok",
+                "data_status": "OK",
+                "strategy": "SMA crossover",
+                "results": {"total_return": 0.05, "max_drawdown": -0.03, "sharpe_ratio": 1.2, "win_rate": 0.55},
+                "health": {},
+            }
+            mock_svc.return_value = mock_service
+
+            response = client.post(
+                "/product/live-backtests/run?symbols=600000.SH&start_date=20250101&end_date=20251231"
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert "results" in data
+
+
+class TestLevel3AutoBlocked:
+    """LEVEL_3_AUTO 在全链路被拒绝"""
+
+    def test_orchestrator_rejects_level3_auto(self):
+        """LiveSignalOrchestrator 拒绝 LEVEL_3_AUTO"""
+        from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
+        orchestrator = LiveSignalOrchestrator()
+        result = orchestrator.generate_signal_draft(
+            symbols=["600000.SH"],
+            start_date="2025-01-01",
+            end_date="2025-06-10",
+            trading_mode="LEVEL_3_AUTO",
+        )
+        assert result["status"] == "rejected"
+        assert "LEVEL_3_AUTO" in result["message"]

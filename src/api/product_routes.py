@@ -582,7 +582,16 @@ def generate_signal_draft(
     end_date: str = Query("20251231", description="End date"),
     trading_mode: str = Query("LEVEL_1_SIGNAL_ONLY", description="Trading mode"),
 ) -> dict[str, Any]:
-    """生成信号草稿（含数据健康证据链）"""
+    """生成信号草稿（含数据健康证据链）
+
+    LEVEL_3_AUTO 在当前阶段被禁止，服务端拒绝该模式。
+    """
+    if trading_mode == "LEVEL_3_AUTO":
+        return {
+            "status": "rejected",
+            "message": "LEVEL_3_AUTO is not available in the current phase. Automated trading is not enabled.",
+            "trading_mode": trading_mode,
+        }
     orchestrator = _get_live_signal_orchestrator()
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
     return orchestrator.generate_signal_draft(
@@ -598,6 +607,49 @@ def get_signal_status(signal_id: str) -> dict[str, Any]:
     """获取信号状态"""
     orchestrator = _get_live_signal_orchestrator()
     return orchestrator.get_signal_status(signal_id)
+
+
+# ============================================================
+# Live Factor & Backtest API (Architecture §6.4)
+# ============================================================
+
+def _get_live_factor_service():
+    """获取 LiveFactorService 单例"""
+    from src.product_app.live_factor_service import get_live_factor_service
+    return get_live_factor_service()
+
+
+def _get_live_backtest_service():
+    """获取 LiveBacktestService 单例"""
+    from src.product_app.live_backtest_service import LiveBacktestService
+    if not hasattr(_get_live_backtest_service, "_instance"):
+        _get_live_backtest_service._instance = LiveBacktestService()
+    return _get_live_backtest_service._instance
+
+
+@router.post("/live-factors/compute")
+def compute_live_factors(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    start_date: str = Query("20250101", description="Start date YYYYMMDD"),
+    end_date: str = Query("20251231", description="End date YYYYMMDD"),
+    factor_names: str = Query("", description="Comma-separated factor names (empty=all)"),
+) -> dict[str, Any]:
+    """基于实时日线数据计算技术因子（live closed-loop）"""
+    service = _get_live_factor_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return service.get_factor_summary(symbol_list, start_date, end_date)
+
+
+@router.post("/live-backtests/run")
+def run_live_backtest(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    start_date: str = Query("20250101", description="Start date YYYYMMDD"),
+    end_date: str = Query("20251231", description="End date YYYYMMDD"),
+) -> dict[str, Any]:
+    """基于实时日线数据运行快速回测（live closed-loop）"""
+    service = _get_live_backtest_service()
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    return service.get_backtest_summary(symbol_list, start_date, end_date)
 
 
 # ============================================================

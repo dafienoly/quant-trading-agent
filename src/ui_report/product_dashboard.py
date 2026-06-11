@@ -330,84 +330,76 @@ def render_watchlist() -> None:
 
 
 def render_factor_lab() -> None:
-    st.subheader("Factor Lab")
-    dashboard = _get("/product/dashboard") or {}
-    watchlist = dashboard.get("watchlist", [])
-    options = [item.get("symbol", "") for item in watchlist] or ["002463.SZ", "600584.SH"]
-    selected = st.multiselect("Symbols", options, default=options[:5], key="factor_symbols")
+    st.subheader("Factor Lab (Live)")
+    st.caption("Technical factors computed from live daily bars. No demo fallback.")
+    symbols = st.text_input("Symbols", "600000.SH,000001.SZ", key="factor_symbols")
     col1, col2 = st.columns(2)
-    start_date = col1.date_input("Start date", value=None, key="factor_start_date")
-    end_date = col2.date_input("End date", value=None, key="factor_end_date")
+    start_date = col1.text_input("Start date", "20250101", key="factor_start_date")
+    end_date = col2.text_input("End date", "20251231", key="factor_end_date")
 
-    params = {"symbols": ",".join(selected)}
-    if start_date:
-        params["start_date"] = start_date.strftime("%Y%m%d")
-    if end_date:
-        params["end_date"] = end_date.strftime("%Y%m%d")
-
-    if st.button("Compute factors", type="primary", key="compute_factors_btn"):
-        result = _post("/product/factors/compute", params=params)
-    else:
-        result = {"factors": dashboard.get("factors", []), "warnings": []}
-
-    for warning in result.get("warnings", []):
-        _banner("warn", warning)
-
-    rows = []
-    for factor in result.get("factors", []):
-        rows.append(
-            {
-                "Symbol": factor.get("symbol"),
-                "Name": factor.get("name"),
-                "Sector": factor.get("sector"),
-                "Technical": factor.get("technical_score"),
-                "Fundamental": factor.get("fundamental_score"),
-                "Sentiment": factor.get("sentiment_score"),
-                "Theme": factor.get("policy_score"),
-                "Total": factor.get("total_score"),
-            }
+    if st.button("Compute live factors", type="primary", key="compute_factors_btn"):
+        result = _post(
+            "/product/live-factors/compute",
+            params={"symbols": symbols, "start_date": start_date, "end_date": end_date},
         )
-    st.dataframe(_df(rows), width="stretch", hide_index=True)
+        if result:
+            data_status = result.get("data_status", "UNKNOWN")
+            if data_status == "FAILED":
+                _banner("danger", f"Factor computation failed. Data status: {data_status}")
+            elif data_status == "WARN":
+                _banner("warn", f"Factor computation partial. Data status: {data_status}")
+            else:
+                _banner("safe", f"Factors computed. Data status: {data_status}. Provider: {result.get('data_health', {}).get('chosen_provider', '')}")
+            rows = []
+            for factor in result.get("factors", []):
+                rows.append({
+                    "Symbol": factor.get("symbol"),
+                    "Date": factor.get("trade_date"),
+                    "SMA_5": factor.get("sma_5"),
+                    "SMA_20": factor.get("sma_20"),
+                    "RSI": factor.get("rsi_14"),
+                    "MACD": factor.get("macd_line"),
+                    "BOLL_Mid": factor.get("boll_middle"),
+                })
+            st.dataframe(_df(rows), hide_index=True)
+            with st.expander("Data Health"):
+                st.json(result.get("data_health", {}))
+        else:
+            _banner("danger", "Failed to compute live factors.")
 
 
 def render_backtest() -> None:
-    st.subheader("Backtest")
+    st.subheader("Backtest (Live)")
+    st.caption("Quick backtest on live daily bars. No demo fallback.")
     col1, col2, col3 = st.columns(3)
-    symbols = col1.text_input("Symbols", "002463.SZ,600584.SH", key="backtest_symbols")
+    symbols = col1.text_input("Symbols", "600000.SH,000001.SZ", key="backtest_symbols")
     start_date = col2.text_input("Start date", "20250101", key="backtest_start_date")
     end_date = col3.text_input("End date", "20251231", key="backtest_end_date")
 
-    col4, col5, col6, col7 = st.columns(4)
-    capital = col4.number_input("Initial capital", min_value=10000.0, value=1000000.0, step=10000.0, key="backtest_capital")
-    commission = col5.number_input("Commission", min_value=0.0, value=0.0003, format="%.4f", key="backtest_commission")
-    stamp = col6.number_input("Stamp duty", min_value=0.0, value=0.0010, format="%.4f", key="backtest_stamp")
-    slippage = col7.number_input("Slippage", min_value=0.0, value=0.0010, format="%.4f", key="backtest_slippage")
-
-    if commission == 0 or stamp == 0 or slippage == 0:
-        _banner("warn", "Backtest policy requires commission, stamp duty, and slippage.")
-
-    if st.button("Run backtest", type="primary", key="run_backtest_btn"):
+    if st.button("Run live backtest", type="primary", key="run_backtest_btn"):
         result = _post(
-            "/product/jobs/backtest/start",
-            params={
-                "symbols": symbols,
-                "start_date": start_date,
-                "end_date": end_date,
-                "initial_capital": capital,
-                "commission_rate": commission,
-                "stamp_duty_rate": stamp,
-                "slippage": slippage,
-            },
+            "/product/live-backtests/run",
+            params={"symbols": symbols, "start_date": start_date, "end_date": end_date},
         )
         if result:
-            st.success(f"Backtest job created: {result.get('job_id')}")
-            perf = result.get("performance", {})
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Annual return", f"{perf.get('annual_return', 0):.2%}")
-            c2.metric("Max drawdown", f"{perf.get('max_drawdown', 0):.2%}")
-            c3.metric("Sharpe", f"{perf.get('sharpe_ratio', 0):.2f}")
-            c4.metric("Win rate", f"{perf.get('win_rate', 0):.2%}")
-            st.dataframe(_df(result.get("trades", [])), width="stretch", hide_index=True)
+            bt_status = result.get("status", "unknown")
+            data_status = result.get("data_status", "UNKNOWN")
+            if bt_status == "failed" or data_status == "FAILED":
+                _banner("danger", f"Backtest failed. Data status: {data_status}")
+            elif bt_status == "insufficient_data":
+                _banner("warn", "Insufficient data for backtest (need at least 20 trading days).")
+            else:
+                _banner("safe", f"Backtest completed. Strategy: {result.get('strategy', '')}. Data status: {data_status}")
+                results = result.get("results", {})
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Total return", f"{results.get('total_return', 0):.2%}")
+                c2.metric("Max drawdown", f"{results.get('max_drawdown', 0):.2%}")
+                c3.metric("Sharpe", f"{results.get('sharpe_ratio', 0):.2f}")
+                c4.metric("Win rate", f"{results.get('win_rate', 0):.2%}")
+            with st.expander("Data Health"):
+                st.json(result.get("health", {}))
+        else:
+            _banner("danger", "Failed to run live backtest.")
 
 
 def render_signals() -> None:
@@ -792,9 +784,7 @@ def render_live_data() -> None:
     signal_symbols = st.text_input("Signal symbols", "600000.SH,000001.SZ", key="live_signal_symbols")
     signal_start = st.text_input("Start date", "20250101", key="live_signal_start")
     signal_end = st.text_input("End date", "20251231", key="live_signal_end")
-    signal_mode = st.selectbox("Trading mode", ["LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"], index=0, key="live_signal_mode")
-    if signal_mode == "LEVEL_3_AUTO":
-        _banner("danger", "LEVEL_3_AUTO is blocked in this demo.")
+    signal_mode = st.selectbox("Trading mode", ["LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM"], index=0, key="live_signal_mode")
     if st.button("Generate Signal Draft", type="primary", key="live_signal_btn"):
         result = _post(
             "/product/signal/draft",

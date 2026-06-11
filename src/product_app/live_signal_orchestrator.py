@@ -110,6 +110,17 @@ class LiveSignalOrchestrator:
             symbols, start_date, end_date, trading_mode,
         )
 
+        # LEVEL_3_AUTO 在当前阶段被禁止
+        if trading_mode == "LEVEL_3_AUTO":
+            logger.warning("LiveSignalOrchestrator: LEVEL_3_AUTO 被拒绝")
+            return {
+                "signal_id": _next_signal_id(),
+                "status": "rejected",
+                "message": "LEVEL_3_AUTO is not available in the current phase. Automated trading is not enabled.",
+                "trading_mode": trading_mode,
+                "symbols": symbols,
+            }
+
         now = datetime.now()
         created_at = now.strftime("%Y-%m-%d %H:%M:%S")
         expires_at = now.replace(hour=15, minute=0, second=0, microsecond=0)
