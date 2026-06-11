@@ -476,6 +476,7 @@ class ThemePoolService:
         stocks = stocks[:MAX_THEME_POOL_SIZE]
 
         return {
+            "pool_id": self._theme_data.get("pool_id", "ai_semiconductor"),
             "name": self._theme_data.get("name", "AI算力/半导体"),
             "stocks": stocks,
             "count": len(stocks),

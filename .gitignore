@@ -15,8 +15,11 @@ build/
 venv/
 env/
 
-# 数据目录（不提交行情数据）
-data/
+# 数据目录（不提交行情数据，但跟踪参考数据）
+data/*
+!data/reference/
+data/reference/*
+!data/reference/theme_pools/
 
 # pip 离线包缓存
 .pip_packages/

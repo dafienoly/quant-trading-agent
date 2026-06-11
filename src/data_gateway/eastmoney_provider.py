@@ -127,11 +127,28 @@ class EastmoneyProvider:
     # A 股筛选参数：沪市主板 + 深市主板 + 中小板
     _A_SHARE_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
 
+    # Browser-like headers to avoid anti-scraping blocks
+    _HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://quote.eastmoney.com/",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+
     def __init__(self, timeout_seconds: float = 8.0, request_interval: float = 0.8):
         self._timeout = timeout_seconds
         self._request_interval = request_interval
         self._last_request_time = 0.0
-        self._client = httpx.Client(timeout=timeout_seconds)
+        self._client = httpx.Client(
+            timeout=httpx.Timeout(timeout_seconds, connect=5.0, read=8.0),
+            headers=self._HEADERS,
+        )
 
     # ------------------------------------------------------------------
     # 速率限制
@@ -150,7 +167,9 @@ class EastmoneyProvider:
     def get_realtime_quotes(self, symbols: list[str]) -> pd.DataFrame:
         """获取 A 股实时行情快照。
 
-        一次性拉取全市场 A 股数据，然后按 symbols 过滤。
+        分两步：
+        1. 尝试一次性拉取全市场 A 股数据（bulk path）。
+        2. 若 bulk 失败或返回空数据，逐个 symbol 降级拉取（single-symbol fallback）。
         """
         if not symbols:
             return pd.DataFrame()
@@ -164,20 +183,25 @@ class EastmoneyProvider:
         if not a_symbols:
             return pd.DataFrame()
 
+        # ── Step 1: Bulk path ──────────────────────────────────────
         try:
             self._rate_limit()
             raw = self._fetch_all_a_share_realtime()
-            if raw is None or raw.empty:
-                logger.warning("Eastmoney realtime: API returned empty data")
-                return pd.DataFrame()
-
-            # 使用 realtime_provider 的映射函数
-            df = map_a_share_realtime_quotes(raw, a_symbols, data_source="eastmoney")
-            return df
-
+            if raw is not None and not raw.empty:
+                df = map_a_share_realtime_quotes(raw, a_symbols, data_source="eastmoney")
+                if not df.empty and len(df) >= len(a_symbols) * 0.5:
+                    return df
+                logger.warning(
+                    f"Eastmoney bulk: only got {len(df)}/{len(a_symbols)} symbols, "
+                    "falling back to single-symbol"
+                )
+            else:
+                logger.warning("Eastmoney bulk: empty data, falling back to single-symbol")
         except Exception as exc:
-            logger.error(f"Eastmoney realtime quotes failed: {exc}")
-            return pd.DataFrame()
+            logger.warning(f"Eastmoney bulk failed: {exc}, falling back to single-symbol")
+
+        # ── Step 2: Single-symbol fallback ─────────────────────────
+        return self._fetch_realtime_single_symbol(a_symbols)
 
     def _fetch_all_a_share_realtime(self) -> pd.DataFrame:
         """从东方财富拉取全市场 A 股实时行情，返回中文列名 DataFrame。"""
@@ -216,6 +240,68 @@ class EastmoneyProvider:
             raw_df["代码"] = raw_df["代码"].astype(str).str.zfill(6)
 
         return raw_df
+
+    def _fetch_realtime_single_symbol(self, symbols: list[str]) -> pd.DataFrame:
+        """Single-symbol fallback: fetch realtime quotes one symbol at a time.
+
+        Uses Eastmoney stock get API (same endpoint as fundamentals but with
+        realtime fields). Output uses the same Chinese column names as the bulk
+        path so it goes through the same ``map_a_share_realtime_quotes`` mapper.
+        """
+        # Single-stock realtime quote URL (same endpoint as fundamentals
+        # but with realtime field codes)
+        _SINGLE_QUOTE_URL = "https://push2.eastmoney.com/api/qt/stock/get"
+
+        rows: list[dict] = []
+        for i, symbol in enumerate(symbols):
+            try:
+                if i > 0:
+                    time.sleep(self._request_interval)
+                self._rate_limit()
+                secid = _symbol_to_secid(symbol)
+                params = {
+                    "secid": secid,
+                    "fields": _EM_REALTIME_FIELDS,
+                }
+                resp = self._client.get(_SINGLE_QUOTE_URL, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+                stock_data = data.get("data")
+                if not stock_data:
+                    logger.warning(f"Eastmoney single-symbol {symbol}: empty response")
+                    continue
+
+                # Build a row with f-code keys matching the bulk path
+                row = {}
+                for f_code, cn_name in _EM_REALTIME_FIELD_MAP.items():
+                    value = stock_data.get(f_code)
+                    if value is not None and value != "-":
+                        row[f_code] = value
+                    else:
+                        row[f_code] = None
+                if row.get("f12"):
+                    row["f12"] = str(row["f12"]).zfill(6)
+                    rows.append(row)
+                    logger.debug(f"Eastmoney single-symbol: {symbol} OK")
+                else:
+                    logger.warning(f"Eastmoney single-symbol {symbol}: no code in response")
+            except Exception as exc:
+                logger.warning(f"Eastmoney single-symbol {symbol} failed: {exc}")
+
+        if not rows:
+            return pd.DataFrame()
+
+        raw_df = pd.DataFrame(rows)
+        rename_map = {}
+        for f_code, cn_name in _EM_REALTIME_FIELD_MAP.items():
+            if f_code in raw_df.columns:
+                rename_map[f_code] = cn_name
+        raw_df = raw_df.rename(columns=rename_map)
+
+        if "代码" in raw_df.columns:
+            raw_df["代码"] = raw_df["代码"].astype(str).str.zfill(6)
+
+        return map_a_share_realtime_quotes(raw_df, symbols, data_source="eastmoney")
 
     # ------------------------------------------------------------------
     # 日线行情

@@ -1,0 +1,2119 @@
+{
+  "pool_id": "ai_semiconductor",
+  "name": "AI算力/半导体主题池",
+  "description": "覆盖AI算力芯片、先进封装、设备材料、存储、HBM、光模块等核心产业链",
+  "version": "2026-06-11",
+  "updated_at": "2026-06-11T00:00:00+08:00",
+  "tags": [
+    {
+      "id": "ai_chip",
+      "name": "AI算力芯片",
+      "description": "GPU/AI芯片设计"
+    },
+    {
+      "id": "advanced_packaging",
+      "name": "先进封装",
+      "description": "Chiplet/CoWoS/2.5D/3D封装"
+    },
+    {
+      "id": "equipment_material",
+      "name": "设备材料",
+      "description": "半导体设备和材料"
+    },
+    {
+      "id": "storage",
+      "name": "存储",
+      "description": "DRAM/NAND/存储控制器"
+    },
+    {
+      "id": "hbm",
+      "name": "HBM",
+      "description": "高带宽内存"
+    },
+    {
+      "id": "optical_module",
+      "name": "光模块",
+      "description": "光通信/800G/1.6T"
+    },
+    {
+      "id": "pcb",
+      "name": "PCB",
+      "description": "印制电路板/高多层/HDI"
+    },
+    {
+      "id": "eda_ip",
+      "name": "EDA/IP",
+      "description": "芯片设计工具和IP核"
+    }
+  ],
+  "stocks": [
+    {
+      "symbol": "603893.SH",
+      "name": "瑞芯微",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002049.SZ",
+      "name": "紫光国微",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603501.SH",
+      "name": "韦尔股份",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600171.SH",
+      "name": "上海贝岭",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600745.SH",
+      "name": "闻泰科技",
+      "tags": [
+        "ai_chip",
+        "advanced_packaging"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600460.SH",
+      "name": "士兰微",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603160.SH",
+      "name": "汇顶科技",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603019.SH",
+      "name": "中科曙光",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000977.SZ",
+      "name": "浪潮信息",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "601138.SH",
+      "name": "工业富联",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000066.SZ",
+      "name": "中国长城",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000938.SZ",
+      "name": "紫光股份",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603290.SH",
+      "name": "斯达半导",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "605111.SH",
+      "name": "新洁能",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600360.SH",
+      "name": "华微电子",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600703.SH",
+      "name": "三安光电",
+      "tags": [
+        "ai_chip",
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000611.SZ",
+      "name": "高新发展",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002261.SZ",
+      "name": "拓维信息",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603496.SH",
+      "name": "恒为科技",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600584.SH",
+      "name": "长电科技",
+      "tags": [
+        "advanced_packaging",
+        "hbm"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002156.SZ",
+      "name": "通富微电",
+      "tags": [
+        "advanced_packaging"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002185.SZ",
+      "name": "华天科技",
+      "tags": [
+        "advanced_packaging"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603005.SH",
+      "name": "晶方科技",
+      "tags": [
+        "advanced_packaging"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "601231.SH",
+      "name": "环旭电子",
+      "tags": [
+        "advanced_packaging"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002077.SZ",
+      "name": "大港股份",
+      "tags": [
+        "advanced_packaging"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603283.SH",
+      "name": "赛腾股份",
+      "tags": [
+        "advanced_packaging",
+        "hbm"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002119.SZ",
+      "name": "康强电子",
+      "tags": [
+        "advanced_packaging",
+        "hbm"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002371.SZ",
+      "name": "北方华创",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002409.SZ",
+      "name": "雅克科技",
+      "tags": [
+        "equipment_material",
+        "hbm"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603690.SH",
+      "name": "至纯科技",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600641.SH",
+      "name": "万业企业",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600206.SH",
+      "name": "有研新材",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "605358.SH",
+      "name": "立昂微",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "003026.SZ",
+      "name": "中晶科技",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603186.SH",
+      "name": "华正新材",
+      "tags": [
+        "equipment_material",
+        "pcb"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603078.SH",
+      "name": "江化微",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603650.SH",
+      "name": "彤程新材",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603002.SH",
+      "name": "宏昌电子",
+      "tags": [
+        "equipment_material",
+        "hbm"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002584.SZ",
+      "name": "西陇科学",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603324.SH",
+      "name": "盛剑环境",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002158.SZ",
+      "name": "汉钟精机",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603929.SH",
+      "name": "亚翔集成",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603163.SH",
+      "name": "圣晖集成",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002008.SZ",
+      "name": "大族激光",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002222.SZ",
+      "name": "福晶科技",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000636.SZ",
+      "name": "风华高科",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002138.SZ",
+      "name": "顺络电子",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002859.SZ",
+      "name": "洁美科技",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600563.SH",
+      "name": "法拉电子",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002484.SZ",
+      "name": "江海股份",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603989.SH",
+      "name": "艾华集团",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600237.SH",
+      "name": "铜峰电子",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002326.SZ",
+      "name": "永太科技",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002407.SZ",
+      "name": "多氟多",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002782.SZ",
+      "name": "可立克",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002885.SZ",
+      "name": "京泉华",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002922.SZ",
+      "name": "伊戈尔",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603191.SH",
+      "name": "望变电气",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000962.SZ",
+      "name": "东方钽业",
+      "tags": [
+        "equipment_material"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002428.SZ",
+      "name": "云南锗业",
+      "tags": [
+        "equipment_material",
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603986.SH",
+      "name": "兆易创新",
+      "tags": [
+        "storage",
+        "hbm"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000021.SZ",
+      "name": "深科技",
+      "tags": [
+        "storage"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600667.SH",
+      "name": "太极实业",
+      "tags": [
+        "storage",
+        "hbm"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "001309.SZ",
+      "name": "德明利",
+      "tags": [
+        "storage"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002559.SZ",
+      "name": "亚威股份",
+      "tags": [
+        "hbm"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000988.SZ",
+      "name": "华工科技",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002281.SZ",
+      "name": "光迅科技",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600487.SH",
+      "name": "亨通光电",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600522.SH",
+      "name": "中天科技",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600498.SH",
+      "name": "烽火通信",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000070.SZ",
+      "name": "特发信息",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002902.SZ",
+      "name": "铭普光磁",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002792.SZ",
+      "name": "通宇通讯",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603083.SH",
+      "name": "剑桥科技",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603042.SH",
+      "name": "华脉科技",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603803.SH",
+      "name": "瑞斯康达",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "601869.SH",
+      "name": "长飞光纤",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603118.SH",
+      "name": "共进股份",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002897.SZ",
+      "name": "意华股份",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000836.SZ",
+      "name": "富通信息",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603322.SH",
+      "name": "超讯通信",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002396.SZ",
+      "name": "星网锐捷",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002273.SZ",
+      "name": "水晶光电",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002179.SZ",
+      "name": "中航光电",
+      "tags": [
+        "optical_module",
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002475.SZ",
+      "name": "立讯精密",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002025.SZ",
+      "name": "航天电器",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002055.SZ",
+      "name": "得润电子",
+      "tags": [
+        "optical_module"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002463.SZ",
+      "name": "沪电股份",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002916.SZ",
+      "name": "深南电路",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600183.SH",
+      "name": "生益科技",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002938.SZ",
+      "name": "鹏鼎控股",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002913.SZ",
+      "name": "奥士康",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603228.SH",
+      "name": "景旺电子",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002815.SZ",
+      "name": "崇达技术",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002436.SZ",
+      "name": "兴森科技",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002636.SZ",
+      "name": "金安国纪",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002134.SZ",
+      "name": "天津普林",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603936.SH",
+      "name": "博敏电子",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603328.SH",
+      "name": "依顿电子",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000823.SZ",
+      "name": "超声电子",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002384.SZ",
+      "name": "东山精密",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002579.SZ",
+      "name": "中京电子",
+      "tags": [
+        "pcb"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600536.SH",
+      "name": "中国软件",
+      "tags": [
+        "eda_ip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002368.SZ",
+      "name": "太极股份",
+      "tags": [
+        "eda_ip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "002837.SZ",
+      "name": "英维克",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "603912.SH",
+      "name": "佳力图",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "000034.SZ",
+      "name": "神州数码",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SZ",
+      "board_type": "main",
+      "exchange": "SZ",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "600100.SH",
+      "name": "同方股份",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    },
+    {
+      "symbol": "601702.SH",
+      "name": "华峰铝业",
+      "tags": [
+        "ai_chip"
+      ],
+      "market": "SH",
+      "board_type": "main",
+      "exchange": "SH",
+      "is_st": false,
+      "is_delisting": false,
+      "evidence": "curated from public semiconductor/AI compute industry classification"
+    }
+  ],
+  "extended": {
+    "note": "以下为创业板/科创板股票，不允许用于实盘闭环交易，仅供参考研究",
+    "stocks": [
+      {
+        "symbol": "688256.SH",
+        "name": "寒武纪",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688041.SH",
+        "name": "海光信息",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300458.SZ",
+        "name": "全志科技",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300474.SZ",
+        "name": "景嘉微",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300077.SZ",
+        "name": "国民技术",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300613.SZ",
+        "name": "富瀚微",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300053.SZ",
+        "name": "欧比特",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688385.SH",
+        "name": "复旦微电",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688018.SH",
+        "name": "乐鑫科技",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688047.SH",
+        "name": "龙芯中科",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688396.SH",
+        "name": "华润微",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688012.SH",
+        "name": "中微公司",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688072.SH",
+        "name": "拓荆科技",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688019.SH",
+        "name": "安集科技",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688120.SH",
+        "name": "华海清科",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688082.SH",
+        "name": "盛美上海",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688037.SH",
+        "name": "芯源微",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688200.SH",
+        "name": "华峰测控",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300604.SZ",
+        "name": "长川科技",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300567.SZ",
+        "name": "精测电子",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300346.SZ",
+        "name": "南大光电",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300666.SZ",
+        "name": "江丰电子",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300054.SZ",
+        "name": "鼎龙股份",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300236.SZ",
+        "name": "上海新阳",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300398.SZ",
+        "name": "飞凯材料",
+        "tags": [
+          "equipment_material",
+          "hbm"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300429.SZ",
+        "name": "强力新材",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688268.SH",
+        "name": "华特气体",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688106.SH",
+        "name": "金宏气体",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688596.SH",
+        "name": "正帆科技",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300820.SZ",
+        "name": "英杰电气",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300260.SZ",
+        "name": "新莱应材",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688409.SH",
+        "name": "富创精密",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688233.SH",
+        "name": "神工股份",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688126.SH",
+        "name": "沪硅产业",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688234.SH",
+        "name": "天岳先进",
+        "tags": [
+          "equipment_material"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688300.SH",
+        "name": "联瑞新材",
+        "tags": [
+          "equipment_material",
+          "hbm"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300223.SZ",
+        "name": "北京君正",
+        "tags": [
+          "storage"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688110.SH",
+        "name": "东芯股份",
+        "tags": [
+          "storage"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300042.SZ",
+        "name": "朗科科技",
+        "tags": [
+          "storage"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300672.SZ",
+        "name": "国科微",
+        "tags": [
+          "storage"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "301308.SZ",
+        "name": "江波龙",
+        "tags": [
+          "storage"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688025.SH",
+        "name": "佰维存储",
+        "tags": [
+          "storage"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688766.SH",
+        "name": "普冉股份",
+        "tags": [
+          "storage"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300857.SZ",
+        "name": "协创数据",
+        "tags": [
+          "storage"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688416.SH",
+        "name": "恒烁股份",
+        "tags": [
+          "storage"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688535.SH",
+        "name": "华海诚科",
+        "tags": [
+          "hbm"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688733.SH",
+        "name": "壹石通",
+        "tags": [
+          "hbm"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300308.SZ",
+        "name": "中际旭创",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300502.SZ",
+        "name": "新易盛",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300394.SZ",
+        "name": "天孚通信",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300548.SZ",
+        "name": "博创科技",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300570.SZ",
+        "name": "太辰光",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "301205.SZ",
+        "name": "联特科技",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688313.SH",
+        "name": "仕佳光子",
+        "tags": [
+          "optical_module"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300476.SZ",
+        "name": "胜宏科技",
+        "tags": [
+          "pcb"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688093.SH",
+        "name": "世华科技",
+        "tags": [
+          "pcb"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688519.SH",
+        "name": "南亚新材",
+        "tags": [
+          "pcb"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688020.SH",
+        "name": "方邦股份",
+        "tags": [
+          "pcb"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300739.SZ",
+        "name": "明阳电路",
+        "tags": [
+          "pcb"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300657.SZ",
+        "name": "弘信电子",
+        "tags": [
+          "pcb"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688206.SH",
+        "name": "概伦电子",
+        "tags": [
+          "eda_ip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "301269.SZ",
+        "name": "华大九天",
+        "tags": [
+          "eda_ip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688521.SH",
+        "name": "芯原股份",
+        "tags": [
+          "eda_ip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688352.SH",
+        "name": "颀中科技",
+        "tags": [
+          "advanced_packaging"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688362.SH",
+        "name": "甬矽电子",
+        "tags": [
+          "advanced_packaging"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "300373.SZ",
+        "name": "扬杰科技",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300623.SZ",
+        "name": "捷捷微电",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "300046.SZ",
+        "name": "台基股份",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SZ",
+        "board_type": "chinext"
+      },
+      {
+        "symbol": "688261.SH",
+        "name": "东微半导",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      },
+      {
+        "symbol": "688711.SH",
+        "name": "宏微科技",
+        "tags": [
+          "ai_chip"
+        ],
+        "market": "SH",
+        "board_type": "star"
+      }
+    ]
+  },
+  "data_source": "curated_reference",
+  "universe": "a_share_mainboard"
+}

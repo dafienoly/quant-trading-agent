@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -222,3 +224,112 @@ class TestPoolAPI:
             }
             response = client.post("/product/pools/watchlist?action=remove&symbols=600000.SH")
             assert response.status_code == 200
+
+    def test_get_ai_semiconductor_pool_endpoint(self, client):
+        """GET /product/pools/ai_semiconductor 返回主题池"""
+        with patch("src.api.product_routes._get_theme_pool_service") as mock_tps:
+            mock_tps.return_value.get_theme_pool.return_value = {
+                "pool_id": "ai_semiconductor",
+                "name": "AI算力/半导体主题池",
+                "stocks": [{"symbol": "600584.SH", "name": "长电科技", "tags": ["advanced_packaging"]}],
+                "count": 1,
+                "tags": [{"id": "advanced_packaging", "name": "先进封装"}],
+            }
+            response = client.get("/product/pools/ai_semiconductor")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            pool = data["pool"]
+            assert pool["pool_id"] == "ai_semiconductor"
+            assert "stocks" in pool
+            assert "tags" in pool
+
+
+# ============================================================
+# Theme Pool Contract Tests (2026-06-11 acceptance fix)
+# ============================================================
+
+
+def _get_pool_path():
+    return Path(__file__).resolve().parent.parent / "data" / "reference" / "theme_pools" / "ai_semiconductor.json"
+
+
+class TestThemePoolContract:
+    """验证 ai_semiconductor JSON 文件满足架构契约规则"""
+
+    @pytest.fixture
+    def pool_data(self):
+        path = _get_pool_path()
+        assert path.exists(), f"Theme pool file not found: {path}"
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_file_exists(self):
+        assert _get_pool_path().exists()
+
+    def test_top_level_fields(self, pool_data):
+        fields = ["pool_id", "name", "version", "updated_at", "data_source", "universe", "tags", "stocks"]
+        for f in fields:
+            assert f in pool_data, f"Missing top-level field: {f}"
+
+    def test_data_source(self, pool_data):
+        assert pool_data.get("data_source") == "curated_reference"
+
+    def test_universe(self, pool_data):
+        assert pool_data.get("universe") == "a_share_mainboard"
+
+    def test_version_format(self, pool_data):
+        assert re.match(r"^\d{4}-\d{2}-\d{2}$", pool_data.get("version", ""))
+
+    def test_updated_at_format(self, pool_data):
+        assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$", pool_data.get("updated_at", ""))
+
+    def test_stock_count_range(self, pool_data):
+        stocks = pool_data.get("stocks", [])
+        assert 100 <= len(stocks) <= 300, f"Stock count {len(stocks)} not in [100, 300]"
+
+    def test_required_tag_ids(self, pool_data):
+        tag_ids = {t.get("id") for t in pool_data.get("tags", []) if isinstance(t, dict)}
+        assert "ai_chip" in tag_ids
+        assert "optical_module" in tag_ids
+
+    def test_symbol_pattern(self, pool_data):
+        pattern = re.compile(r"^\d{6}\.(SH|SZ)$")
+        for stock in pool_data.get("stocks", []):
+            symbol = stock.get("symbol", "")
+            assert pattern.match(symbol), f"Invalid symbol pattern: {symbol}"
+
+    def test_mainboard_only(self, pool_data):
+        allowed_prefixes = ("600", "601", "603", "605", "000", "001", "002", "003")
+        for stock in pool_data.get("stocks", []):
+            symbol = stock.get("symbol", "")
+            code = symbol.split(".")[0]
+            assert code.startswith(allowed_prefixes), f"Non-mainboard symbol: {symbol}"
+
+    def test_no_duplicate_symbols(self, pool_data):
+        symbols = [s["symbol"] for s in pool_data.get("stocks", [])]
+        assert len(symbols) == len(set(symbols)), "Duplicate symbols found"
+
+    def test_stock_fields(self, pool_data):
+        required = {"symbol", "name", "exchange", "board_type", "tags", "is_st", "is_delisting", "evidence"}
+        for stock in pool_data.get("stocks", []):
+            for field in required:
+                assert field in stock, f"{stock.get('symbol', '?')} missing field: {field}"
+
+    def test_no_risk_stocks_in_main_list(self, pool_data):
+        for stock in pool_data.get("stocks", []):
+            assert not stock.get("is_st", False), f"ST stock in main list: {stock['symbol']}"
+            assert not stock.get("is_delisting", False), f"Delisting stock in main list: {stock['symbol']}"
+
+    def test_each_stock_has_at_least_one_tag(self, pool_data):
+        tag_ids = {t.get("id") for t in pool_data.get("tags", []) if isinstance(t, dict)}
+        for stock in pool_data.get("stocks", []):
+            stock_tags = set(stock.get("tags", []))
+            assert stock_tags, f"{stock['symbol']} has no tags"
+            unknown = stock_tags - tag_ids
+            assert not unknown, f"{stock['symbol']} has unknown tags: {unknown}"
+
+    def test_stock_exchange_field(self, pool_data):
+        for stock in pool_data.get("stocks", []):
+            exchange = stock.get("exchange", "")
+            assert exchange in ("SH", "SZ"), f"{stock['symbol']} invalid exchange: {exchange}"
