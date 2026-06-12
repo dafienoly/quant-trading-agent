@@ -2,6 +2,7 @@
 
 > 角色：Test Engineer Agent
 > 日期：2026-06-12
+> 版本：v2（PR #3 Review 修复 R2 验证）
 
 ---
 
@@ -31,13 +32,13 @@
 
 ## 3. 分支信息
 
-| 项目 | 值 |
-|---|---|
-| 被测分支 | `feat/deepseek-agent-runtime/llm-core` |
-| 基线分支 | `epic/2026-06-12-deepseek-agent-runtime` |
-| 被测提交 | `6b7f273` |
-| 临时测试分支 | `test/deepseek-agent-runtime/all-modules-20260612-1736` |
-| 临时分支状态 | ✅ 已删除 |
+| 项目 | R1 (原始) | R2 (修复验证) |
+|---|---|---|
+| 被测分支 | `feat/deepseek-agent-runtime/llm-core` | `feat/deepseek-agent-runtime/llm-core` |
+| 基线分支 | `epic/2026-06-12-deepseek-agent-runtime` | `epic/2026-06-12-deepseek-agent-runtime` |
+| 被测提交 | `6b7f273` | `78b89c6` (合并 `1600735` 修复) |
+| 临时测试分支 | `test/deepseek-agent-runtime/all-modules-20260612-1736` | `test/deepseek-runtime/r2-verify-20260612-2358` |
+| 临时分支状态 | ✅ 已删除 | ✅ 已删除 |
 
 ---
 
@@ -69,17 +70,17 @@
 
 | 需求 ID | 功能点 | 测试覆盖 | 状态 |
 |---|---|---|---|
-| F-001 | 统一 DeepSeek Runtime | `test_deepseek_runtime.py` (16 cases) | ✅ PASS |
+| F-001 | 统一 DeepSeek Runtime | `test_deepseek_runtime.py` (21 cases, +5 in R2) | ✅ PASS |
 | F-002 | 非阻塞调用能力 | async-first API + Semaphore + timeout + retry 实现；`test_missing_api_key`、`test_missing_openai_package` 覆盖 fail-closed | ✅ PASS |
-| F-003 | Thinking Mode | `test_thinking_enabled_via_profile`、`test_thinking_disabled_via_profile` | ✅ PASS |
+| F-003 | Thinking Mode | `test_thinking_enabled_via_profile`、`test_thinking_disabled_via_profile`、R2: `test_assistant_msg_includes_reasoning_content`、`test_tool_round_message_preserves_reasoning_content` | ✅ PASS |
 | F-004 | Multi-round Conversation | `test_deepseek_conversation.py` (10 cases) | ✅ PASS |
-| F-005 | Tool Calls | `test_deepseek_tools.py` (11 cases) | ✅ PASS |
+| F-005 | Tool Calls | `test_deepseek_tools.py` (14 cases, +3 in R2) | ✅ PASS |
 | F-006 | Context Prefix Cache | `test_deepseek_context_cache.py` (10 cases) | ✅ PASS |
-| F-007 | JSON Output | `test_parse_valid_json`、`test_parse_markdown_json`、`test_parse_empty_content`、`test_parse_invalid_json`、`test_unknown_profile_falls_back` | ✅ PASS |
+| F-007 | JSON Output + Schema Validation | R2: `test_registered_schema_valid_data`、`test_registered_schema_invalid_data`、`test_unknown_schema_name_does_not_block` | ✅ PASS |
 | F-008 | BugFixAgent 迁移 | `test_bugfix_agent_deepseek_runtime.py` (12 cases) | ✅ PASS |
 | F-009 | Agent 复用约束 | 架构探测确认 `model_router.py` 不再直接调用 SDK | ✅ PASS |
 | F-010 | 可观测性 | `test_deepseek_usage.py` (6 cases) | ✅ PASS |
-| F-011 | 安全边界 | 工具只读校验、路径安全校验、受限模块阻断测试、secret 脱敏测试 | ✅ PASS |
+| F-011 | 安全边界 | 工具只读校验、路径安全校验、受限模块阻断测试、secret 脱敏测试；R2: `test_directory_traversal_upwards`、`test_directory_traversal_parent`、`test_allowed_directory_passes` | ✅ PASS |
 
 ---
 
@@ -161,6 +162,50 @@ grep -rn "sk-[a-zA-Z0-9]" src/ --include="*.py"
 
 **结果**：65 passed in 20.68s ✅
 
+### 6.8 R2 — PR #3 Review 修复验证（新增 8 个测试，共 73 项）
+
+```bash
+.venv/bin/python -m pytest tests/test_deepseek_runtime.py tests/test_deepseek_tools.py \
+  tests/test_deepseek_context_cache.py tests/test_deepseek_conversation.py \
+  tests/test_deepseek_usage.py tests/test_bugfix_agent_deepseek_runtime.py \
+  -v --basetemp=runtime/pytest-tmp-deepseek-runtime-r2
+```
+
+**结果：73 passed in 18.89s** ✅
+
+### 6.9 R2 — 三项修复逐项验证
+
+#### S1: Thinking tool loop 保留 reasoning_content
+
+| 测试 | 结果 | 验证内容 |
+|---|---|---|
+| `test_assistant_msg_includes_reasoning_content` | ✅ PASS | Fake client 的 tool 循环中，第二轮 assistant message 的 `reasoning_content` 字段存在且为 `"让我先查看相关文件..."` |
+| `test_tool_round_message_preserves_reasoning_content` | ✅ PASS | `kwargs["messages"]` 中的 assistant message 包含 `reasoning_content` 且不为 None |
+
+代码变更：`deepseek_runtime.py:231-250` — tool 循环中捕获 `current_reasoning` 并写入 `assistant_msg["reasoning_content"]`
+
+#### S2: search_project_text 路径穿越
+
+| 测试 | 结果 | 验证内容 |
+|---|---|---|
+| `test_directory_traversal_upwards` | ✅ PASS | `directory="../../"` → `"Access denied"` |
+| `test_directory_traversal_parent` | ✅ PASS | `directory="../"` → `"Access denied"` |
+| `test_allowed_directory_passes` | ✅ PASS | `directory="src/"` 通过校验（输出可能因 rg 不存在而异，但不返回 Access denied） |
+
+代码变更：`tool_registry.py:303-308` — `_search_project_text()` 使用 `.resolve()` 后调用 `_is_path_allowed()` 校验
+
+#### S2: Runtime 层 schema 校验
+
+| 测试 | 结果 | 验证内容 |
+|---|---|---|
+| `test_registered_schema_valid_data` | ✅ PASS | 合法 BugFixAnalysis JSON → `status="ok"` |
+| `test_registered_schema_invalid_data` | ✅ PASS | 缺少必填字段 `root_cause` → `status="invalid_response"`，`error.reason="schema_validation_failed"` |
+| `test_unknown_schema_name_does_not_block` | ✅ PASS | 未知 schema_name → 不阻断，`status="ok"` |
+
+代码变更：
+- `schemas.py:177-203` — 新增 `SCHEMA_REGISTRY` 和 `validate_schema()` 函数
+- `deepseek_runtime.py:307-333` — 新增 `_validate_output()` 方法
+
 ---
 
 ## 7. API / UI / CLI / 数据源 / 风控 / 安全验证
@@ -183,7 +228,10 @@ grep -rn "sk-[a-zA-Z0-9]" src/ --include="*.py"
 |---|---|---|---|
 | 无 | — | 本轮测试未发现运行时缺陷 | N/A |
 
-**说明**：所有 65 项自动化测试通过，架构门禁全部确认通过，安全边界验证通过。
+**说明**：
+- **R1**（原始提交 `6b7f273`）：65 项自动化测试通过
+- **R2**（PR #3 Review 修复 `78b89c6`）：73 项自动化测试通过（+8 项修复验证测试）
+- 三项修复全部验证通过：thinking+tool loop reasoning_content 保留 ✅、路径穿越阻断 ✅、Runtime schema 校验 ✅
 
 ---
 
@@ -216,6 +264,12 @@ grep -rn "sk-[a-zA-Z0-9]" src/ --include="*.py"
 
 **PASS**
 
-所有 65 项自动化测试全部通过，架构门禁（`chat.completions.create` 调用收敛、BugFixAgent 去 OpenAI SDK 依赖）已确认满足，安全约束（只读工具、secret 脱敏、受限模块阻断）已验证，代码符合需求和架构设计要求。
+- **R1**（65 tests）：原始实现通过
+- **R2**（73 tests）：PR #3 Review 三项阻断修复全部验证通过
+  - S1: thinking tool loop reasoning_content 保留 ✅
+  - S2: search 路径穿越阻断 ✅
+  - S2: Runtime schema 校验 ✅
+
+架构门禁（`chat.completions.create` 调用收敛、BugFixAgent 去 OpenAI SDK 依赖）已确认满足，安全约束（只读工具、secret 脱敏、受限模块阻断）已验证。代码符合需求和架构设计要求。
 
 可进入下一阶段：**Architect Code Review**。
