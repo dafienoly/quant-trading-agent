@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,21 @@ _BLOCKED_PATTERNS = ("risk_engine", "execution_engine", "trading_log", "backtest
 # 上下文文件读取上限
 _MAX_CONTEXT_FILES = 3
 _MAX_LINES_PER_FILE = 200
+
+
+@dataclass
+class BugFixExecutionContext:
+    """Execution context for running a fix in an isolated worktree.
+
+    When passed to ``execute_fix()``, all file operations and test
+    commands run inside ``worktree_path`` instead of the active
+    project root, protecting the active development workspace.
+    """
+    bug_id: str
+    project_root: Path
+    base_branch: str
+    branch_name: str
+    worktree_path: Path
 
 
 # ============================================================
@@ -181,12 +197,19 @@ class BugFixAgent:
             logger.error(f"生成修复方案失败: {e}")
             return {"error": str(e)}
 
-    def execute_fix(self, bug_report: dict, proposal: dict) -> dict:
+    def execute_fix(
+        self,
+        bug_report: dict,
+        proposal: dict,
+        context: BugFixExecutionContext | None = None,
+    ) -> dict:
         """执行修复方案，应用代码变更并运行测试
 
         参数:
             bug_report: Bug 报告字典
             proposal: propose_fix() 返回的修复方案字典
+            context: 可选执行上下文。传入时文件操作和测试命令在
+                ``context.worktree_path`` 内运行，避免修改活跃工作区。
 
         返回:
             执行结果字典。成功时包含 {"success": True, "test_output": ...}，
@@ -206,7 +229,8 @@ class BugFixAgent:
                     "error": "修复方案涉及受限模块，自动执行已拒绝",
                 }
 
-            project_root = self.project_root.resolve()
+            # Use context root when available, otherwise fallback to project_root
+            work_root = context.worktree_path.resolve() if context else self.project_root.resolve()
             # 保存原始文件内容，用于回滚
             originals: dict[str, str | None] = {}
 
@@ -215,8 +239,8 @@ class BugFixAgent:
                 if not file_path:
                     continue
 
-                full_path = (self.project_root / file_path).resolve()
-                if not full_path.is_relative_to(project_root):
+                full_path = (work_root / file_path).resolve()
+                if not full_path.is_relative_to(work_root):
                     return {"success": False, "error": f"非法文件路径，已拒绝自动修复: {file_path}"}
 
                 change_type = str(change.get("change_type", "modify")).lower()
@@ -253,7 +277,8 @@ class BugFixAgent:
                     logger.warning(f"无法应用 diff 到: {file_path}")
 
             # 运行测试
-            test_result = self._run_tests(code_changes=code_changes)
+            test_workdir = str(context.worktree_path) if context else None
+            test_result = self._run_tests(code_changes=code_changes, workdir=test_workdir)
 
             if test_result["passed"]:
                 logger.info("测试通过，修复已应用")
@@ -467,13 +492,14 @@ class BugFixAgent:
             return ""
         return "\n".join(new_lines) + "\n"
 
-    def _run_tests(self, code_changes: list | None = None) -> dict[str, Any]:
+    def _run_tests(self, code_changes: list | None = None, workdir: str | None = None) -> dict[str, Any]:
         """运行 pytest 测试
 
         优先运行与修改文件相关的测试，若无匹配则运行全部测试。
 
         参数:
             code_changes: 代码变更列表，用于选择相关测试文件
+            workdir: 可选工作目录，传入时在指定目录运行测试
 
         返回:
             {"passed": bool, "output": str}
@@ -498,7 +524,7 @@ class BugFixAgent:
         try:
             result = subprocess.run(
                 test_args,
-                cwd=str(self.project_root),
+                cwd=workdir or str(self.project_root),
                 capture_output=True,
                 text=True,
                 timeout=300,

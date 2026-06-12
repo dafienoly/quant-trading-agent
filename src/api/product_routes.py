@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Query
@@ -396,6 +397,58 @@ def get_bug_fix_status(bug_id: str) -> dict[str, Any]:
         "status": "ok",
         "bug_id": bug_id,
         "fix_status": status_info,
+    }
+
+
+@router.post("/feedback/{bug_id}/merge")
+def merge_bug_fix(
+    bug_id: str,
+    force: bool = Query(False, description="绕过自动合并保护（需用户明确确认）"),
+) -> dict[str, Any]:
+    """将已验证的修复合并到基础分支
+
+    默认情况下自动合并被禁止（BUGFIX_AUTO_MERGE=false），
+    需要用户传入 force=true 明确授权。
+    """
+    workflow = _get_bug_fix_workflow()
+    result = workflow.merge_fix(bug_id, force=force)
+    return result
+
+
+@router.post("/feedback/{bug_id}/cleanup-worktree")
+def cleanup_bug_fix_worktree(bug_id: str) -> dict[str, Any]:
+    """清理 Bug 修复的隔离 worktree
+
+    注意：此路由仅在 BugFixBranchManager 有对应 worktree 记录时工作。
+    如果 bug 尚未经过 approve 流程，不执行任何操作。
+    """
+    workflow = _get_bug_fix_workflow()
+    bug_report = workflow.get_bug_report(bug_id)
+    if bug_report is None:
+        return {"status": "error", "bug_id": bug_id, "message": f"Bug not found: {bug_id}"}
+
+    worktree_path_str = bug_report.get("fix_worktree_path", "")
+    if not worktree_path_str:
+        return {"status": "ok", "bug_id": bug_id, "message": "没有 worktree 需要清理"}
+
+    from src.product_app.bug_fix_branch_manager import BugFixWorktree
+    worktree_descriptor = BugFixWorktree(
+        bug_id=bug_id,
+        base_branch=bug_report.get("base_branch", "main"),
+        branch_name=bug_report.get("fix_branch", ""),
+        path=Path(worktree_path_str),
+        base_sha=bug_report.get("base_sha", ""),
+    )
+
+    bm = workflow.branch_manager if hasattr(workflow, "branch_manager") else None
+    if bm is None:
+        return {"status": "error", "bug_id": bug_id, "message": "BugFixBranchManager 未初始化"}
+
+    cleanup = bm.cleanup_worktree(worktree_descriptor, keep_on_failure=False)
+    return {
+        "status": "ok" if cleanup.get("removed") else "error",
+        "bug_id": bug_id,
+        "cleanup": cleanup,
     }
 
 

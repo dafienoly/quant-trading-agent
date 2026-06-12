@@ -169,3 +169,57 @@ class TestLLMStatusEndpoint:
         assert "model" in body
         assert "api_key_present" in body
         assert body["trade_decision_enabled"] is False
+
+
+class TestBugFixMergeEndpoints:
+    """Tests for merge and cleanup-worktree endpoints."""
+
+    @patch("src.api.product_routes._get_bug_fix_workflow")
+    def test_merge_endpoint_calls_workflow_merge(self, mock_get_wf):
+        """POST /feedback/{id}/merge calls workflow.merge_fix()."""
+        mock_wf = MagicMock()
+        mock_wf.merge_fix.return_value = {
+            "status": "fixed",
+            "bug_id": "BUG_TEST_001",
+            "merge_result": {"merged": True, "merge_commit": "abc123"},
+        }
+        mock_get_wf.return_value = mock_wf
+        client = TestClient(app)
+        response = client.post("/product/feedback/BUG_TEST_001/merge?force=true")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "fixed"
+
+    @patch("src.api.product_routes._get_bug_fix_workflow")
+    def test_merge_refuses_without_force(self, mock_get_wf):
+        """Merge without force=true returns proper result."""
+        mock_wf = MagicMock()
+        mock_wf.merge_fix.return_value = {
+            "status": "error",
+            "bug_id": "BUG_TEST_001",
+            "merge_result": {"merged": False, "reason": "auto_merge_disabled"},
+        }
+        mock_get_wf.return_value = mock_wf
+        client = TestClient(app)
+        response = client.post("/product/feedback/BUG_TEST_001/merge")
+        assert response.status_code == 200
+        body = response.json()
+        assert "merge_result" in body
+
+    @patch("src.api.product_routes._get_bug_fix_workflow")
+    def test_cleanup_returns_ok_for_known_bug(self, mock_get_wf):
+        """cleanup-worktree returns properly for bug with worktree_path."""
+        mock_wf = MagicMock()
+        mock_wf.get_bug_report.return_value = {
+            "bug_id": "BUG_TEST_CLEAN",
+            "fix_worktree_path": "/tmp/test_worktree",
+            "fix_branch": "bugfix/BUG_TEST_CLEAN-ts",
+            "base_branch": "main",
+            "base_sha": "abc",
+        }
+        mock_wf.branch_manager = MagicMock()
+        mock_wf.branch_manager.cleanup_worktree.return_value = {"removed": True}
+        mock_get_wf.return_value = mock_wf
+        client = TestClient(app)
+        response = client.post("/product/feedback/BUG_TEST_CLEAN/cleanup-worktree")
+        assert response.status_code == 200

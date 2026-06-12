@@ -6,11 +6,15 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
+
+from src.product_app.bug_fix_branch_manager import BugFixBranchManager
+from src.product_app.bug_fix_agent import BugFixExecutionContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _ANALYSIS_DIR = _PROJECT_ROOT / "feedback" / "bugs" / "analysis"
@@ -51,13 +55,15 @@ class BugFixWorkflow:
         "rejected": ["analyzing"],
         "fixing": ["verified", "fix_failed"],
         "fix_failed": ["fixing", "open"],
-        "verified": ["fixed"],
+        "verified": ["merge_pending", "fixed"],
+        "merge_pending": ["fixed"],
         "blocked": [],
     }
 
     def __init__(self) -> None:
         self._bug_fix_agent = None
         self._feedback_service = None
+        self._branch_manager = None
         self._active_workflows: dict[str, str] = {}  # {bug_id: current_state}
 
     # ----------------------------------------------------------
@@ -79,6 +85,16 @@ class BugFixWorkflow:
             from src.product_app.feedback import get_feedback_service
             self._feedback_service = get_feedback_service()
         return self._feedback_service
+
+    @property
+    def branch_manager(self):
+        """延迟加载 BugFixBranchManager"""
+        if self._branch_manager is None:
+            self._branch_manager = BugFixBranchManager(
+                project_root=_PROJECT_ROOT,
+                base_branch=os.getenv("BUGFIX_BASE_BRANCH", "main"),
+            )
+        return self._branch_manager
 
     # ----------------------------------------------------------
     # 公开方法
@@ -295,12 +311,10 @@ class BugFixWorkflow:
     # ----------------------------------------------------------
 
     def _execute_and_verify(self, bug_id: str) -> dict:
-        """执行修复并验证
+        """执行修复并验证（使用隔离 worktree）
 
-        转换到 fixing 状态，执行修复，成功则提交，失败则回滚。
-
-        参数:
-            bug_id: Bug 唯一标识
+        转换到 fixing 状态，在隔离 worktree 中执行修复，
+        提交到 bugfix 分支，标记为 verified。
 
         返回:
             修复结果字典
@@ -312,123 +326,146 @@ class BugFixWorkflow:
         bug_report = self._read_bug_report(bug_id)
         proposal = bug_report.get("fix_proposal", {})
 
-        dirty_files = self._get_dirty_files()
-        if dirty_files:
-            fix_result = {
-                "success": False,
-                "error": "工作区存在未提交变更，自动修复已拒绝执行",
-                "dirty_files": dirty_files,
-            }
-            self._transition(bug_id, "fix_failed")
-            self._update_bug_report(bug_id, fix_result=fix_result)
-            return {
-                "status": "fix_failed",
-                "bug_id": bug_id,
-                "error": fix_result["error"],
-                "dirty_files": dirty_files,
-            }
-
         try:
-            # 执行修复
-            fix_result = self.bug_fix_agent.execute_fix(bug_report, proposal)
+            # 1. 创建隔离 worktree
+            worktree = self.branch_manager.prepare_worktree(bug_id)
 
-            if isinstance(fix_result, dict) and fix_result.get("success"):
-                # Git commit — only stage files modified by the fix
-                title = bug_report.get("title", "untitled")
-                commit_msg = f"fix(auto): {bug_id} - {title}"
-                code_changes = proposal.get("code_changes", [])
-                for change in code_changes:
-                    file_path = change.get("file_path", "")
-                    if file_path:
-                        add_result = subprocess.run(
-                            ["git", "add", file_path],
-                            cwd=str(_PROJECT_ROOT),
-                            capture_output=True,
-                            text=True,
-                            timeout=30,
-                        )
-                        if add_result.returncode != 0:
-                            raise RuntimeError(f"git add failed for {file_path}: {add_result.stderr}")
-
-                commit_result = subprocess.run(
-                    ["git", "commit", "-m", commit_msg],
-                    cwd=str(_PROJECT_ROOT),
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
+            try:
+                # 2. 构建执行上下文
+                context = BugFixExecutionContext(
+                    bug_id=bug_id,
+                    project_root=worktree.path,
+                    base_branch=worktree.base_branch,
+                    branch_name=worktree.branch_name,
+                    worktree_path=worktree.path,
                 )
-                if commit_result.returncode != 0:
-                    error_msg = commit_result.stderr or commit_result.stdout or "git commit failed"
+
+                # 3. 执行修复
+                fix_result = self.bug_fix_agent.execute_fix(bug_report, proposal, context=context)
+
+                if not isinstance(fix_result, dict) or not fix_result.get("success"):
                     self._transition(bug_id, "fix_failed")
-                    failed_result = {
-                        **fix_result,
-                        "success": False,
-                        "error": error_msg.strip(),
-                        "commit_failed": True,
-                    }
-                    self._update_bug_report(bug_id, fix_result=failed_result)
+                    self._update_bug_report(bug_id, fix_result=fix_result)
+                    self.branch_manager.cleanup_worktree(worktree, keep_on_failure=True)
                     return {
                         "status": "fix_failed",
                         "bug_id": bug_id,
-                        "error": error_msg.strip(),
+                        "error": fix_result.get("error", "未知错误") if isinstance(fix_result, dict) else str(fix_result),
                     }
 
-                # 获取 commit hash
-                result = subprocess.run(
-                    ["git", "rev-parse", "HEAD"],
-                    cwd=str(_PROJECT_ROOT),
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(f"git rev-parse failed: {result.stderr}")
-                commit_hash = result.stdout.strip()
+                # 4. 提交修复
+                code_changes = proposal.get("code_changes", [])
+                file_list = [c.get("file_path", "") for c in code_changes if c.get("file_path")]
+                title = bug_report.get("title", "untitled")
+                commit_msg = f"fix(auto): {bug_id} - {title}"
+                commit_sha = self.branch_manager.commit_fix(worktree, files=file_list, message=commit_msg)
 
-                # 更新 Bug 报告
+                # 5. 更新 Bug 报告（含分支元数据）
                 self._update_bug_report(
                     bug_id,
                     fix_result=fix_result,
-                    git_commit_hash=commit_hash,
+                    fix_branch=worktree.branch_name,
+                    fix_commit=commit_sha,
+                    base_branch=worktree.base_branch,
+                    base_sha=worktree.base_sha,
+                    fix_worktree_path=str(worktree.path),
+                    merge_status="pending_approval",
                 )
 
-                # 转换到 verified
+                # 6. 转换到 verified（不是直接 fixed）
                 self._transition(bug_id, "verified")
 
-                # 转换到 fixed
-                self._transition(bug_id, "fixed")
-
-                # 保存修复报告
+                # 7. 保存修复报告
                 self._save_analysis_file(bug_id, "fix_report", fix_result)
 
+                # 8. 清理 worktree
+                self.branch_manager.cleanup_worktree(worktree, keep_on_failure=True)
+
                 return {
-                    "status": "fixed",
+                    "status": "verified",
                     "bug_id": bug_id,
-                    "commit_hash": commit_hash,
+                    "fix_branch": worktree.branch_name,
+                    "commit_hash": commit_sha,
+                    "merge_status": "pending_approval",
+                    "base_branch": worktree.base_branch,
+                    "base_sha": worktree.base_sha,
                 }
-            else:
+
+            except Exception as e:
+                logger.error(f"Bug {bug_id} 修复执行异常: {e}")
                 self._transition(bug_id, "fix_failed")
-
-                error_msg = fix_result.get("error", "未知错误") if isinstance(fix_result, dict) else str(fix_result)
-                self._update_bug_report(bug_id, fix_result=fix_result)
-
+                self._update_bug_report(bug_id, fix_result={"success": False, "error": str(e)})
+                self.branch_manager.cleanup_worktree(worktree, keep_on_failure=True)
                 return {
                     "status": "fix_failed",
                     "bug_id": bug_id,
-                    "error": error_msg,
+                    "error": str(e),
                 }
 
         except Exception as e:
-            logger.error(f"Bug {bug_id} 修复执行异常: {e}")
-
+            logger.error(f"Bug {bug_id} 准备 worktree 失败: {e}")
             self._transition(bug_id, "fix_failed")
-            self._update_bug_report(bug_id, fix_result={"success": False, "error": str(e)})
-
+            self._update_bug_report(bug_id, fix_result={"success": False, "error": f"worktree preparation failed: {e}"})
             return {
                 "status": "fix_failed",
                 "bug_id": bug_id,
                 "error": str(e),
             }
+
+    def merge_fix(self, bug_id: str, force: bool = False) -> dict:
+        """将已验证的修复合并到基础分支。
+
+        参数:
+            bug_id: Bug 唯一标识
+            force: 是否绕过自动合并阻止（需要用户明确确认）
+
+        返回:
+            合并结果字典
+        """
+        bug_report = self._read_bug_report(bug_id)
+        if bug_report is None:
+            return {"status": "error", "bug_id": bug_id, "error": f"Bug 报告未找到: {bug_id}"}
+
+        current_status = bug_report.get("status", "")
+        if current_status not in ("verified", "merge_pending"):
+            return {
+                "status": "error",
+                "bug_id": bug_id,
+                "error": f"Bug 状态不是 verified 或 merge_pending（当前: {current_status}）",
+            }
+
+        fix_branch = bug_report.get("fix_branch", "")
+        if not fix_branch:
+            return {"status": "error", "bug_id": bug_id, "error": "没有 fix_branch 记录，无法合并"}
+
+        # 构建 worktree descriptor
+        from src.product_app.bug_fix_branch_manager import BugFixWorktree
+        worktree = BugFixWorktree(
+            bug_id=bug_id,
+            base_branch=bug_report.get("base_branch", "main"),
+            branch_name=fix_branch,
+            path=Path(bug_report.get("fix_worktree_path", "")),
+            base_sha=bug_report.get("base_sha", ""),
+        )
+
+        merge_result = self.branch_manager.merge_fix(worktree, force=force)
+
+        if merge_result.get("merged"):
+            self._transition(bug_id, "fixed")
+            self._update_bug_report(
+                bug_id,
+                merge_status="merged",
+                merge_commit=merge_result.get("merge_commit", ""),
+            )
+        else:
+            self._transition(bug_id, "merge_pending")
+            self._update_bug_report(bug_id, merge_status="merge_failed")
+
+        return {
+            "status": "fixed" if merge_result.get("merged") else "error",
+            "bug_id": bug_id,
+            "merge_result": merge_result,
+        }
 
     def _transition(self, bug_id: str, new_status: str) -> bool:
         """执行状态转换

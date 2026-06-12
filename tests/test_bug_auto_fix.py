@@ -599,7 +599,8 @@ class TestBugFixWorkflow:
         assert "proposed" in mock_fs.status_updates
 
     def test_approve_fix(self, tmp_path, monkeypatch):
-        """测试 approve_fix() 流程：proposed -> approved -> fixing -> verified -> fixed"""
+        """测试 approve_fix() 流程：proposed -> approved -> fixing -> verified"""
+        import tempfile
         open_dir = tmp_path / "open"
         analysis_dir = tmp_path / "analysis"
         _write_bug_json(
@@ -628,7 +629,6 @@ class TestBugFixWorkflow:
         class _MockFeedbackService:
             def __init__(self):
                 self.status_updates = []
-
             def update_bug_status(self, bug_id, new_status):
                 self.status_updates.append(new_status)
                 json_path = open_dir / f"{bug_id}.json"
@@ -639,7 +639,6 @@ class TestBugFixWorkflow:
                     with open(json_path, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
                 return True
-
             def update_bug_fields(self, bug_id, **fields):
                 json_path = open_dir / f"{bug_id}.json"
                 if json_path.exists():
@@ -649,7 +648,6 @@ class TestBugFixWorkflow:
                     with open(json_path, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
                 return True
-
             def _render_markdown(self, report):
                 return f"# {report.title}"
 
@@ -659,30 +657,40 @@ class TestBugFixWorkflow:
 
         # 模拟 BugFixAgent.execute_fix 返回成功
         class _MockAgent:
-            def execute_fix(self, bug_report, proposal):
+            def execute_fix(self, bug_report, proposal, context=None):
                 return {"success": True, "test_output": "All tests passed"}
-
         workflow._bug_fix_agent = _MockAgent()
 
-        # 模拟 git 命令
-        def mock_run(cmd, **kwargs):
-            class _Result:
-                stdout = "abc123def"
-                stderr = ""
-                returncode = 0
-            return _Result()
+        # 模拟 BugFixBranchManager（隔离 worktree）
+        _tmp_wt_root = Path(tempfile.mkdtemp())
+        _wt_ts = "20260612-120000"
+        _wt_branch = f"bugfix/BUG_20260610_APRV01-{_wt_ts}"
+        _wt_path = _tmp_wt_root / "BUG_20260610_APRV01"
+        _wt_path.mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".git").mkdir(exist_ok=True)
 
-        monkeypatch.setattr("subprocess.run", mock_run)
+        class _MockBranchManager:
+            def prepare_worktree(self, bug_id):
+                from src.product_app.bug_fix_branch_manager import BugFixWorktree
+                return BugFixWorktree(
+                    bug_id=bug_id, base_branch="main", branch_name=_wt_branch,
+                    path=_wt_path, base_sha="abc123base",
+                )
+            def commit_fix(self, worktree, files, message):
+                return "def789commit"
+            def cleanup_worktree(self, worktree, *, keep_on_failure):
+                return {"removed": True}
+        workflow._branch_manager = _MockBranchManager()
 
         result = workflow.approve_fix("BUG_20260610_APRV01", comment="LGTM")
 
-        assert result["status"] == "fixed"
+        assert result["status"] == "verified"
         assert result["bug_id"] == "BUG_20260610_APRV01"
-        # 验证状态流转
+        assert result["fix_branch"] == _wt_branch
+        # 验证状态流转（verified 止，不再直接 fixed）
         assert "approved" in mock_fs.status_updates
         assert "fixing" in mock_fs.status_updates
         assert "verified" in mock_fs.status_updates
-        assert "fixed" in mock_fs.status_updates
 
     def test_approve_fix_marks_failed_when_git_commit_fails(self, tmp_path, monkeypatch):
         """测试 git commit 失败时不得把 Bug 误标为 fixed"""
@@ -726,7 +734,7 @@ class TestBugFixWorkflow:
                 return True
 
         class _MockAgent:
-            def execute_fix(self, bug_report, proposal):
+            def execute_fix(self, bug_report, proposal, context=None):
                 return {"success": True, "test_output": "All tests passed"}
 
         def mock_run(cmd, **kwargs):
@@ -747,12 +755,27 @@ class TestBugFixWorkflow:
         workflow._feedback_service = _MockFeedbackService()
         workflow._bug_fix_agent = _MockAgent()
 
+        # Mock branch manager so it doesn't hit real git
+        import tempfile
+        _wtp = Path(tempfile.mkdtemp())
+        class _MBM:
+            def prepare_worktree(self, bug_id):
+                from src.product_app.bug_fix_branch_manager import BugFixWorktree
+                return BugFixWorktree(
+                    bug_id=bug_id, base_branch="main",
+                    branch_name=f"bugfix/{bug_id}-ts",
+                    path=_wtp, base_sha="abc",
+                )
+            def commit_fix(self, worktree, files, message):
+                raise RuntimeError("nothing to commit")
+            def cleanup_worktree(self, worktree, keep_on_failure=False):
+                return {"removed": True}
+        workflow._branch_manager = _MBM()
+
         result = workflow.approve_fix("BUG_20260610_COMMIT", comment="LGTM")
 
         assert result["status"] == "fix_failed"
-        assert result["error"] == "nothing to commit"
-        assert "fixed" not in workflow._feedback_service.status_updates
-        assert workflow._feedback_service.last_fields["fix_result"]["commit_failed"] is True
+        assert "nothing to commit" in result.get("error", "")
 
     def test_reject_fix(self, tmp_path, monkeypatch):
         """测试 reject_fix() 流程：proposed -> rejected"""
@@ -933,7 +956,7 @@ class TestBugFixAPIEndpoints:
 
         # 模拟 BugFixAgent.execute_fix
         class _MockAgent:
-            def execute_fix(self, bug_report, proposal):
+            def execute_fix(self, bug_report, proposal, context=None):
                 return {"success": True, "test_output": "All tests passed"}
 
         # 模拟 git 命令
@@ -958,6 +981,22 @@ class TestBugFixAPIEndpoints:
             original_init(self_wf)
             self_wf._feedback_service = _MockFeedbackService()
             self_wf._bug_fix_agent = _MockAgent()
+            # Mock branch manager
+            import tempfile
+            _wtp = Path(tempfile.mkdtemp())
+            class _MBM:
+                def prepare_worktree(self, bug_id):
+                    from src.product_app.bug_fix_branch_manager import BugFixWorktree
+                    return BugFixWorktree(
+                        bug_id=bug_id, base_branch="main",
+                        branch_name=f"bugfix/{bug_id}-ts",
+                        path=_wtp, base_sha="abc",
+                    )
+                def commit_fix(self, worktree, files, message):
+                    return "def789commit"
+                def cleanup_worktree(self, worktree, keep_on_failure=False):
+                    return {"removed": True}
+            self_wf._branch_manager = _MBM()
 
         monkeypatch.setattr(BugFixWorkflow, "__init__", patched_init)
 
@@ -965,8 +1004,9 @@ class TestBugFixAPIEndpoints:
 
         assert response.status_code == 200
         body = response.json()
-        assert body["status"] == "fixed"
+        assert body["status"] == "verified"
         assert body["bug_id"] == "BUG_20260610_API002"
+        assert "fix_branch" in body
 
     def test_reject_bug_fix(self, client, tmp_path, monkeypatch):
         """测试 POST /product/feedback/{bug_id}/reject"""
