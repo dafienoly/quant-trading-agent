@@ -1,0 +1,224 @@
+"""Deterministic AI output sanitizer.
+
+Rejects or sanitizes LLM outputs containing direct trade decisions,
+order instructions, or executable trade payloads.
+
+Used as a shared guard by all AI agent modules (factor discovery,
+recommendation research, signal explanation) and the API layer.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+# ---------------------------------------------------------------------------
+# Forbidden patterns — matched against JSON stringified output
+# ---------------------------------------------------------------------------
+
+# Direct trade decision labels (case-insensitive in relevant contexts)
+_FORBIDDEN_DECISIONS = {"BUY", "SELL"}
+
+# Key paths that would indicate a direct trade decision
+_FORBIDDEN_KEYS: set[str] = {
+    # Order instructions
+    "order_type",
+    "order_quantity",
+    "order_price",
+    "limit_price",
+    "stop_price",
+    # Position sizing
+    "position_size",
+    "target_position",
+    "position_weight",
+    "allocation",
+    "trade_size",
+    # Order payloads
+    "order_payload",
+    "order_instruction",
+    "trade_decision",
+    "execution_plan",
+}
+
+# Regex patterns catching executable instructions in string values
+_FORBIDDEN_VALUE_PATTERNS: list[re.Pattern] = [
+    # BUY/SELL with word or underscore boundaries (catches "BUY", "BUY_signal", "_BUY_")
+    re.compile(r'(?:\b|_)BUY(?:\b|_)'),
+    re.compile(r'(?:\b|_)SELL(?:\b|_)'),
+    re.compile(r'\b(place|submit|execute)\s+order\b', re.IGNORECASE),
+    re.compile(r'\b(position|allocation)\s*(=|:)\s*\d', re.IGNORECASE),
+    re.compile(r'\bat\s*(market|limit)\s*price', re.IGNORECASE),
+]
+
+
+def sanitize_llm_output(raw: dict[str, Any] | list[Any]) -> dict[str, Any]:
+    """Sanitize LLM output, stripping or blocking trade-execution content.
+
+    Returns a dict with:
+      - ``original``: true if raw was already a dict (preserves status)
+      - ``sanitized``: cleaned output dict
+      - ``blocked``: true if output was blocked entirely
+      - ``block_reasons``: list of why it was blocked
+      - ``warnings``: list of non-blocking sanitization warnings
+
+    If the input is a list, wraps it in a dict first.
+    """
+    result: dict[str, Any] = {
+        "sanitized": {},
+        "blocked": False,
+        "block_reasons": [],
+        "warnings": [],
+    }
+
+    if not isinstance(raw, dict):
+        result["sanitized"] = {"data": raw}
+        result["warnings"].append("LLM output was not a dict; wrapped in data key")
+        return result
+
+    # ---- Step 1: Check top-level status ----
+    status = raw.get("status")
+    if status in ("unavailable", "invalid_response", "failed"):
+        result["sanitized"] = dict(raw)
+        return result
+
+    # ---- Step 2: Check for forbidden top-level keys ----
+    blocked_keys = _find_forbidden_keys(raw)
+    if blocked_keys:
+        result["blocked"] = True
+        result["block_reasons"].append(
+            f"Output contains forbidden key(s): {', '.join(sorted(blocked_keys))}"
+        )
+        # Still produce a sanitized copy for debugging
+        sanitized = {k: v for k, v in raw.items() if k not in _FORBIDDEN_KEYS}
+        sanitized["sanitization_note"] = (
+            f"Blocked keys removed: {', '.join(sorted(blocked_keys))}"
+        )
+        result["sanitized"] = sanitized
+        return result
+
+    # ---- Step 3: Check value-level forbidden patterns ----
+    violations = _find_forbidden_values(raw)
+    if violations:
+        result["blocked"] = True
+        result["block_reasons"].extend(violations)
+        sanitized = _strip_violating_values(raw, violations)
+        sanitized["sanitization_note"] = "Some values sanitized; see block_reasons"
+        result["sanitized"] = sanitized
+        return result
+
+    # ---- Step 4: Check nested forbidden keys ----
+    nested_blocked = _find_forbidden_keys_nested(raw)
+    if nested_blocked:
+        result["blocked"] = True
+        result["block_reasons"].append(
+            f"Nested output contains forbidden key(s): {', '.join(sorted(nested_blocked))}"
+        )
+        sanitized = _strip_nested_forbidden_keys(raw, nested_blocked)
+        sanitized["sanitization_note"] = (
+            f"Nested blocked keys removed: {', '.join(sorted(nested_blocked))}"
+        )
+        result["sanitized"] = sanitized
+        return result
+
+    # ---- Pass ----
+    result["sanitized"] = dict(raw)
+    return result
+
+
+def _find_forbidden_keys(d: dict[str, Any]) -> set[str]:
+    """Find any top-level keys that match forbidden trade-decision keys."""
+    d_lower = {k.lower(): k for k in d}
+    return {d_lower[k] for k in _FORBIDDEN_KEYS if k in d_lower}
+
+
+def _find_forbidden_values(d: dict[str, Any]) -> list[str]:
+    """Scan string values for forbidden patterns.
+
+    Returns a list of human-readable violation descriptions.
+    """
+    violations: list[str] = []
+    for key, value in d.items():
+        if isinstance(value, str):
+            for pattern in _FORBIDDEN_VALUE_PATTERNS:
+                if pattern.search(value):
+                    violations.append(
+                        f"Field '{key}' contains forbidden pattern: {pattern.pattern}"
+                    )
+                    break  # one violation per field
+        elif isinstance(value, dict):
+            violations.extend(_find_forbidden_values(value))
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    violations.extend(_find_forbidden_values(item))
+                elif isinstance(item, str):
+                    for pattern in _FORBIDDEN_VALUE_PATTERNS:
+                        if pattern.search(item):
+                            violations.append(
+                                f"List item contains forbidden pattern: {pattern.pattern}"
+                            )
+                            break
+    return violations
+
+
+def _find_forbidden_keys_nested(d: dict[str, Any], depth: int = 0) -> set[str]:
+    """Recursively find forbidden keys at any nesting level."""
+    if depth > 5:
+        return set()
+    found: set[str] = set()
+    for key, value in d.items():
+        if key.lower() in _FORBIDDEN_KEYS:
+            found.add(key)
+        if isinstance(value, dict):
+            found |= _find_forbidden_keys_nested(value, depth + 1)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    found |= _find_forbidden_keys_nested(item, depth + 1)
+    return found
+
+
+def _strip_violating_values(d: dict[str, Any], violations: list[str]) -> dict[str, Any]:
+    """Return a copy of dict with violating string values replaced."""
+    cleaned = {}
+    for key, value in d.items():
+        if isinstance(value, str):
+            # Check if this field is violating
+            for pattern in _FORBIDDEN_VALUE_PATTERNS:
+                if pattern.search(value):
+                    cleaned[key] = f"[SANITIZED: {pattern.pattern} removed]"
+                    break
+            else:
+                cleaned[key] = value
+        elif isinstance(value, dict):
+            cleaned[key] = _strip_violating_values(value, violations)
+        elif isinstance(value, list):
+            cleaned[key] = [
+                _strip_violating_values(item, violations) if isinstance(item, dict)
+                else item
+                for item in value
+            ]
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+def _strip_nested_forbidden_keys(
+    d: dict[str, Any], forbidden_keys: set[str]
+) -> dict[str, Any]:
+    """Recursively strip forbidden keys from a nested dict."""
+    cleaned = {}
+    for key, value in d.items():
+        if key in forbidden_keys:
+            continue
+        if isinstance(value, dict):
+            cleaned[key] = _strip_nested_forbidden_keys(value, forbidden_keys)
+        elif isinstance(value, list):
+            cleaned[key] = [
+                _strip_nested_forbidden_keys(item, forbidden_keys) if isinstance(item, dict)
+                else item
+                for item in value
+            ]
+        else:
+            cleaned[key] = value
+    return cleaned

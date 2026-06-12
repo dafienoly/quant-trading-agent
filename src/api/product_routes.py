@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
 
@@ -37,6 +38,42 @@ _config_service = get_config_service()
 
 def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _probe_url(url: str, timeout_seconds: float = 3.0) -> dict[str, Any]:
+    """Lightweight HTTP probe returning status and latency.
+
+    Returns dict with ``status`` (reachable/unreachable/error),
+    ``url``, and optionally ``latency_ms``.
+    """
+    import urllib.request
+    import time
+    start = time.monotonic()
+    try:
+        resp = urllib.request.urlopen(url, timeout=timeout_seconds)
+        elapsed = int((time.monotonic() - start) * 1000)
+        return {
+            "status": "reachable",
+            "url": url,
+            "latency_ms": elapsed,
+            "http_status": resp.status,
+        }
+    except (urllib.error.URLError, ConnectionRefusedError, OSError) as exc:
+        elapsed = int((time.monotonic() - start) * 1000)
+        return {
+            "status": "unreachable",
+            "url": url,
+            "latency_ms": elapsed,
+            "reason": str(exc),
+        }
+    except Exception as exc:
+        elapsed = int((time.monotonic() - start) * 1000)
+        return {
+            "status": "error",
+            "url": url,
+            "latency_ms": elapsed,
+            "reason": str(exc),
+        }
 
 
 def _get_bug_fix_workflow():
@@ -635,18 +672,40 @@ def get_runtime_services() -> dict[str, Any]:
 
     manager = get_service_manager()
     jobs = manager.list_jobs()
-    # jobs can be a list (list_jobs return format) or a dict (legacy format)
     jobs_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+
+    # AkTools: probe known port
+    aktools_port = os.getenv("AKTOOLS_BASE_URL", "http://127.0.0.1:8080")
+    aktools_status = _probe_url(f"{aktools_port}/version")
+    # Dashboard: probe streamlit port
+    dashboard_status = _probe_url("http://127.0.0.1:8771")
+
+    # LLM: use ModelRouter (lazy-import safe)
+    try:
+        from src.llm.model_router import ModelRouter
+        llm_config = ModelRouter().get_config()
+        llm_status = {
+            "status": "ok",
+            "provider": llm_config.provider,
+            "model": llm_config.model,
+            "api_key_present": llm_config.api_key_present,
+        }
+    except Exception:
+        llm_status = {"status": "unavailable", "reason": "model_router_error"}
+
     return {
         "status": "ok",
         "services": {
             "api": {"status": "running", "url": "/product/health"},
+            "aktools": aktools_status,
+            "dashboard": dashboard_status,
             "bug_fix_agent": {
                 "status": next(
                     (j.get("state") for j in jobs_list if j.get("name") == "bug_fix_agent"),
                     "not_started",
                 ),
             },
+            "llm": llm_status,
         },
     }
 
@@ -747,6 +806,7 @@ def ai_factor_discover(
 ) -> dict[str, Any]:
     """AI 因子假设挖掘——LLM 输出结构化研究假设，不输出交易决策"""
     from src.agent_orchestrator.factor_discovery_agent import FactorDiscoveryAgent
+    from src.agent_orchestrator.output_guard import sanitize_llm_output
 
     router = _get_model_router()
     config = router.get_config()
@@ -754,9 +814,22 @@ def ai_factor_discover(
         return {"status": "unavailable", "reason": "missing_api_key"}
     agent = FactorDiscoveryAgent(router=router)
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-    result = agent.discover(symbol_list, context={"theme_pool": theme_pool})
+    raw = agent.discover(symbol_list, context={"theme_pool": theme_pool})
+
+    # API 层输出安全守卫
+    guard_result = sanitize_llm_output(raw)
+    if guard_result["blocked"]:
+        return {
+            "status": "blocked_by_guard",
+            "message": "LLM output contained forbidden trade-decision content",
+            "block_reasons": guard_result["block_reasons"],
+            "original_data": guard_result["sanitized"],
+        }
+    result = guard_result["sanitized"]
     if isinstance(result, dict) and result.get("status") != "unavailable":
         result["disclaimer"] = "AI output is research/explanation only. It is not a trading instruction."
+        if guard_result["warnings"]:
+            result.setdefault("warnings", []).extend(guard_result["warnings"])
     return result
 
 
@@ -768,6 +841,7 @@ def ai_recommendations(
 ) -> dict[str, Any]:
     """AI 研究推荐——对已有数据和因子排序，不输出买卖指令"""
     from src.agent_orchestrator.recommendation_agent import RecommendationAgent
+    from src.agent_orchestrator.output_guard import sanitize_llm_output
 
     router = _get_model_router()
     config = router.get_config()
@@ -775,9 +849,23 @@ def ai_recommendations(
         return {"status": "unavailable", "reason": "missing_api_key"}
     agent = RecommendationAgent(router=router)
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-    result = agent.recommend(symbol_list, context={"start_date": start_date, "end_date": end_date})
+    raw = agent.recommend(symbol_list, context={"start_date": start_date, "end_date": end_date})
+
+    # API 层输出安全守卫
+    guard_result = sanitize_llm_output(raw)
+    if guard_result["blocked"]:
+        return {
+            "status": "blocked_by_guard",
+            "disclaimer": "Research ranking only. Not a trading instruction.",
+            "message": "LLM output contained forbidden trade-decision content",
+            "block_reasons": guard_result["block_reasons"],
+            "original_data": guard_result["sanitized"],
+        }
+    result = guard_result["sanitized"]
     if isinstance(result, dict):
         result["disclaimer"] = "Research ranking only. Not a trading instruction."
+        if guard_result["warnings"]:
+            result.setdefault("warnings", []).extend(guard_result["warnings"])
     return result
 
 
@@ -786,20 +874,49 @@ def ai_signal_explain(
     signal_id: str,
     symbols: str = Query("", description="Comma-separated symbols"),
 ) -> dict[str, Any]:
-    """AI 信号解释——解释已有信号草稿，不改变信号类型"""
+    """AI 信号解释——解释已有信号草稿，不改变信号类型
+
+    只应从 LiveSignalOrchestrator 加载已经存在的信号，
+    不可虚构或改变信号类型。
+    """
     from src.agent_orchestrator.signal_explanation_agent import SignalExplanationAgent
+    from src.agent_orchestrator.output_guard import sanitize_llm_output
 
     router = _get_model_router()
     config = router.get_config()
     if not config.api_key_present:
         return {"status": "unavailable", "reason": "missing_api_key"}
 
+    # ── 加载真实信号 ──────────────────────────────────────
+    orchestrator = _get_live_signal_orchestrator()
+    status = orchestrator.get_signal_status(signal_id)
+    if status.get("status") == "not_found" or status.get("signal") is None:
+        return {
+            "status": "not_found",
+            "message": f"Signal {signal_id} not found. The signal explanation agent can only explain existing signals.",
+        }
+
+    signal_draft = status["signal"]
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
-    signal_draft = {"signal_id": signal_id, "signal_type": "hold"}
     context = {"symbols": symbol_list}
 
     agent = SignalExplanationAgent(router=router)
     result = agent.explain(signal_draft, context=context)
-    if isinstance(result, dict) and result.get("status") != "unavailable":
-        result["disclaimer"] = "AI output is research/explanation only. It is not a trading instruction."
-    return result
+
+    # ── API 层输出安全守卫 ────────────────────────────────
+    guard_result = sanitize_llm_output(result)
+    if guard_result["blocked"]:
+        return {
+            "status": "blocked_by_guard",
+            "signal_id": signal_id,
+            "original_signal_type": signal_draft.get("signal_type", ""),
+            "message": "AI output was blocked by safety guard",
+            "block_reasons": guard_result["block_reasons"],
+        }
+
+    sanitized = guard_result["sanitized"]
+    if isinstance(sanitized, dict) and sanitized.get("status") != "unavailable":
+        sanitized["disclaimer"] = "AI output is research/explanation only. It is not a trading instruction."
+        if guard_result["warnings"]:
+            sanitized.setdefault("warnings", []).extend(guard_result["warnings"])
+    return sanitized

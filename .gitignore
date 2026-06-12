@@ -59,4 +59,4 @@ feedback/
 !feedback/bugs/
 !feedback/index.json
 !feedback/README.md
-aktools_log.log
+aktools_log.log*

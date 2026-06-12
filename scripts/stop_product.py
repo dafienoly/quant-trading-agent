@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PID_FILE = PROJECT_ROOT / "runtime" / "product.pid.json"
 STARTUP_LOG = PROJECT_ROOT / "logs" / "product_startup.log"
 
-KNOWN_PORTS = (8000, 8001, 8002, 8501, 8502, 8771)  # common project ports
+KNOWN_PORTS = (8000, 8001, 8002, 8080, 8501, 8502, 8771)  # common project ports
 
 
 def _log(msg: str) -> None:

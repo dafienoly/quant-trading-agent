@@ -1197,3 +1197,31 @@ class TestBugFixProposalValidation:
         assert result["is_valid"] is True
         assert result["invalid_files"] == []
         assert result["blocked_files"] == []
+
+
+# ============================================================
+# TestMissingOpenAI
+# ============================================================
+
+
+class TestMissingOpenAI:
+    """Tests for graceful degradation when openai package is missing."""
+
+    def test_bug_fix_agent_construction_without_openai(self, monkeypatch):
+        """BugFixAgent construction does not crash when openai package is missing."""
+        import builtins
+
+        original_import = builtins.__import__
+
+        def _mock_import(name, *args, **kwargs):
+            if name == "openai":
+                raise ModuleNotFoundError(f"No module named '{name}'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", _mock_import)
+
+        agent = BugFixAgent()
+        assert agent is not None
+        # Verify agent can still access config
+        assert agent.api_key is not None
+        assert agent.model is not None

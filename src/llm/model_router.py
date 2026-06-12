@@ -5,8 +5,6 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from openai import OpenAI
-
 
 @dataclass(frozen=True)
 class LLMConfig:
@@ -44,6 +42,18 @@ class ModelRouter:
         api_key = os.getenv(config.api_key_env, "").strip()
         if not api_key:
             return {"status": "unavailable", "reason": "missing_api_key", "schema": schema_name}
+
+        # Lazy import: openai package may not be installed
+        try:
+            from openai import OpenAI
+        except ModuleNotFoundError:
+            return {
+                "status": "unavailable",
+                "reason": "openai_package_not_installed",
+                "message": "The 'openai' package is required for LLM features. "
+                "Install it with: pip install openai>=1.0",
+                "schema": schema_name,
+            }
 
         client = OpenAI(api_key=api_key, base_url=config.api_base)
         response = client.chat.completions.create(

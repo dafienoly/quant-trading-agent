@@ -2,8 +2,8 @@
 """Summarize open feedback bugs by category.
 
 Usage:
-    .venv/bin/python scripts/summarize_feedback_bugs.py \\
-        --input feedback/bugs/open \\
+    .venv/bin/python scripts/summarize_feedback_bugs.py \
+        --input feedback/bugs/open \
         --output-dir docs/test_reports
 """
 from __future__ import annotations

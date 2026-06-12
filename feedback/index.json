@@ -31,9 +31,9 @@
       "severity": "medium",
       "status": "open",
       "created_at": "2026-06-10 14:16:42",
-      "updated_at": "2026-06-11 18:02:22",
+      "updated_at": "2026-06-12 11:17:20",
       "dedupe_hash": "1cccc370326c30ff",
-      "occurrence_count": 28,
+      "occurrence_count": 29,
       "triage_note": "根因：AkShare 免费数据源批量实时行情限流。已修复：1) 增加重试+指数退避 2) 逐symbol降级 3) 非交易时段不生成Bug。"
     },
     {
@@ -180,5 +180,5 @@
       "occurrence_count": 1
     }
   ],
-  "updated_at": "2026-06-11 23:44:35"
+  "updated_at": "2026-06-12 11:17:20"
 }

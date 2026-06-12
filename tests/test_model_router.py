@@ -54,3 +54,40 @@ def test_llm_status_endpoint(monkeypatch):
     assert body["model"] == "deepseek-v4-flash"
     assert body["api_key_present"] is True
     assert body["trade_decision_enabled"] is False
+
+
+def test_chat_json_returns_unavailable_when_openai_missing(monkeypatch):
+    """chat_json returns unavailable when openai package is missing."""
+    import builtins
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_API_KEY_ENV", "DEEPSEEK_API_KEY")
+
+    original_import = builtins.__import__
+
+    def _mock_import(name, *args, **kwargs):
+        if name == "openai":
+            raise ModuleNotFoundError(f"No module named '{name}'")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _mock_import)
+
+    router = ModelRouter()
+    result = router.chat_json(
+        system_prompt="test",
+        user_prompt="test",
+        schema_name="test",
+    )
+
+    assert result["status"] == "unavailable"
+    assert "openai_package_not_installed" in result.get("reason", "")
+
+
+def test_get_config_does_not_import_openai(monkeypatch):
+    """get_config() works without the openai package."""
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+
+    config = ModelRouter().get_config()
+    assert config.provider == "deepseek"
+    assert config.model == "deepseek-v4-flash"
+    assert config.api_key_present is True
