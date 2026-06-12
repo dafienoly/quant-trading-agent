@@ -60,3 +60,4 @@ feedback/
 !feedback/index.json
 !feedback/README.md
 aktools_log.log*
+memory/

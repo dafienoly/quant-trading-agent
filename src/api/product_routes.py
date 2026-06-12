@@ -903,8 +903,9 @@ def ai_signal_explain(
     agent = SignalExplanationAgent(router=router)
     result = agent.explain(signal_draft, context=context)
 
-    # ── API 层输出安全守卫 ────────────────────────────────
-    guard_result = sanitize_llm_output(result)
+    # ── API 层输出安全守卫（豁免系统元数据字段）──────────────
+    _SIGNAL_EXPLAIN_EXEMPT = {"signal_id", "original_signal_type", "decision_source", "llm_model", "llm_provider"}
+    guard_result = sanitize_llm_output(result, exempt_keys=_SIGNAL_EXPLAIN_EXEMPT)
     if guard_result["blocked"]:
         return {
             "status": "blocked_by_guard",
