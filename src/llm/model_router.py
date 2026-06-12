@@ -1,9 +1,17 @@
+"""Model Router — configuration and legacy chat_json compatibility.
+
+``ModelRouter`` provides env-based provider/model config and a
+``chat_json()`` method that now delegates to ``DeepSeekRuntime``.
+
+All new code should use ``DeepSeekRuntime`` directly.
+"""
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from typing import Any
+
+from loguru import logger
 
 
 @dataclass(frozen=True)
@@ -16,6 +24,12 @@ class LLMConfig:
 
 
 class ModelRouter:
+    """Legacy configuration and compatibility router.
+
+    Kept for existing consumer code paths (e.g. ``/product/llm/status``).
+    Prefer ``DeepSeekRuntime`` for all new LLM calls.
+    """
+
     def get_config(self) -> LLMConfig:
         provider = os.getenv("LLM_PROVIDER", "deepseek").strip() or "deepseek"
         model = (
@@ -38,46 +52,37 @@ class ModelRouter:
         )
 
     def chat_json(self, *, system_prompt: str, user_prompt: str, schema_name: str) -> dict[str, Any]:
+        """Compatibility wrapper that delegates to DeepSeekRuntime.
+
+        New code should call ``DeepSeekRuntime.chat_json()`` directly.
+        """
         config = self.get_config()
         api_key = os.getenv(config.api_key_env, "").strip()
         if not api_key:
             return {"status": "unavailable", "reason": "missing_api_key", "schema": schema_name}
 
-        # Lazy import: openai package may not be installed
         try:
-            from openai import OpenAI
-        except ModuleNotFoundError:
-            return {
-                "status": "unavailable",
-                "reason": "openai_package_not_installed",
-                "message": "The 'openai' package is required for LLM features. "
-                "Install it with: pip install openai>=1.0",
-                "schema": schema_name,
-            }
+            from src.llm.deepseek_runtime import DeepSeekRuntime
+            from src.llm.schemas import DeepSeekRequest
 
-        client = OpenAI(api_key=api_key, base_url=config.api_base)
-        response = client.chat.completions.create(
-            model=config.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        text = response.choices[0].message.content or ""
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            cleaned = text.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.strip("`").strip()
-                if cleaned.startswith("json"):
-                    cleaned = cleaned[4:].strip()
-            try:
-                data = json.loads(cleaned)
-            except json.JSONDecodeError:
-                return {"status": "invalid_response", "raw": text, "schema": schema_name}
-        if isinstance(data, dict):
-            data.setdefault("llm_model", config.model)
-            data.setdefault("llm_provider", config.provider)
-            return data
-        return {"status": "invalid_response", "raw": text, "schema": schema_name}
+            runtime = DeepSeekRuntime(router=self)
+            result = runtime.chat_json(
+                DeepSeekRequest(
+                    profile="compat",
+                    schema_name=schema_name,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+            )
+
+            if result.status == "ok" and result.data is not None:
+                result.data.setdefault("llm_model", config.model)
+                result.data.setdefault("llm_provider", config.provider)
+                return result.data
+
+            error_reason = result.error.get("reason", result.status) if result.error else result.status
+            return {"status": result.status, "reason": error_reason, "schema": schema_name}
+
+        except Exception as exc:
+            logger.error("ModelRouter.chat_json failed: {}", exc)
+            return {"status": "unavailable", "reason": str(exc), "schema": schema_name}
