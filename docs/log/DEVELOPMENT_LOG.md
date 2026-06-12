@@ -123,6 +123,16 @@ quant-trading-agent/
 │   ├── execution_engine/        # 执行层 (待实现)
 │   ├── agent_orchestrator/      # Agent 编排 (待实现)
 │   ├── ui_report/               # 报告层 (待实现)
+│   ├── product_app/             # 产品应用层
+│   │   ├── feedback.py          # Bug 报告系统（含自动处理状态）
+│   │   ├── bug_fix_agent.py     # BugFix Agent（DeepSeek API 封装）
+│   │   ├── bug_watchdog.py      # Bug 文件监控 Hook
+│   │   ├── bug_fix_workflow.py  # Bug 修复工作流状态机
+│   │   ├── service_manager.py   # 后台作业调度
+│   │   ├── health.py            # 健康服务
+│   │   ├── config_service.py    # 配置中心
+│   │   ├── demo_data.py         # Demo 数据
+│   │   └── market_data.py       # 产品行情门面
 │   ├── models/
 │   │   └── schemas.py           # 数据模型定义
 │   ├── config/
@@ -143,10 +153,11 @@ quant-trading-agent/
     ├── test_phase3.py           # Phase 3 测试
     ├── test_audit_fixes.py      # Phase 1 审计修复测试
     ├── test_audit_phase2.py     # Phase 2 审计修复测试
-    └── test_audit_phase3.py     # Phase 3 审计修复测试
+    ├── test_audit_phase3.py     # Phase 3 审计修复测试
+    └── test_bug_auto_fix.py     # Phase 5.6 BUG自动处理测试
 ```
 
-### 2.3 8 个 Agent 角色
+### 2.3 9 个 Agent 角色
 
 | Agent | 职责 | 实现状态 |
 |-------|------|---------|
@@ -156,8 +167,9 @@ quant-trading-agent/
 | Strategy Agent | 评分、信号生成、板块轮动 | ✅ Phase 2 |
 | Backtest Agent | 回测执行、绩效评估、显著性检验 | ✅ Phase 3 |
 | Risk Agent | 风控检查、仓位约束、回撤控制 | ✅ Phase 3 (回测内) |
-| Execution Agent | 订单执行、交易时段控制 | ⬜ Phase 5 |
+| Execution Agent | 订单执行、交易时段控制 | ✅ Phase 5 |
 | Report Agent | 报告生成、可视化 | ✅ Phase 3 (回测内) |
+| BugFix Agent | Bug 自动分析、修复方案生成、自动修复 | ✅ Phase 5.6 |
 
 ---
 
@@ -490,7 +502,8 @@ A股印花税 0.1%（卖出），港股印花税 0.13%（买卖双向），在 `
 | Phase 3 | 1 个文件 | 42 | 100% |
 | Phase 3 审计 | 1 个文件 | 58 | 100% |
 | Phase 4 Risk-First | 4 个文件 | 11 | 100% |
-| **合计** | **13 个文件** | **262** | **100%** |
+| Phase 5.6 BUG自动处理 | 1 个文件 | 21 | 100% |
+| **合计** | **14 个文件** | **283** | **100%** |
 
 ### 6.2 运行测试
 
@@ -682,3 +695,231 @@ git push -u origin feature/phase4-fastapi
 | v0.4.0 | 2026-06-08 | Phase 3 | 回测与评估 |
 | v0.4.1 | 2026-06-08 | Phase 3 审计 | 审计整改 (248/248 测试通过) |
 | v0.5.0 | 2026-06-08 | Phase 4 Risk-First | 运行时风控+数据健康门禁+只读监控器+API (262/262 测试通过) |
+| v0.5.6 | 2026-06-10 | Phase 5.5 产品补强 | AkShare/AkTools 产品行情门面、实时行情 API、后台 quote_refresh 快照、9 Tab Dashboard 交互补强 (17 项聚焦测试通过) |
+| v0.6.0 | 2026-06-10 | Phase 5.6 BUG自动处理 | BugFixAgent(DeepSeek API)+BugWatchdog(文件监控)+BugFixWorkflow(状态机)+4 API端点+面板审批 (21 项集成测试通过) |
+| v0.6.1 | 2026-06-10 | Agent 开发流程治理 | 新增 Agent Development Pipeline，重写自测守则，AGENTS 接入 PM/Architect/Developer/Tester/Review/Acceptance 门禁 |
+
+---
+
+## 十一、2026-06-10 产品实时行情与 Dashboard 补强
+
+### 11.1 背景
+
+Phase 5.5 已具备一键启动与产品 Demo，但用户侧核心体验仍需要从“静态 Demo 表格”升级为“可选择数据源、可触发实时刷新、可落盘后台快照”的产品闭环。本次修改保持默认 `LEVEL_1_SIGNAL_ONLY`，不引入任何真实自动下单能力。
+
+### 11.2 完成内容
+
+1. 新增 `src/product_app/market_data.py`，统一产品侧 AkShare/AkTools provider 构建、symbols 规范化、Demo fallback、自动 feedback Bug 生成。
+2. `/product/quotes` 接入统一行情门面，支持 `provider=akshare|aktools`、`allow_demo`、`force_live` 参数。
+3. `ServiceManager.quote_refresh` 不再只写 `source=demo`，改为写入 `runtime/state/latest_quotes.json`，包含 `status/provider/is_demo/symbols/quotes/messages/updated_at`。
+4. Streamlit 产品 Dashboard 的 `Realtime Market` Tab 增加数据源选择、实时刷新、后台快照启动、后台作业状态展示。
+5. Dashboard 保留人工确认安全边界：不暴露批量买入确认，不启用 LEVEL_3 自动交易。
+6. 新增聚焦测试：
+   - `tests/test_product_market_data.py`
+   - `tests/test_product_realtime_api.py`
+   - `tests/test_product_service_manager_quotes.py`
+   - `tests/test_realtime_provider.py`
+   - `tests/test_product_dashboard_source.py`
+
+### 11.3 后续 Agent 必须遵守的开发准则
+
+1. 修改 `src/data_gateway/realtime_provider.py` 或 `src/data_gateway/aktools_provider.py` 时，必须确认 volume 内部单位仍为股，并保留 `data_source/updated_at/data_version/currency/timezone`。
+2. 修改 `/product/quotes`、`product_app.market_data` 或 `ServiceManager.quote_refresh` 时，必须同时验证 API 与后台 `latest_quotes.json` 快照。
+3. Dashboard 新增交易相关控件时，必须保持 LEVEL_3 不默认暴露，买入订单不允许批量确认。
+4. AkShare/AkTools 失败时不得静默吞错，必须生成 `feedback/bugs/open` 下的 Bug 清单；允许 Demo fallback，但 UI/API 必须显式标注 `is_demo=true` 或 `fallback_demo`。
+5. 触碰本次范围后必须运行：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase4_api.py tests/test_phase4_realtime_health.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py -q --basetemp=runtime\pytest-tmp
+.venv\Scripts\python.exe -m ruff check src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py tests\test_realtime_provider.py tests\test_product_market_data.py tests\test_product_realtime_api.py tests\test_product_service_manager_quotes.py tests\test_product_dashboard_source.py
+.venv\Scripts\python.exe -m py_compile src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py
+```
+
+### 11.4 本次验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| 聚焦 pytest | 17 passed |
+| ruff touched scope | All checks passed |
+| py_compile touched scope | passed |
+| API smoke | `/product/quotes` 返回 HTTP 200，Demo fallback 状态显式 |
+| Streamlit smoke | `http://127.0.0.1:8771` 返回 HTTP 200 |
+| Browser smoke | Realtime Market Tab、数据源选择、刷新、后台快照按钮可见，quote_refresh 状态可见 |
+
+---
+
+## 十二、2026-06-10 Phase 5.6 BUG 自动处理系统
+
+### 12.1 背景
+
+项目仍处于开发期，Bug 频繁产生且阻塞正常流程。原有的 Bug 收集系统（`feedback.py`）仅实现了提交、去重和状态管理，Bug 提交后需要人工逐个分析、定位、修复。Phase 5.6 将"Bug 收集"升级为"Bug 自动处理"，引入 AI Agent 作为 Bug 处理工程师。
+
+### 12.2 LLM 引擎选型
+
+| 资源 | 优势 | 劣势 | 结论 |
+|------|------|------|------|
+| Claude Code + DeepSeek | Claude 擅长代码理解和修复 | Claude Code 需要交互式环境，不适合后台自动化 | 不采用 |
+| DeepSeek API | 成本极低（约 0.001 元/千 token）、代码能力强、适合批量自动化 | 长上下文理解略弱于 Claude | **采用** |
+
+### 12.3 完成内容
+
+1. **BugFixAgent** (`src/product_app/bug_fix_agent.py`)：封装 DeepSeek API 调用
+   - `analyze()` — 读取 Bug 报告 + 项目上下文 → 调用 DeepSeek API → 生成根因分析
+   - `propose_fix()` — 基于分析结果 → 调用 DeepSeek API → 生成修复方案（含代码 diff）
+   - `execute_fix()` — 应用代码 diff → 运行 pytest → 验证通过则提交，失败则回滚
+   - `_call_deepseek()` — OpenAI 兼容接口调用，3 次重试 + 指数退避（2s/4s/8s）
+   - `_build_context()` — 根据 Bug 组件收集相关源码上下文（最多 3 文件，每文件 200 行）
+   - `_is_blocked_module()` — 拦截对 risk_engine/trading_log/backtest_report 的修改
+
+2. **BugWatchdog** (`src/product_app/bug_watchdog.py`)：文件监控 Hook
+   - 基于 watchdog 库监控 `feedback/bugs/open/` 目录新文件事件
+   - watchdog 未安装时自动降级为 30 秒轮询模式
+   - 2 秒防抖机制，避免重复触发
+   - 启动时自动处理已有 Bug 文件
+
+3. **BugFixWorkflow** (`src/product_app/bug_fix_workflow.py`)：状态机编排
+   - 状态流转：open → analyzing → proposed → approved → fixing → verified → fixed
+   - 分支状态：blocked（受限模块）、rejected（审批拒绝）、fix_failed（修复失败）
+   - `process_bug()` — 编排完整分析+方案生成流程
+   - `approve_fix()` — 审批通过后自动执行修复
+   - `reject_fix()` — 审批拒绝，可重新触发分析
+   - `_execute_and_verify()` — 干净工作区校验 + 执行修复 + pytest 验证 + git commit
+
+4. **FeedbackService 扩展** (`src/product_app/feedback.py`)：
+   - BugReport 新增 6 字段：analysis_report/fix_proposal/approval_status/approval_comment/fix_result/git_commit_hash
+   - 新增 8 个状态常量：analyzing/proposed/approved/rejected/fixing/fix_failed/verified/blocked
+   - 新增 `feedback/bugs/analysis/` 目录
+
+5. **ServiceManager 扩展** (`src/product_app/service_manager.py`)：
+   - 新增 `bug_fix_agent` 作业类型
+   - 启动时创建 BugWatchdog 并注册回调
+   - 停止时自动关闭 BugWatchdog
+
+6. **API 端点** (`src/api/product_routes.py`)：
+   - `GET /product/feedback/{bug_id}/analysis` — 获取分析报告、修复方案、修复结果和审批信息
+   - `POST /product/feedback/{bug_id}/approve` — 审批修复方案
+   - `POST /product/feedback/{bug_id}/reject` — 拒绝修复方案
+   - `GET /product/feedback/{bug_id}/fix-status` — 获取修复进度
+
+7. **产品面板** (`src/ui_report/product_dashboard.py`)：
+   - 状态机步骤指示器（7 步水平进度条）
+   - 分析报告和修复方案展开显示
+   - Approve/Reject 操作按钮
+   - 修复执行结果展示
+
+8. **依赖更新** (`pyproject.toml`)：
+   - 新增 `openai>=1.0`（DeepSeek API 调用）
+   - 新增 `watchdog>=3.0`（文件系统监控）
+
+9. **集成测试** (`tests/test_bug_auto_fix.py`)：
+   - 25 个测试用例：BugFixAgent + BugWatchdog + BugFixWorkflow + API端点 + ServiceManager 常驻作业
+
+### 12.4 安全约束
+
+1. 修复方案必须经过人工审批才能执行（与 AGENTS.md 2.1 原则一致）
+2. 禁止修改风控模块、交易日志、回测报告（与 AGENTS.md 4.2 一致）
+3. 自动修复必须在干净 Git 工作区执行，禁止覆盖用户或其他 Agent 的未提交修改
+4. 修复后必须运行 pytest 验证，测试不通过则自动回滚
+5. DeepSeek API Key 从环境变量读取，不硬编码
+6. 受限模块必须在方案生成和执行修复两个入口重复拦截
+7. git commit 失败不得将 Bug 标记为 fixed
+
+### 12.5 后续 Agent 必须遵守的开发准则
+
+1. 修改 `bug_fix_agent.py` 时，不得移除 `_is_blocked_module()` 检查或绕过审批流程
+2. 修改 `bug_fix_workflow.py` 状态机时，必须保持人工审批门禁（proposed → approved 不可跳过）
+3. 新增 Bug 状态时，必须同步更新 `VALID_TRANSITIONS` 和 `_status_to_dir()` 映射
+4. 修改 DeepSeek API 调用逻辑时，必须保持重试机制和错误处理
+5. 触碰本次范围后必须运行：
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_bug_auto_fix.py -v
+```
+
+### 12.6 本次验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| 集成测试 | 25 passed |
+| checklist 验证 | 30/30 项全部通过 |
+| AGENTS.md 合规 | 人工确认原则 ✅ / 禁止修改风控 ✅ / 禁止硬编码密钥 ✅ |
+
+---
+
+## 十三、2026-06-10 Agent 开发流程治理
+
+### 13.1 背景
+
+项目已进入多 Agent 协作阶段，原有 `docs/design/AGENTS.md`、`docs/policy/*` 主要约束产品、交易、数据、风控和执行行为，但对“开发团队 Agent 如何协作”缺少统一流程。随着 PM、Architect、Developer、Tester、BugFix、Reviewer、Acceptance 多角色并行，必须建立可追溯的开发管线，防止需求被误解、架构被绕过、测试被跳过、功能未验收即进入下一阶段。
+
+### 13.2 完成内容
+
+1. 新增 `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`：
+   - 定义 User → PM → Architect → Developer → Tester → BugFix → Architect Review → PM Acceptance → Log/Release 的完整门禁。
+   - 规定每个角色的输入、输出、禁止项和退出条件。
+   - 规定标准交付物目录：`docs/requirements/`、`docs/design/`、`docs/dev_reports/`、`docs/test_reports/`、`docs/review/`、`docs/acceptance/`。
+   - 定义缺陷等级 S0-S4 和受限模块额外规则。
+   - 提供各类 Agent 的提示词骨架。
+
+2. 重写 `docs/policy/SELF_TEST_CHECKLIST.md`：
+   - 从“固定步骤”升级为“按触碰范围分级自测”。
+   - 定义 L0-L6 自测级别：文档、普通代码、API/配置、前端、数据/因子/回测、风控/执行、自动修复。
+   - 明确每类变更必须运行的命令和通过标准。
+   - 增加开发报告自测模板。
+   - 明确失败处理和提交前最终清单。
+
+3. 更新 `docs/design/AGENTS.md`：
+   - 新增“开发协作流程硬约束”章节。
+   - 明确新 Phase、完整新功能、核心模块变更不得从口头需求直接进入代码。
+   - 将 `AGENT_DEVELOPMENT_PIPELINE.md` 和 `SELF_TEST_CHECKLIST.md` 标为所有开发 Agent 必读。
+
+### 13.3 后续 Agent 必须遵守的开发准则
+
+1. 新阶段或完整功能必须先有 PM 需求文档，再有架构设计文档。
+2. Developer Agent 不得自行改写需求目标或架构边界。
+3. Developer Agent 必须按 `SELF_TEST_CHECKLIST.md` 输出自测结果。
+4. Test Engineer Agent 必须输出测试报告，阻断 Bug 不得口头处理。
+5. Architect Reviewer 必须对照需求、架构、测试报告和 diff 做 Review。
+6. PM Acceptance Agent 必须从用户视角逐项验收。
+7. 任一门禁失败，不得进入下一阶段。
+
+### 13.4 本次验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| 新流程文档 | `docs/process/AGENT_DEVELOPMENT_PIPELINE.md` 已创建 |
+| 自测守则 | `docs/policy/SELF_TEST_CHECKLIST.md` 已重写 |
+| AGENTS 接入 | `docs/design/AGENTS.md` 已新增开发协作流程硬约束 |
+| 文档引用检查 | `AGENT_DEVELOPMENT_PIPELINE` / `SELF_TEST_CHECKLIST` 可被 `rg` 检索 |
+
+---
+
+## 十四、2026-06-10 Feedback 自动处理审查与加固
+
+### 14.1 审查结论
+
+Feedback 基础提交能力可用：`POST /product/feedback` 能生成结构化 Bug 报告，数据源和后台任务异常也能写入 `feedback/bugs/open/`。但审查发现自动分析与自动修复闭环存在几处会影响交付可信度的问题：
+
+1. `bug_fix_agent` 是常驻监听任务，却会被 ServiceManager 在线程执行结束后标记为 `SUCCEEDED`，导致运行状态失真并影响停止操作。
+2. `GET /product/feedback/{bug_id}/analysis` 只返回 workflow status，无法直接给前端或开发 Agent 消费分析报告和修复方案。
+3. 自动执行修复时缺少执行期受限模块复查，手工篡改 proposal 可能绕过方案生成阶段的拦截。
+4. git commit 失败时存在把 Bug 误标为 `fixed` 的风险。
+5. watchdog 启动扫描会尝试处理非 `open` 状态的 Bug，虽然 workflow 会跳过，但会造成噪声和重复扫描。
+6. `openai` 包缺失时顶层导入会导致测试收集失败，不能形成清晰的运行时错误。
+
+### 14.2 完成修复
+
+1. `ServiceManager` 将 `bug_fix_agent` 改为常驻作业模型：启动后保持 `RUNNING`，直到 watchdog 停止才结束。
+2. `/product/feedback/{bug_id}/analysis` 返回 `analysis_report`、`fix_proposal`、`fix_result`、`approval_status` 和 `approval_comment`。
+3. `BugFixAgent.execute_fix()` 新增执行期硬拦截：空 `code_changes`、受限模块、越权路径均拒绝执行。
+4. `BugFixWorkflow._execute_and_verify()` 新增干净工作区门禁；git add/commit/rev-parse 失败会进入 `fix_failed`，不得标记 fixed。
+5. `BugWatchdog` 只自动处理 `status=open` 的 Bug。
+6. DeepSeek/OpenAI SDK 改为懒依赖，缺包时在真实调用阶段返回清晰错误，测试仍可 monkeypatch。
+7. `tests/test_bug_auto_fix.py` 扩展到 25 个用例，覆盖执行期阻断、非 open 跳过、commit 失败、分析 API 内容和常驻作业状态。
+
+### 14.3 验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| `.venv\Scripts\python.exe -m pytest tests/test_bug_auto_fix.py -q --basetemp=runtime\pytest-tmp` | 25 passed |
+| `.venv\Scripts\python.exe -m ruff check src/product_app/bug_fix_agent.py src/product_app/bug_fix_workflow.py src/product_app/bug_watchdog.py src/product_app/service_manager.py src/api/product_routes.py tests/test_bug_auto_fix.py` | passed |

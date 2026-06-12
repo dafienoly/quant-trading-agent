@@ -11,6 +11,7 @@
 - **Phase 4**: 实盘盯盘与信号生成
 - **Phase 5**: 人工确认交易
 - **Phase 5.5**: 产品化交付 Demo（一键启动、集成前端、自动反馈）
+- **Phase 5.6**: BUG 自动处理系统
 - **Phase 6**: 小资金自动交易实验
 
 默认只推进到 Phase 5.5。Phase 6 必须经过长期模拟验证后再启用。
@@ -397,6 +398,41 @@ BROKER_ADAPTER=paper
 
 ---
 
+## Phase 5.6: BUG 自动处理系统
+
+### 目标
+
+将现有 BUG 收集系统升级为 BUG 自动处理系统，引入 AI Agent 自动分析 Bug 原因、制定修复方案，审批后自动执行修复。
+
+### 任务
+
+1. 扩展 BugReport 模型，新增分析和修复相关字段
+2. 实现 BugFixAgent（基于 DeepSeek API）
+3. 实现 BugWatchdog（文件监控 Hook）
+4. 实现 BugFixWorkflow（状态机编排）
+5. 扩展 ServiceManager 和 API 端点
+6. 更新产品面板反馈中心
+7. 编写集成测试
+
+### 交付物
+
+- src/product_app/bug_fix_agent.py
+- src/product_app/bug_watchdog.py
+- src/product_app/bug_fix_workflow.py
+- 扩展的 feedback.py
+- 新增 API 端点
+- 更新的产品面板
+
+### 验收标准
+
+1. Bug 提交后自动触发分析
+2. 修复方案需人工审批后才能执行
+3. 修复后自动运行 pytest 验证
+4. 修复失败自动回滚
+5. 禁止修改风控/交易日志/回测模块
+
+---
+
 ## Phase 6: 小资金自动交易实验
 
 ### 启用条件
@@ -602,7 +638,29 @@ MAX_TRADING_LEVEL=LEVEL_1_SIGNAL_ONLY
 
 ---
 
-### 8. MVP 推荐顺序
+### 8. 开发自测约束
+
+所有代码变更提交前，必须按 `docs/policy/SELF_TEST_CHECKLIST.md` 执行完整自测流程，包括：
+
+1. **静态检查**: ruff check + Widget ID 冲突检查 + 硬编码密钥检查
+2. **单元测试**: `pytest tests/` 全部通过
+3. **API 端点测试**: 启动 FastAPI 逐端点验证
+4. **功能实现检查**: 对照需求文档和设计文档，逐个功能点验证实现完整性（正向+反向+边界）
+5. **浏览器端到端测试**: 使用 Playwright 启动 Streamlit，验证页面加载无异常、无 `StreamlitDuplicateElementId` 错误、所有 Tab 可点击
+6. **安全检查**: 默认交易模式、风控完整性、数据安全
+
+**关键要求**:
+
+- 功能实现检查为强制步骤，必须对照需求文档逐功能验证，不得仅凭"代码存在"判定通过
+- 浏览器 E2E 测试为强制步骤，不得跳过（Phase 5.6 审计发现用户打开网页即报错但自测未发现的问题）
+- Playwright 安装: `pip install playwright && playwright install chromium`
+- 未通过自测的代码不得提交
+
+详细流程见: `docs/policy/SELF_TEST_CHECKLIST.md`
+
+---
+
+### 9. MVP 推荐顺序
 
 **最推荐先做：**
 
@@ -628,7 +686,7 @@ MAX_TRADING_LEVEL=LEVEL_1_SIGNAL_ONLY
 
 ---
 
-### 9. 第一周任务清单
+### 10. 第一周任务清单
 
 **Day 1**
 
@@ -686,7 +744,7 @@ MAX_TRADING_LEVEL=LEVEL_1_SIGNAL_ONLY
 
 ---
 
-### 10. 当前项目最小可行目标
+### 11. 当前项目最小可行目标
 
 MVP 成功标准：
 

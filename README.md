@@ -114,7 +114,7 @@ quant-trading-agent/
 │   ├── strategy_engine/      # 策略引擎（评分模型、信号生成、板块轮动）
 │   ├── ui_report/            # Web 仪表板（Streamlit）
 │   └── utils/                # 工具函数（日历、数据质量、存储）
-├── scripts/                  # 运维脚本（部署、启动、停止、数据拉取）
+├── scripts/                  # 运维脚本（部署、启动、停止、重启）
 ├── tests/                    # 测试用例
 ├── docs/                     # 设计文档与审计报告
 ├── feedback/                 # Bug 反馈数据
@@ -143,7 +143,11 @@ scripts\setup.bat
 ### 2. 一键启动
 
 ```bash
-python scripts/start_product.py
+# Linux / macOS
+bash scripts/start.sh
+
+# Windows
+scripts\start.bat
 ```
 
 启动后访问：
@@ -154,7 +158,21 @@ python scripts/start_product.py
 ### 3. 一键停止
 
 ```bash
-python scripts/stop_product.py
+# Linux / macOS
+bash scripts/stop.sh
+
+# Windows
+scripts\stop.bat
+```
+
+### 4. 一键重启
+
+```bash
+# Linux / macOS
+bash scripts/restart.sh
+
+# Windows
+scripts\restart.bat
 ```
 
 ---
@@ -166,7 +184,7 @@ python scripts/stop_product.py
 | 标签页 | 功能说明 |
 |---|---|
 | 系统状态 | 健康检查、组件运行状态、Kill Switch 控制 |
-| 实时行情 | 股票行情表格、涨跌幅展示 |
+| 实时行情 | AkShare/AkTools 数据源选择、实时刷新、后台快照、Demo fallback 明示 |
 | 候选股监控 | 观察列表管理、信号触发提醒 |
 | 因子分析 | 四因子评分详情、雷达图可视化 |
 | 回测实验室 | 回测参数配置、回测结果展示 |
@@ -179,13 +197,14 @@ python scripts/stop_product.py
 
 ## API 接口
 
-系统提供 13 个产品端点，均以 `/product` 为前缀：
+系统提供 15 个产品端点，均以 `/product` 为前缀：
 
 ### 健康与仪表板
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/product/health` | 系统健康状态 |
+| GET | `/product/quotes` | 实时行情快照（AkShare/AkTools，可显式 Demo fallback） |
 | GET | `/product/dashboard` | 仪表板聚合数据 |
 
 ### 因子与回测
@@ -209,6 +228,7 @@ python scripts/stop_product.py
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/product/feedback` | 获取 Bug 列表 |
+| POST | `/product/feedback` | 提交 UI/API 自动反馈 Bug |
 | POST | `/product/feedback/{bug_id}/status` | 更新 Bug 状态 |
 
 ### 作业管理
@@ -237,6 +257,9 @@ cp .env.example .env
 | `ENABLE_LIVE_TRADING` | `false` | 是否启用实盘交易 |
 | `REQUIRE_HUMAN_CONFIRMATION` | `true` | 是否需要人工确认 |
 | `DATA_SOURCE` | `sina` | 数据源 |
+| `DEFAULT_DATA_PROVIDER` | `akshare` | 产品行情默认数据源（akshare/aktools） |
+| `AKTOOLS_BASE_URL` | `http://127.0.0.1:8080` | AkTools 本地 HTTP 服务地址 |
+| `DEEPSEEK_API_KEY` | 空 | BugFix Agent 分析和生成修复方案所需 Key |
 | `LOG_LEVEL` | `INFO` | 日志级别 |
 | `API_PORT` | `8000` | API 服务端口 |
 | `STREAMLIT_PORT` | `8501` | 仪表板端口 |
@@ -246,6 +269,33 @@ cp .env.example .env
 | `BROKER_ADAPTER` | `paper` | 券商适配器（paper 为模拟） |
 
 完整配置项参见 `.env.example` 文件。
+
+### AkTools 本地服务
+
+本项目通过 HTTP 接入 AkTools。仅安装 `aktools` 包不等于服务已经可用，需要单独启动：
+
+```bash
+python -m aktools --host 127.0.0.1 --port 8080
+```
+
+验证：
+
+```bash
+curl http://127.0.0.1:8080/version
+curl "http://127.0.0.1:8080/api/public/stock_zh_a_spot_em"
+```
+
+如 API 和 AkTools 分别运行在 WSL/Windows 两侧，请把 `.env` 中的 `AKTOOLS_BASE_URL` 改成 API 进程可访问的地址。
+
+### Feedback 自动修复
+
+Feedback 自动修复分两步：后台 `bug_fix_agent` 先把 Open Bug 分析到 `proposed`，用户审批后才会执行修复和测试。启动前必须配置 `DEEPSEEK_API_KEY`：
+
+```bash
+curl -X POST http://127.0.0.1:8000/product/jobs/bug_fix_agent/start
+```
+
+也可以在 Dashboard 的“反馈 / Feedback”页启动或停止 BugFix Agent。
 
 ---
 
@@ -260,6 +310,10 @@ python tests/test_e2e_acceptance.py
 
 # 产品 API 端到端测试
 python tests/test_product_api_e2e.py
+
+# 本次产品实时行情/前端触碰范围验证
+python -m pytest tests/test_phase4_api.py tests/test_phase4_realtime_health.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py -q --basetemp=runtime/pytest-tmp
+python -m ruff check src/product_app/market_data.py src/product_app/service_manager.py src/api/product_routes.py src/data_gateway/realtime_provider.py src/data_gateway/aktools_provider.py src/ui_report/product_dashboard.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py
 ```
 
 ---

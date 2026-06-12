@@ -16,6 +16,7 @@ from src.data_gateway.column_mapper import (
 
 
 class AkShareProvider(MarketDataProvider):
+    name = "akshare"
 
     def __init__(self, request_interval: float = 0.5):
         self._request_interval = request_interval

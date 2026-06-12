@@ -1,0 +1,8 @@
+{
+  "total": 13,
+  "by_category": {
+    "dashboard_timeout": 6,
+    "uncategorized": 3,
+    "provider_empty_data": 4
+  }
+}

@@ -16,6 +16,7 @@
 | 4 | 实盘盯盘与信号生成 | ✅ 已完成 | 2026-06-09 | 289/289 (含审计整改) |
 | 5 | 人工确认交易 | ✅ 已完成 | 2026-06-09 | 328/328 |
 | 5.5 | 产品交付 | ✅ 已完成 | 2026-06-09 | 364/364 + 84项E2E验收 |
+| 5.6 | BUG自动处理系统 | ✅ 已完成 | 2026-06-10 | 21/21 (集成测试) |
 | 6 | 小资金自动交易实验 | ⬜ 未开始 | - | - |
 
 ---
@@ -658,7 +659,7 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 
 ### 交付物清单
 
-#### 产品服务模块（6 个）
+#### 产品服务模块（7 个）
 
 | # | 文件 | 说明 |
 |---|------|------|
@@ -668,31 +669,34 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 | 4 | `src/product_app/feedback.py` | 反馈系统：.md+.json双格式Bug报告，24h去重，脱敏，状态生命周期(open→triaged→fixed/ignored) |
 | 5 | `src/product_app/demo_data.py` | Demo数据：10只股票行情/3买2卖5持有信号/因子评分/账户信息，市场休市/离线模式自动降级 |
 | 6 | `src/product_app/__init__.py` | 包初始化 |
+| 7 | `src/product_app/market_data.py` | 产品行情门面：统一 AkShare/AkTools 实时行情、symbols 规范化、Demo fallback、反馈 Bug 生成 |
 
-#### 产品API路由（13个端点）
+#### 产品API路由（15个端点）
 
 | # | 端点 | 方法 | 说明 |
 |---|------|------|------|
 | 1 | `/product/health` | GET | 系统健康状态聚合 |
-| 2 | `/product/dashboard` | GET | 仪表板数据(行情+信号+因子+账户) |
-| 3 | `/product/factors/compute` | POST | 因子评分计算 |
-| 4 | `/product/jobs/backtest/start` | POST | 启动回测任务 |
-| 5 | `/product/config` | GET | 获取配置(掩码) |
-| 6 | `/product/config` | POST | 更新配置项 |
-| 7 | `/product/config/confirm-upgrade` | POST | 确认交易模式升级 |
-| 8 | `/product/config/restore-defaults` | POST | 恢复默认配置 |
-| 9 | `/product/feedback` | GET | 获取Bug列表 |
-| 10 | `/product/feedback/{bug_id}/status` | POST | 更新Bug状态 |
-| 11 | `/product/jobs` | GET | 作业列表 |
-| 12 | `/product/jobs/{job_name}/start` | POST | 启动作业 |
-| 13 | `/product/jobs/{job_name}/stop` | POST | 停止作业 |
+| 2 | `/product/quotes` | GET | 实时行情快照：AkShare/AkTools provider、Demo fallback、force_live |
+| 3 | `/product/dashboard` | GET | 仪表板数据(行情+信号+因子+账户) |
+| 4 | `/product/factors/compute` | POST | 因子评分计算 |
+| 5 | `/product/jobs/backtest/start` | POST | 启动回测任务 |
+| 6 | `/product/config` | GET | 获取配置(掩码) |
+| 7 | `/product/config` | POST | 更新配置项 |
+| 8 | `/product/config/confirm-upgrade` | POST | 确认交易模式升级 |
+| 9 | `/product/config/restore-defaults` | POST | 恢复默认配置 |
+| 10 | `/product/feedback` | GET | 获取Bug列表 |
+| 11 | `/product/feedback` | POST | 提交 UI/API 自动反馈 Bug |
+| 12 | `/product/feedback/{bug_id}/status` | POST | 更新Bug状态 |
+| 13 | `/product/jobs` | GET | 作业列表 |
+| 14 | `/product/jobs/{job_name}/start` | POST | 启动作业，quote_refresh 支持 symbols/provider/allow_demo/force_live |
+| 15 | `/product/jobs/{job_name}/stop` | POST | 停止作业 |
 
 #### 产品面板（9个Tab）
 
 | # | Tab | 说明 |
 |---|-----|------|
 | 1 | 系统状态 | 健康检查+组件状态+Kill Switch |
-| 2 | 实时行情 | 10只股票行情表格+涨跌幅 |
+| 2 | 实时行情 | AkShare/AkTools 数据源选择、实时刷新、后台快照、Demo fallback 显式标注 |
 | 3 | 候选股监控 | 观察列表+信号触发 |
 | 4 | 因子分析 | 四因子评分+雷达图 |
 | 5 | 回测实验室 | 参数配置+回测结果 |
@@ -776,11 +780,210 @@ Phase 5 审计通过后，项目 Leader 审阅代码并给出指导意见 `PRODU
 | 2 | Demo数据为确定性预置数据，非实时行情 | 中 | 实盘环境自动切换真实数据源 |
 | 3 | 后台作业为同步执行，长时间任务可能阻塞 | 中 | Phase 6 引入异步任务队列 |
 
+### 2026-06-10 产品补强复核
+
+本次补强不改变交易安全级别，不进入自动交易；目标是让 Phase 5.5 产品交付从“静态 Demo 面板”升级为“可选择实时数据源、可刷新、可后台落盘、可自动反馈”的用户闭环。
+
+| 项目 | 结论 |
+|---|---|
+| AkShare/AkTools 实时行情 | `/product/quotes` 与 `product_app.market_data` 已统一接入 |
+| Demo fallback | API 与 UI 均显式返回/展示 `is_demo`、`fallback_demo` 或 provider 状态 |
+| 后台 quote_refresh | 已写入 `runtime/state/latest_quotes.json`，包含 provider、symbols、quotes、messages、updated_at |
+| Dashboard 交互 | Realtime Market Tab 支持数据源选择、手动刷新、后台快照启动、作业状态展示 |
+| 自动 feedback | provider 异常或空结果会写入 `feedback/bugs/open` |
+| 安全边界 | 未引入真实自动下单；人工确认仍为逐笔确认，不允许批量确认买入 |
+
+#### 复核测试
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/test_phase4_api.py tests/test_phase4_realtime_health.py tests/test_realtime_provider.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_product_dashboard_source.py -q --basetemp=runtime\pytest-tmp
+# 17 passed
+
+.venv\Scripts\python.exe -m ruff check src\product_app\market_data.py src\product_app\service_manager.py src\api\product_routes.py src\data_gateway\realtime_provider.py src\data_gateway\aktools_provider.py src\ui_report\product_dashboard.py tests\test_realtime_provider.py tests\test_product_market_data.py tests\test_product_realtime_api.py tests\test_product_service_manager_quotes.py tests\test_product_dashboard_source.py
+# All checks passed
+```
+
+---
+
+## Phase 5.6: BUG 自动处理系统
+
+### 完成日期
+
+2026-06-10
+
+### 背景
+
+项目仍处于开发期，Bug 频繁产生且阻塞正常流程。原有的 Bug 收集系统（`feedback.py`）仅实现了提交、去重和状态管理，Bug 提交后需要人工逐个分析、定位、修复。Phase 5.6 将"Bug 收集"升级为"Bug 自动处理"，引入 AI Agent 作为 Bug 处理工程师，自动分析原因、制定修复方案，审批后自动执行修复。
+
+### 技术方案
+
+**LLM 引擎选型：DeepSeek API**
+
+| 资源 | 优势 | 劣势 | 结论 |
+|------|------|------|------|
+| Claude Code + DeepSeek | Claude 擅长代码理解 | Claude Code 需交互式环境 | 不适合后台自动化 |
+| DeepSeek API | 成本极低、代码能力强、适合批量自动化 | 长上下文略弱 | **采用** |
+
+理由：Bug 处理是后台自动化任务，需要 API 调用而非交互式会话；DeepSeek API 成本极低（约 0.001 元/千 token），代码能力强，可通过 OpenAI 兼容 SDK 直接调用。
+
+### 交付物清单
+
+#### 核心模块（3 个新增）
+
+| # | 文件 | 行数 | 说明 |
+|---|------|------|------|
+| 1 | `src/product_app/bug_fix_agent.py` | ~433 | BugFixAgent：DeepSeek API 封装，提供 analyze()、propose_fix()、execute_fix()，含重试机制、受限模块检查、diff 应用、pytest 验证 |
+| 2 | `src/product_app/bug_watchdog.py` | ~213 | BugWatchdog：文件监控 Hook，检测 feedback/bugs/open/ 新文件，支持 watchdog 库实时监控 + 轮询降级，防抖去重 |
+| 3 | `src/product_app/bug_fix_workflow.py` | ~496 | BugFixWorkflow：状态机编排，管理 open→analyzing→proposed→approved→fixing→verified→fixed 全流程，含 git stash/commit 回滚 |
+
+#### 扩展模块（4 个修改）
+
+| # | 文件 | 变更说明 |
+|---|------|---------|
+| 1 | `src/product_app/feedback.py` | BugReport 新增 6 字段（analysis_report/fix_proposal/approval_status/approval_comment/fix_result/git_commit_hash）+ 8 个新状态常量 + analysis 目录 |
+| 2 | `src/product_app/service_manager.py` | 新增 bug_fix_agent 作业 + BugWatchdog 启动/停止管理 |
+| 3 | `src/api/product_routes.py` | 新增 4 个 API 端点（analysis/approve/reject/fix-status） |
+| 4 | `src/ui_report/product_dashboard.py` | 反馈中心新增：状态机步骤指示器 + 分析报告/修复方案展示 + Approve/Reject 按钮 + 修复结果展示 |
+
+#### 测试文件（1 个新增）
+
+| # | 文件 | 测试数 | 覆盖范围 |
+|---|------|--------|---------|
+| 1 | `tests/test_bug_auto_fix.py` | 21 | BugFixAgent(8)/BugWatchdog(3)/BugFixWorkflow(6)/API端点(4) |
+
+#### 依赖更新
+
+| 包名 | 版本 | 用途 |
+|------|------|------|
+| openai | >=1.0 | DeepSeek API 调用（OpenAI 兼容 SDK） |
+| watchdog | >=3.0 | 文件系统实时监控 |
+
+### 系统架构
+
+```
+feedback/bugs/open/  ──[BugWatchdog]──>  BugFixWorkflow  ──>  BugFixAgent.analyze()
+                                                    │                    │
+                                                    v                    v
+                                              状态机流转          DeepSeek API 分析
+                                                    │
+                                              [人工审批/API]
+                                                    │
+                                                    v
+                                          BugFixAgent.execute_fix()
+                                                    │
+                                              pytest 验证 + git commit
+```
+
+### Bug 状态机
+
+```
+open → analyzing → proposed → approved → fixing → verified → fixed
+                   │           │                           │
+                   v           v                           v
+                blocked    rejected                   fix_failed
+                              │                           │
+                              └──→ analyzing (重新分析)     └──→ fixing (重试)
+                                                              └──→ open (重置)
+```
+
+### API 端点（4 个新增）
+
+| # | 端点 | 方法 | 说明 |
+|---|------|------|------|
+| 1 | `/product/feedback/{bug_id}/analysis` | GET | 获取 Bug 分析报告和修复方案 |
+| 2 | `/product/feedback/{bug_id}/approve` | POST | 审批通过修复方案，自动执行修复 |
+| 3 | `/product/feedback/{bug_id}/reject` | POST | 拒绝修复方案，可重新触发分析 |
+| 4 | `/product/feedback/{bug_id}/fix-status` | GET | 获取 Bug 修复进度 |
+
+### 安全约束
+
+| # | 约束 | 实现方式 |
+|---|------|---------|
+| 1 | 修复方案必须审批后才能执行 | BugFixWorkflow.approve_fix() 为唯一执行入口 |
+| 2 | 禁止自动修改风控模块 | _is_blocked_module() 拦截 risk_engine/trading_log/backtest_report |
+| 3 | 修复前创建回滚点 | git stash 保存当前状态 |
+| 4 | 测试失败自动回滚 | pytest 不通过时 git stash pop 恢复 |
+| 5 | 修复成功自动提交 | git commit -m "fix(auto): {bug_id} - {title}" |
+| 6 | DeepSeek API Key 不硬编码 | 从环境变量 DEEPSEEK_API_KEY 读取 |
+
+### 测试结果
+
+```
+tests/test_bug_auto_fix.py — 21 passed
+```
+
+**通过率: 21/21 (100%)**
+
+### 验收标准检查
+
+| # | 验收标准 | 状态 | 验证方式 |
+|---|---------|------|---------|
+| 1 | 新 Bug 自动触发分析 | ✅ | BugWatchdog 监控 open/ 目录，新文件触发 process_bug() |
+| 2 | 分析报告自动生成 | ✅ | BugFixAgent.analyze() 调用 DeepSeek API 生成根因分析 |
+| 3 | 修复方案自动生成 | ✅ | BugFixAgent.propose_fix() 生成含代码 diff 的修复方案 |
+| 4 | 修复方案需人工审批 | ✅ | approve_fix()/reject_fix() 为唯一操作入口 |
+| 5 | 审批后自动执行修复 | ✅ | approve_fix() 自动调用 _execute_and_verify() |
+| 6 | 受限模块自动拦截 | ✅ | _is_blocked_module() 检查 risk_engine/trading_log/backtest_report |
+| 7 | 修复失败自动回滚 | ✅ | pytest 失败时 git stash pop 恢复原状态 |
+| 8 | 修复成功自动提交 | ✅ | git add -A + git commit |
+| 9 | 面板可视化修复进度 | ✅ | 步骤指示器 + 分析/方案展示 + 审批按钮 |
+| 10 | API 端点可查询修复状态 | ✅ | 4 个新端点全部可用 |
+
+### AGENTS.md 合规性
+
+| # | AGENTS.md 规则 | 状态 | 备注 |
+|---|---------------|------|------|
+| 1 | 2.1 人工确认原则 | ✅ | 修复方案必须审批后才能执行 |
+| 2 | 4.2 禁止修改风控模块 | ✅ | _is_blocked_module() 自动拦截 |
+| 3 | 4.1 禁止硬编码密钥 | ✅ | DEEPSEEK_API_KEY 从环境变量读取 |
+
+### 已知问题与限制
+
+| # | 问题 | 严重程度 | 处理计划 |
+|---|------|----------|---------|
+| 1 | DeepSeek API 不可用时自动分析失败 | 中 | 已有重试机制(3次)，失败后保留 open 状态等待人工处理 |
+| 2 | diff 应用为简单字符串替换，复杂 diff 可能失败 | 中 | 后续可引入更精确的 diff 解析库 |
+| 3 | BugWatchdog 轮询模式有 30 秒延迟 | 低 | 安装 watchdog 库后自动切换实时监控 |
+| 4 | 修复执行为同步阻塞 | 低 | 后续可改为异步执行 |
+
 ---
 
 ## Phase 6: 小资金自动交易实验
 
 > ⬜ 未开始
+
+---
+
+## Cross-Phase: Agent 开发流程治理
+
+### 完成日期
+
+2026-06-10
+
+### 背景
+
+随着项目复杂度提升，原有约束文档已经覆盖产品目标、数据契约、风险策略、执行策略和自测要求，但缺少开发团队 Agent 的统一协作流程。为防止需求、架构、开发、自测、测试、Review、验收之间断链，本次新增跨阶段开发管线。
+
+### 完成交付
+
+| # | 文件 | 说明 |
+|---|---|---|
+| 1 | `docs/process/AGENT_DEVELOPMENT_PIPELINE.md` | PM、Architect、Developer、Tester、BugFix、Reviewer、Acceptance 的协作流程、交付物、阶段门禁 |
+| 2 | `docs/policy/SELF_TEST_CHECKLIST.md` | 按触碰范围分级的开发自测守则，覆盖文档、API、前端、数据、因子、回测、风控、执行、自动修复 |
+| 3 | `docs/design/AGENTS.md` | 新增开发协作流程硬约束，要求新 Phase/完整功能必须走需求文档、架构设计、自测、测试、Review、验收 |
+| 4 | `docs/log/DEVELOPMENT_LOG.md` | 记录流程治理背景、完成内容和后续 Agent 准则 |
+
+### 准入影响
+
+后续任一新阶段或完整功能，若缺少以下任一交付物，不得标记为完成：
+
+1. 需求文档。
+2. 架构设计文档。
+3. 开发报告和自测结果。
+4. 测试报告。
+5. 架构 Review 结论。
+6. 产品验收结论。
+7. 开发日志和阶段报告更新。
 
 ---
 

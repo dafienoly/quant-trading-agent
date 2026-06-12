@@ -1,1612 +1,919 @@
-"""量化交易产品仪表板
+"""Integrated Streamlit product dashboard for the Quant Trading Agent demo."""
 
-一体化产品入口，9 个标签页覆盖全部产品功能。
-连接 FastAPI 后端 (http://localhost:8000)，支持 Demo 数据回退。
-
-运行方式:
-    python -m streamlit run src/ui_report/product_dashboard.py
-"""
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
+import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
-API_TIMEOUT = 5
+from src.ui_report.i18n import t
 
-# ============================================================
-# 主题 CSS — 深色专业金融风格
-# ============================================================
+DEFAULT_API_BASE = "http://localhost:8000"
+API_TIMEOUT = 8
 
-DARK_THEME_CSS = """
+
+PAGE_CSS = """
 <style>
-/* ── 全局 ── */
-:root {
-    --bg-primary: #0a0e17;
-    --bg-card: #111827;
-    --bg-card-hover: #1a2332;
-    --border: #1e293b;
-    --border-accent: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --accent-blue: #3b82f6;
-    --accent-cyan: #06b6d4;
-    --accent-green: #10b981;
-    --accent-red: #ef4444;
-    --accent-amber: #f59e0b;
-    --accent-purple: #8b5cf6;
-    --accent-pink: #ec4899;
-    --gradient-blue: linear-gradient(135deg, #3b82f6, #06b6d4);
-    --gradient-green: linear-gradient(135deg, #10b981, #06b6d4);
-    --gradient-red: linear-gradient(135deg, #ef4444, #f59e0b);
-    --gradient-purple: linear-gradient(135deg, #8b5cf6, #3b82f6);
-    --shadow-card: 0 4px 24px rgba(0,0,0,0.3);
-    --shadow-glow-blue: 0 0 20px rgba(59,130,246,0.15);
-    --shadow-glow-green: 0 0 20px rgba(16,185,129,0.15);
-    --shadow-glow-red: 0 0 20px rgba(239,68,68,0.15);
-    --radius: 12px;
-    --radius-sm: 8px;
+.block-container { padding-top: 1.2rem; padding-bottom: 2rem; }
+.status-card {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #ffffff;
+  min-height: 92px;
 }
-
-/* ── Streamlit 覆盖 ── */
-.stApp {
-    background: var(--bg-primary) !important;
-    color: var(--text-primary) !important;
+.status-label {
+  font-size: 0.78rem;
+  color: #62748e;
+  margin-bottom: 6px;
 }
-
-/* 隐藏默认顶栏 */
-header[data-testid="stHeader"] {
-    background: var(--bg-primary) !important;
-    border-bottom: 1px solid var(--border) !important;
+.status-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #102a43;
 }
-
-/* Tab 样式 */
-.stTabs [data-baseweb="tab-list"] {
-    background: var(--bg-card) !important;
-    border-radius: var(--radius) !important;
-    padding: 4px !important;
-    gap: 4px !important;
-    border: 1px solid var(--border) !important;
+.status-note {
+  font-size: 0.82rem;
+  color: #62748e;
+  margin-top: 5px;
 }
-.stTabs [data-baseweb="tab"] {
-    border-radius: var(--radius-sm) !important;
-    color: var(--text-secondary) !important;
-    font-weight: 500 !important;
-    font-size: 0.85rem !important;
-    padding: 8px 16px !important;
-    transition: all 0.2s ease !important;
+.safe-banner {
+  border-left: 4px solid #0f766e;
+  background: #ecfdf5;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #134e4a;
 }
-.stTabs [aria-selected="true"] {
-    background: var(--accent-blue) !important;
-    color: white !important;
-    box-shadow: var(--shadow-glow-blue) !important;
+.warn-banner {
+  border-left: 4px solid #b45309;
+  background: #fffbeb;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #78350f;
 }
-.stTabs [data-baseweb="tab"]:hover:not([aria-selected="true"]) {
-    background: var(--bg-card-hover) !important;
-    color: var(--text-primary) !important;
+.danger-banner {
+  border-left: 4px solid #b91c1c;
+  background: #fef2f2;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #7f1d1d;
 }
-
-/* Metric 卡片 */
-[data-testid="stMetricValue"] {
-    font-size: 1.6rem !important;
-    font-weight: 700 !important;
-    color: var(--text-primary) !important;
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 8px 0;
 }
-[data-testid="stMetricLabel"] {
-    font-size: 0.75rem !important;
-    font-weight: 500 !important;
-    color: var(--text-muted) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
 }
-[data-testid="stMetricDelta"] {
-    font-size: 0.85rem !important;
+.step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: #334155;
+  border: 2px solid #475569;
+  z-index: 1;
 }
-
-/* DataFrame 表格 */
-.stDataFrame {
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    overflow: hidden !important;
+.step-dot.step-completed {
+  background: #059669;
+  border-color: #10b981;
 }
-.stDataFrame table {
-    background: var(--bg-card) !important;
+.step-dot.step-current {
+  background: #2563eb;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.3);
 }
-.stDataFrame th {
-    background: #0f172a !important;
-    color: var(--text-secondary) !important;
-    font-weight: 600 !important;
-    font-size: 0.75rem !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    border-bottom: 2px solid var(--border-accent) !important;
+.step-label {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  margin-top: 4px;
+  text-align: center;
+  white-space: nowrap;
 }
-.stDataFrame td {
-    color: var(--text-primary) !important;
-    font-size: 0.85rem !important;
-    border-bottom: 1px solid var(--border) !important;
+.step-label.step-label-completed {
+  color: #10b981;
 }
-.stDataFrame tr:hover td {
-    background: var(--bg-card-hover) !important;
+.step-label.step-label-current {
+  color: #3b82f6;
+  font-weight: 600;
 }
-
-/* 按钮 */
-.stButton button {
-    border-radius: var(--radius-sm) !important;
-    font-weight: 600 !important;
-    transition: all 0.2s ease !important;
-    border: 1px solid var(--border-accent) !important;
+.step-connector {
+  flex: 1;
+  height: 2px;
+  background: #334155;
+  margin-top: -12px;
 }
-.stButton button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-}
-.stButton button[kind="primary"] {
-    background: var(--accent-blue) !important;
-    border-color: var(--accent-blue) !important;
-}
-
-/* Expander */
-.streamlit-expanderHeader {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius-sm) !important;
-    color: var(--text-primary) !important;
-}
-
-/* Slider */
-.stSlider [data-baseweb="slider"] {
-    accent-color: var(--accent-blue) !important;
-}
-
-/* Selectbox */
-.stSelectbox [data-baseweb="select"] {
-    background: var(--bg-card) !important;
-    border-color: var(--border-accent) !important;
-}
-
-/* Input */
-.stTextInput input, .stNumberInput input {
-    background: var(--bg-card) !important;
-    border-color: var(--border-accent) !important;
-    color: var(--text-primary) !important;
-    border-radius: var(--radius-sm) !important;
-}
-
-/* Divider */
-.stDivider {
-    border-color: var(--border) !important;
-}
-
-/* ── 自定义卡片 ── */
-.card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-card);
-    transition: all 0.2s ease;
-}
-.card:hover {
-    border-color: var(--border-accent);
-    background: var(--bg-card-hover);
-}
-.card-title {
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-}
-.card-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
-}
-.card-sub {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-top: 4px;
-}
-
-/* 状态徽章 */
-.badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-}
-.badge-ok {
-    background: rgba(16,185,129,0.15);
-    color: #34d399;
-    border: 1px solid rgba(16,185,129,0.3);
-}
-.badge-warn {
-    background: rgba(245,158,11,0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(245,158,11,0.3);
-}
-.badge-error {
-    background: rgba(239,68,68,0.15);
-    color: #f87171;
-    border: 1px solid rgba(239,68,68,0.3);
-}
-.badge-info {
-    background: rgba(59,130,246,0.15);
-    color: #60a5fa;
-    border: 1px solid rgba(59,130,246,0.3);
-}
-.badge-demo {
-    background: rgba(139,92,246,0.15);
-    color: #a78bfa;
-    border: 1px solid rgba(139,92,246,0.3);
-}
-
-/* 信号方向标签 */
-.sig-buy {
-    color: #f87171;
-    font-weight: 700;
-}
-.sig-sell {
-    color: #34d399;
-    font-weight: 700;
-}
-.sig-hold {
-    color: #94a3b8;
-    font-weight: 600;
-}
-
-/* 进度条 */
-.score-bar {
-    height: 6px;
-    border-radius: 3px;
-    background: var(--border);
-    overflow: hidden;
-    margin-top: 6px;
-}
-.score-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.5s ease;
-}
-
-/* 顶部品牌栏 */
-.brand-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 0;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-}
-.brand-title {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.02em;
-}
-.brand-sub {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-/* 分区标题 */
-.section-header {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin: 20px 0 12px 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-}
-
-/* 涨跌色 */
-.price-up { color: #f87171 !important; }
-.price-down { color: #34d399 !important; }
-.price-flat { color: #94a3b8 !important; }
-
-/* 警告横幅 */
-.alert-banner {
-    padding: 12px 16px;
-    border-radius: var(--radius-sm);
-    margin-bottom: 12px;
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-.alert-critical {
-    background: rgba(239,68,68,0.12);
-    border: 1px solid rgba(239,68,68,0.3);
-    color: #f87171;
-}
-.alert-warning {
-    background: rgba(245,158,11,0.12);
-    border: 1px solid rgba(245,158,11,0.3);
-    color: #fbbf24;
-}
-.alert-info {
-    background: rgba(59,130,246,0.12);
-    border: 1px solid rgba(59,130,246,0.3);
-    color: #60a5fa;
-}
-
-/* 因子仪表盘 */
-.gauge-container {
-    text-align: center;
-    padding: 8px;
-}
-.gauge-value {
-    font-size: 2rem;
-    font-weight: 800;
-    line-height: 1;
-}
-.gauge-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin-top: 4px;
-}
-
-/* 订单卡片 */
-.order-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    margin-bottom: 8px;
-    border-left: 4px solid;
-}
-.order-buy { border-left-color: #ef4444; }
-.order-sell { border-left-color: #10b981; }
-
-/* 小型统计卡 */
-.stat-mini {
-    text-align: center;
-    padding: 12px;
-}
-.stat-mini-value {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-.stat-mini-label {
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin-top: 2px;
+.step-connector.step-connector-completed {
+  background: #059669;
 }
 </style>
 """
 
 
-# ============================================================
-# 通用工具函数
-# ============================================================
+def _api_base() -> str:
+    return st.session_state.get("api_base", DEFAULT_API_BASE).rstrip("/")
 
-def _api_get(path: str, params: dict | None = None) -> dict | None:
-    """GET 请求封装，失败返回 None"""
-    import requests
+
+def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
     try:
-        resp = requests.get(f"{API_BASE}{path}", params=params, timeout=API_TIMEOUT)
-        if resp.status_code == 200:
-            return resp.json()
-        return None
-    except Exception:
-        return None
+        response = requests.get(f"{_api_base()}{path}", params=params, timeout=API_TIMEOUT)
+        if response.status_code == 200:
+            return response.json()
+        _report_error("dashboard", f"GET {path} returned HTTP {response.status_code}")
+    except Exception as exc:
+        _report_error("dashboard", f"GET {path} failed: {exc}")
+    return None
 
 
-def _api_post(path: str, params: dict | None = None) -> dict | None:
-    """POST 请求封装，失败返回 None"""
-    import requests
+def _post(path: str, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> dict[str, Any] | None:
     try:
-        resp = requests.post(f"{API_BASE}{path}", params=params, timeout=API_TIMEOUT)
-        if resp.status_code == 200:
-            return resp.json()
-        return None
-    except Exception:
-        return None
+        response = requests.post(f"{_api_base()}{path}", params=params, json=json, timeout=API_TIMEOUT)
+        if response.status_code == 200:
+            return response.json()
+        _report_error("dashboard", f"POST {path} returned HTTP {response.status_code}")
+    except Exception as exc:
+        _report_error("dashboard", f"POST {path} failed: {exc}")
+    return None
 
 
 def _report_error(component: str, message: str) -> None:
-    """向反馈系统报告错误"""
     try:
-        import requests
-        requests.post(f"{API_BASE}/product/feedback", json={
-            "component": component,
-            "message": message,
-        }, timeout=2)
+        requests.post(
+            f"{_api_base()}/product/feedback",
+            json={
+                "component": component,
+                "message": message,
+                "endpoint_or_page": "product_dashboard",
+            },
+            timeout=2,
+        )
     except Exception:
         pass
 
 
-def _pct_fmt(val: float) -> str:
-    """格式化涨跌幅"""
-    if val is None:
+def _df(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def _symbol_code(symbol: str) -> str:
+    return str(symbol).split(".", 1)[0]
+
+
+def _format_pct(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
         return "-"
-    if val > 0:
-        return f"+{val:.2f}%"
-    return f"{val:.2f}%"
+    sign = "+" if number > 0 else ""
+    return f"{sign}{number:.2f}%"
 
 
-def _pct_color(val: float) -> str:
-    """涨跌幅颜色"""
-    if val is None:
-        return "gray"
-    if val > 0:
-        return "red"
-    if val < 0:
-        return "green"
-    return "gray"
+def _card(label: str, value: str, note: str = "") -> None:
+    st.markdown(
+        f"""
+<div class="status-card">
+          <div class="status-label">{label}</div>
+          <div class="status-value">{value}</div>
+          <div class="status-note">{note}</div>
+        </div>
+""",
+        unsafe_allow_html=True,
+    )
 
 
-def _score_color(score: float) -> str:
-    """因子评分颜色"""
-    if score >= 82:
-        return "#ef4444"  # 红-买入
-    if score >= 70:
-        return "#f59e0b"  # 黄-偏强
-    if score >= 58:
-        return "#94a3b8"  # 灰-中性
-    return "#10b981"  # 绿-卖出
+def _job_by_name(jobs_data: dict[str, Any] | None, name: str) -> dict[str, Any] | None:
+    if not jobs_data:
+        return None
+    return next((job for job in jobs_data.get("jobs", []) if job.get("name") == name), None)
 
 
-def _score_bar_html(score: float, color: str = None) -> str:
-    """评分进度条 HTML"""
-    if color is None:
-        color = _score_color(score)
-    width = min(max(score, 0), 100)
-    return f'<div class="score-bar"><div class="score-bar-fill" style="width:{width}%;background:{color}"></div></div>'
+def _banner(kind: str, text: str) -> None:
+    css = {"safe": "safe-banner", "warn": "warn-banner", "danger": "danger-banner"}[kind]
+    st.markdown(f'<div class="{css}">{text}</div>', unsafe_allow_html=True)
 
 
-def _badge_html(text: str, level: str = "info") -> str:
-    """徽章 HTML"""
-    return f'<span class="badge badge-{level}">{text}</span>'
+def render_system() -> None:
+    st.subheader(t("system"))
+    health = _get("/product/health")
+    dashboard = _get("/product/dashboard")
 
-
-def _card_html(title: str, value: str, sub: str = "", border_color: str = None) -> str:
-    """卡片 HTML"""
-    style = f'border-left: 4px solid {border_color};' if border_color else ''
-    sub_html = f'<div class="card-sub">{sub}</div>' if sub else ''
-    return f'''<div class="card" style="{style}">
-        <div class="card-title">{title}</div>
-        <div class="card-value">{value}</div>
-        {sub_html}
-    </div>'''
-
-
-def _gauge_html(value: float, label: str, color: str = None) -> str:
-    """仪表盘 HTML"""
-    if color is None:
-        color = _score_color(value)
-    return f'''<div class="gauge-container">
-        <div class="gauge-value" style="color:{color}">{value:.0f}</div>
-        <div class="gauge-label">{label}</div>
-        {_score_bar_html(value, color)}
-    </div>'''
-
-
-def _section_header(text: str) -> None:
-    """分区标题"""
-    st.markdown(f'<div class="section-header">{text}</div>', unsafe_allow_html=True)
-
-
-# ============================================================
-# 1. 系统状态 (Home)
-# ============================================================
-
-def render_home() -> None:
-    """渲染系统状态首页"""
-    health = _api_get("/product/health")
-    dashboard = _api_get("/product/dashboard")
-
-    if health is None and dashboard is None:
-        st.markdown(f'''<div class="alert-banner alert-critical">
-            无法连接后端 API，请确认 FastAPI 服务已启动<br>
-            <code style="color:#94a3b8;font-size:0.8rem">python -m uvicorn src.api.app:app --port 8000</code>
-        </div>''', unsafe_allow_html=True)
+    if not health:
+        _banner("danger", "API is offline. Start it with: python -m uvicorn src.api.app:app --port 8000")
         return
 
-    # ── Kill Switch 警告 ──
-    if health and health.get("kill_switch_active"):
-        st.markdown(f'''<div class="alert-banner alert-critical">
-            KILL SWITCH 已激活 — {health.get('kill_switch_reason', '未知原因')}
-        </div>''', unsafe_allow_html=True)
-
-    # ── Demo 模式提示 ──
-    if health and health.get("is_demo"):
-        st.markdown('''<div class="alert-banner alert-info">
-            当前为非交易时段或 Demo 模式，显示确定性演示数据
-        </div>''', unsafe_allow_html=True)
-
-    # ── 状态指标卡片 ──
-    _section_header("系统状态")
+    if health.get("is_live"):
+        _banner("danger", "Live trading is enabled. Demo delivery should normally run with paper trading.")
+    else:
+        _banner("safe", "Live trading is disabled. Product demo is running in safe paper/signal mode.")
 
     col1, col2, col3, col4 = st.columns(4)
-
-    api_ok = health is not None
     with col1:
-        if api_ok:
-            st.markdown(_card_html("API 状态", "在线", "FastAPI 服务正常", "#10b981"), unsafe_allow_html=True)
-        else:
-            st.markdown(_card_html("API 状态", "离线", "无法连接", "#ef4444"), unsafe_allow_html=True)
-
+        _card(t("api"), health.get("api_status", "unknown"), health.get("timestamp", ""))
     with col2:
-        if health:
-            ds = health.get("data_source", "unknown")
-            ds_label = ds if ds != "unknown" else "未配置"
-            st.markdown(_card_html("数据源", ds_label, "行情数据提供商", "#3b82f6"), unsafe_allow_html=True)
-        else:
-            st.markdown(_card_html("数据源", "未知", "", "#64748b"), unsafe_allow_html=True)
-
+        _card(t("data_provider"), health.get("data_source", "unknown"), t("demo_fallback_explicit"))
     with col3:
-        if health:
-            risk_ok = health.get("risk_status", "UNKNOWN")
-            if risk_ok == "OK":
-                st.markdown(_card_html("风控状态", "正常", "Kill Switch 未激活", "#10b981"), unsafe_allow_html=True)
-            else:
-                st.markdown(_card_html("风控状态", "阻断", "交易已暂停", "#ef4444"), unsafe_allow_html=True)
-        else:
-            st.markdown(_card_html("风控状态", "未知", "", "#64748b"), unsafe_allow_html=True)
-
+        _card(t("risk"), health.get("risk_status", "UNKNOWN"), t("risk_veto"))
     with col4:
-        if health:
-            mode = health.get("trading_mode", "UNKNOWN")
-            mode_map = {
-                "LEVEL_1_SIGNAL_ONLY": ("L1 信号", "#3b82f6"),
-                "LEVEL_2_HUMAN_CONFIRM": ("L2 人工确认", "#f59e0b"),
-                "LEVEL_3_AUTO": ("L3 自动", "#ef4444"),
-            }
-            label, color = mode_map.get(mode, (mode, "#64748b"))
-            st.markdown(_card_html("交易模式", label, mode, color), unsafe_allow_html=True)
-        else:
-            st.markdown(_card_html("交易模式", "未知", "", "#64748b"), unsafe_allow_html=True)
+        _card(t("trading_mode"), health.get("trading_mode", "UNKNOWN"), t("level_3_not_exposed"))
 
-    # ── 第二行状态 ──
-    col5, col6, col7 = st.columns(3)
-
-    with col5:
-        if health:
-            is_live = health.get("is_live", False)
-            if is_live:
-                st.markdown(_card_html("交易环境", "实盘", "真实资金交易", "#ef4444"), unsafe_allow_html=True)
-            else:
-                st.markdown(_card_html("交易环境", "模拟", "PaperBroker 模拟交易", "#10b981"), unsafe_allow_html=True)
-
-    with col6:
-        if health:
-            is_demo = health.get("is_demo", True)
-            if is_demo:
-                st.markdown(_card_html("数据模式", "Demo", "预置演示数据", "#8b5cf6"), unsafe_allow_html=True)
-            else:
-                st.markdown(_card_html("数据模式", "实时", "实时行情数据", "#06b6d4"), unsafe_allow_html=True)
-
-    with col7:
-        if health:
-            backlog = health.get("feedback_backlog", 0)
-            color = "#f59e0b" if backlog > 0 else "#10b981"
-            st.markdown(_card_html("反馈积压", f"{backlog} 条", "待处理 Bug", color), unsafe_allow_html=True)
-
-    # ── 账户概览 ──
-    if dashboard and dashboard.get("account"):
-        _section_header("账户概览")
-        acct = dashboard["account"]
-
+    if dashboard:
+        account = dashboard.get("account", {})
+        st.markdown(f"### {t('paper_account')}")
         c1, c2, c3, c4 = st.columns(4)
-        total = acct.get('total_assets', 0)
-        cash = acct.get('cash', 0)
-        mv = acct.get('market_value', 0)
-        pnl = acct.get('daily_pnl', 0)
-        pnl_pct = acct.get('daily_pnl_pct', 0)
+        c1.metric(t("total_assets"), f"{account.get('total_assets', 0):,.0f}")
+        c2.metric(t("cash"), f"{account.get('cash', 0):,.0f}")
+        c3.metric(t("market_value"), f"{account.get('market_value', 0):,.0f}")
+        c4.metric(t("daily_pnl"), f"{account.get('daily_pnl', 0):,.0f}", f"{account.get('daily_pnl_pct', 0):.2%}")
 
-        with c1:
-            st.metric("总资产", f"{total:,.0f}")
-        with c2:
-            st.metric("可用现金", f"{cash:,.0f}")
-        with c3:
-            st.metric("持仓市值", f"{mv:,.0f}")
-        with c4:
-            delta_color = "normal" if pnl >= 0 else "inverse"
-            st.metric("当日盈亏", f"{pnl:,.0f}", delta=f"{pnl_pct:.2%}", delta_color=delta_color)
-
-        # 资产分布进度条
-        if total > 0:
-            cash_pct = cash / total * 100
-            mv_pct = mv / total * 100
-            st.markdown(f'''
-            <div style="margin-top:8px">
-                <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#94a3b8;margin-bottom:4px">
-                    <span>现金 {cash_pct:.1f}%</span><span>持仓 {mv_pct:.1f}%</span>
-                </div>
-                <div style="height:8px;border-radius:4px;background:#1e293b;overflow:hidden">
-                    <div style="height:100%;width:{mv_pct}%;background:linear-gradient(90deg,#3b82f6,#06b6d4);border-radius:4px"></div>
-                </div>
-            </div>''', unsafe_allow_html=True)
-
-
-# ============================================================
-# 2. 实时行情 (Market)
-# ============================================================
 
 def render_market() -> None:
-    """渲染实时行情"""
-    dashboard = _api_get("/product/dashboard")
+    st.subheader(t("realtime_market"))
+    st.caption(t("realtime_market_caption"))
 
-    # ── 控制栏 ──
-    ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 1])
-    with ctrl_col1:
-        search = st.text_input("搜索股票代码/名称", placeholder="输入代码或名称...", key="market_search")
-    with ctrl_col2:
-        refresh_interval = st.slider("刷新间隔（秒）", 5, 60, 30, key="refresh_interval")
-    with ctrl_col3:
-        if st.button("刷新", key="market_refresh", use_container_width=True):
-            st.rerun()
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        symbols = st.text_input(t("symbols"), "002463.SZ,600584.SH,603228.SH", help=t("symbols_help"), key="market_symbols")
+    with col2:
+        provider = st.selectbox(t("data_provider_select"), ["akshare", "aktools"], index=0, key="market_provider")
+    with col3:
+        force_live = st.checkbox(t("force_realtime_fetch"), value=False, key="market_force_live")
 
-    # ── 数据源标签 ──
-    if dashboard:
-        is_demo = dashboard.get("is_demo", True)
-        ds = dashboard.get("data_source", "unknown")
-        if is_demo:
-            st.markdown(_badge_html("Demo 数据", "demo"), unsafe_allow_html=True)
+    allow_demo = st.checkbox(t("allow_demo_fallback"), value=True, key="market_allow_demo")
+    col4, col5 = st.columns(2)
+    refresh = col4.button(t("refresh_quotes"), type="primary", width="stretch")
+    start_job = col5.button(t("start_bg_snapshot"), width="stretch")
+
+    params = {
+        "symbols": symbols,
+        "provider": provider,
+        "allow_demo": str(allow_demo).lower(),
+        "force_live": str(force_live or refresh).lower(),
+    }
+    if start_job:
+        job_result = _post("/product/jobs/quote_refresh/start", params=params)
+        if job_result and job_result.get("status") == "ok":
+            st.success(f"quote_refresh {t('bg_snapshot_started')}: {job_result.get('job_id')}")
         else:
-            st.markdown(_badge_html(f"数据源: {ds}", "info"), unsafe_allow_html=True)
-        ts = dashboard.get("timestamp", "")
-        if ts:
-            st.caption(f"更新时间: {ts}")
+            _banner("danger", f"quote_refresh {t('bg_snapshot_failed')}: {job_result}")
 
-    # ── 行情表格 ──
-    if dashboard and dashboard.get("quotes"):
-        quotes = dashboard["quotes"]
+    result = _get("/product/quotes", params=params)
+    jobs = _get("/product/jobs") or {}
+    quote_job = next((job for job in jobs.get("jobs", []) if job.get("name") == "quote_refresh"), None)
+    if quote_job:
+        st.caption(
+            "quote_refresh: "
+            f"{quote_job.get('state')} | last_run={quote_job.get('last_run_at', '')} "
+            f"| result={quote_job.get('last_result', '')}"
+        )
 
-        # 搜索过滤
-        if search:
-            search_lower = search.lower()
-            quotes = [
-                q for q in quotes
-                if search_lower in q.get("symbol", "").lower()
-                or search_lower in str(q.get("name", "")).lower()
-            ]
+    if not result:
+        _banner("danger", t("unable_fetch_quotes"))
+        return
 
-        if quotes:
-            rows = []
-            for q in quotes:
-                pct = q.get("pct_change")
-                pct_val = pct if pct is not None else 0
-                pct_str = _pct_fmt(pct)
-                pct_class = "price-up" if pct_val > 0 else ("price-down" if pct_val < 0 else "price-flat")
-                rows.append({
-                    "代码": q.get("symbol", ""),
-                    "名称": _get_stock_name(q.get("symbol", "")),
-                    "最新价": f"{q.get('last_price', 0):.2f}",
-                    "涨跌幅": pct_str,
-                    "成交量": f"{q.get('volume', 0):,.0f}",
-                    "成交额": f"{q.get('amount', 0):,.0f}",
-                    "状态": q.get("status", "UNKNOWN"),
-                })
-
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("未找到匹配的股票")
+    status = result.get("status", "unknown")
+    if result.get("is_demo"):
+        _banner("warn", f"{t('showing_demo_data')}. {t('status')}: {status}. {' '.join(result.get('messages', []))}")
     else:
-        st.warning("暂无行情数据，请确认后端服务已启动")
+        _banner("safe", t("showing_realtime_data").format(provider=result.get('provider'), timestamp=result.get('timestamp')))
 
+    rows = []
+    for quote in result.get("quotes", []):
+        rows.append(
+            {
+                "Symbol": quote.get("symbol"),
+                "Name": quote.get("name", ""),
+                "Market": quote.get("market", ""),
+                "Last": quote.get("last_price", 0),
+                "Change": _format_pct(quote.get("pct_change")),
+                "Volume": quote.get("volume", 0),
+                "Amount": quote.get("amount", 0),
+                "Status": quote.get("status", "UNKNOWN"),
+                "Source": quote.get("data_source", result.get("provider", "")),
+                "Updated": quote.get("updated_at", quote.get("datetime", "")),
+            }
+        )
+    st.dataframe(_df(rows), width="stretch", hide_index=True)
 
-def _get_stock_name(symbol: str) -> str:
-    """根据代码获取股票名称"""
-    from src.product_app.demo_data import DEMO_STOCKS
-    for s in DEMO_STOCKS:
-        if s["symbol"] == symbol:
-            return s["name"]
-    return symbol
-
-
-# ============================================================
-# 3. 候选股监控 (Watchlist)
-# ============================================================
 
 def render_watchlist() -> None:
-    """渲染候选股监控"""
-    dashboard = _api_get("/product/dashboard")
-
+    st.subheader(t("watchlist"))
+    dashboard = _get("/product/dashboard")
     if not dashboard:
-        st.warning("无法获取数据")
+        _banner("danger", t("dashboard_unavailable"))
         return
 
-    watchlist = dashboard.get("watchlist", [])
-    if not watchlist:
-        st.info("暂无候选股数据")
-        return
+    if dashboard.get("trading_mode") == "LEVEL_1_SIGNAL_ONLY":
+        _banner("safe", t("level1_signal_only"))
 
-    # 交易模式提示
-    trading_mode = dashboard.get("trading_mode", "")
-    if trading_mode == "LEVEL_1_SIGNAL_ONLY":
-        st.markdown('''<div class="alert-banner alert-info">
-            当前为 LEVEL_1 信号模式 — 仅生成信号，不会产生任何订单
-        </div>''', unsafe_allow_html=True)
+    rows = []
+    for item in dashboard.get("watchlist", []):
+        rows.append(
+            {
+                "Symbol": item.get("symbol"),
+                "Name": item.get("name"),
+                "Sector": item.get("sector"),
+                "Last": item.get("last_price", 0),
+                "Change": _format_pct(item.get("pct_change")),
+                "Risk status": item.get("status", "UNKNOWN"),
+            }
+        )
+    st.dataframe(_df(rows), width="stretch", hide_index=True)
 
-    # 候选股卡片
-    _section_header("候选股列表")
-
-    for w in watchlist:
-        pct = w.get("pct_change", 0) or 0
-        symbol = w.get("symbol", "")
-        name = w.get("name", symbol)
-        price = w.get("last_price", 0)
-        sector = _sector_label(w.get("sector", ""))
-        status = w.get("status", "UNKNOWN")
-
-        pct_class = "price-up" if pct > 0 else ("price-down" if pct < 0 else "price-flat")
-        border_color = "#ef4444" if pct > 0 else ("#10b981" if pct < 0 else "#64748b")
-
-        st.markdown(f'''<div class="card" style="border-left:4px solid {border_color}">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div>
-                    <span style="font-weight:700;font-size:1rem">{name}</span>
-                    <span style="color:#64748b;font-size:0.8rem;margin-left:8px">{symbol}</span>
-                    <span style="margin-left:8px">{_badge_html(sector, "info")}</span>
-                </div>
-                <div style="text-align:right">
-                    <div style="font-weight:700;font-size:1.1rem">{price:.2f}</div>
-                    <div class="{pct_class}" style="font-size:0.85rem">{_pct_fmt(pct)}</div>
-                </div>
-            </div>
-        </div>''', unsafe_allow_html=True)
-
-    # 风控阻断提示
     risk = dashboard.get("risk", {})
-    if risk and not risk.get("risk_pass", True):
-        st.markdown(f'''<div class="alert-banner alert-critical">
-            风控阻断: {' / '.join(risk.get('messages', []))}
-        </div>''', unsafe_allow_html=True)
+    if not risk.get("risk_pass", True):
+        _banner("danger", t("risk_blocked") + ": " + " / ".join(risk.get("messages", [])))
 
-    # 触发的信号提醒
-    signals = dashboard.get("signals", [])
-    buy_signals = [s for s in signals if s.get("signal_type") == "BUY"]
-    sell_signals = [s for s in signals if s.get("signal_type") == "SELL"]
-
-    if buy_signals:
-        st.markdown(f'''<div class="alert-banner alert-warning">
-            {len(buy_signals)} 只股票触发买入信号
-        </div>''', unsafe_allow_html=True)
-    if sell_signals:
-        st.markdown(f'''<div class="alert-banner alert-critical">
-            {len(sell_signals)} 只股票触发卖出信号
-        </div>''', unsafe_allow_html=True)
-
-
-def _sector_label(sector: str) -> str:
-    """板块代码转中文标签"""
-    labels = {
-        "pcb_ccl": "PCB/CCL",
-        "advanced_packaging": "先进封装",
-        "equipment_material": "设备/材料",
-        "optical_module_cpo": "光模块/CPO",
-        "memory_hbm": "存储/HBM",
-    }
-    return labels.get(sector, sector)
-
-
-# ============================================================
-# 4. 因子分析 (Factor Lab)
-# ============================================================
 
 def render_factor_lab() -> None:
-    """渲染因子分析"""
-    dashboard = _api_get("/product/dashboard")
-
-    # ── 选择器 ──
-    if dashboard and dashboard.get("watchlist"):
-        symbols = [f"{w['symbol']} {w.get('name', '')}" for w in dashboard["watchlist"]]
-    else:
-        from src.product_app.demo_data import DEMO_STOCKS
-        symbols = [f"{s['symbol']} {s['name']}" for s in DEMO_STOCKS]
-
-    selected = st.multiselect("选择股票", symbols, default=symbols[:5], key="factor_symbols")
-    date_col1, date_col2 = st.columns(2)
-    with date_col1:
-        start_date = st.date_input("开始日期", value=None, key="factor_start")
-    with date_col2:
-        end_date = st.date_input("结束日期", value=None, key="factor_end")
-
-    if st.button("计算因子评分", key="compute_factors", type="primary"):
-        symbol_codes = [s.split()[0] for s in selected]
-        params = {"symbols": ",".join(symbol_codes)}
-        if start_date:
-            params["start_date"] = start_date.strftime("%Y%m%d")
-        if end_date:
-            params["end_date"] = end_date.strftime("%Y%m%d")
-
-        with st.spinner("正在计算因子评分..."):
-            result = _api_post("/product/factors/compute", params=params)
-
-        if result and result.get("factors"):
-            _render_factor_results(result)
-        else:
-            st.error("因子计算失败，请检查后端服务")
-    else:
-        # 显示 Dashboard 中的因子数据
-        if dashboard and dashboard.get("factors"):
-            _render_factor_cards(dashboard["factors"])
-
-        st.markdown('''<div class="alert-banner alert-warning">
-            因子数据存在幸存者偏差：仅包含当前在池股票。部分因子可能存在数据缺失，请结合原始数据验证。
-        </div>''', unsafe_allow_html=True)
-
-
-def _render_factor_cards(factors: list) -> None:
-    """渲染因子评分卡片"""
-    _section_header("因子评分")
-
-    for f in factors:
-        symbol = f.get("symbol", "")
-        name = f.get("name", symbol)
-        total = f.get("total_score", 0)
-        policy = f.get("policy_score", 0)
-        sentiment = f.get("sentiment_score", 0)
-        fundamental = f.get("fundamental_score", 0)
-        technical = f.get("technical_score", 0)
-
-        # 综合评分颜色
-        total_color = _score_color(total)
-        action = "买入" if total >= 82 else ("卖出" if total <= 58 else "持有")
-        action_badge = "badge-error" if total >= 82 else ("badge-ok" if total <= 58 else "badge-info")
-
-        st.markdown(f'''<div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <div>
-                    <span style="font-weight:700;font-size:1rem">{name}</span>
-                    <span style="color:#64748b;font-size:0.8rem;margin-left:8px">{symbol}</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px">
-                    <span class="badge {action_badge}">{action}</span>
-                    <span style="font-size:1.5rem;font-weight:800;color:{total_color}">{total:.0f}</span>
-                </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
-                {_gauge_html(policy, "政策面", _score_color(policy))}
-                {_gauge_html(sentiment, "情绪面", _score_color(sentiment))}
-                {_gauge_html(fundamental, "基本面", _score_color(fundamental))}
-                {_gauge_html(technical, "技术面", _score_color(technical))}
-            </div>
-        </div>''', unsafe_allow_html=True)
-
-
-def _render_factor_results(result: dict) -> None:
-    """渲染因子计算结果"""
-    factors = result.get("factors", [])
-    _render_factor_cards(factors)
-    st.success(f"因子计算完成，共 {len(factors)} 只股票")
-
-    # 因子说明
-    with st.expander("因子说明"):
-        st.markdown("""
-        - **政策面** (权重 25%): 产业政策对板块的影响评分
-        - **情绪面** (权重 30%): 资金流向与市场情绪评分
-        - **基本面** (权重 20%): 财务指标与估值水平评分
-        - **技术面** (权重 25%): 价格趋势与动量信号评分
-        - **综合评分** >= 82 触发买入，<= 58 触发卖出
-        """)
-
-    warnings = result.get("warnings", [])
-    for w in warnings:
-        st.warning(w)
-
-
-# ============================================================
-# 5. 回测实验室 (Backtest Lab)
-# ============================================================
-
-def render_backtest_lab() -> None:
-    """渲染回测实验室"""
-
-    # ── 参数设置 ──
-    _section_header("回测参数")
-
+    st.subheader(t("factor_lab"))
+    st.caption(t("factor_lab_caption"))
+    symbols = st.text_input(t("symbols"), "600000.SH,000001.SZ", key="factor_symbols")
     col1, col2 = st.columns(2)
+    start_date = col1.text_input(t("start_date"), "20250101", key="factor_start_date")
+    end_date = col2.text_input(t("end_date"), "20251231", key="factor_end_date")
 
-    with col1:
-        strategy = st.selectbox("策略", [
-            "demo_semiconductor_rotation",
-            "sector_rotation",
-            "momentum_breakout",
-        ], key="bt_strategy")
-        symbols_input = st.text_input("股票代码（逗号分隔）", "002463,002916,002371", key="bt_symbols")
-
-    with col2:
-        bt_start = st.date_input("开始日期", value=None, key="bt_start")
-        bt_end = st.date_input("结束日期", value=None, key="bt_end")
-        initial_capital = st.number_input("初始资金", min_value=100000, value=1000000, step=100000, key="bt_capital")
-
-    # ── 成本参数 ──
-    with st.expander("交易成本参数"):
-        cc1, cc2, cc3 = st.columns(3)
-        with cc1:
-            commission = st.number_input("手续费率", min_value=0.0, value=0.0003, step=0.0001, format="%.4f", key="bt_commission")
-        with cc2:
-            stamp_duty = st.number_input("印花税率", min_value=0.0, value=0.001, step=0.0001, format="%.4f", key="bt_stamp")
-        with cc3:
-            slippage = st.number_input("滑点", min_value=0.0, value=0.001, step=0.0001, format="%.4f", key="bt_slippage")
-
-    # ── 无成本假设阻断 ──
-    if commission == 0 and stamp_duty == 0 and slippage == 0:
-        st.markdown('''<div class="alert-banner alert-critical">
-            回测必须包含交易成本假设（手续费/印花税/滑点），不含成本的回测结果不可信
-        </div>''', unsafe_allow_html=True)
-
-    # ── 运行回测 ──
-    if st.button("运行回测", key="run_backtest", type="primary"):
-        params = {
-            "strategy": strategy,
-            "symbols": symbols_input,
-            "initial_capital": initial_capital,
-            "commission_rate": commission,
-            "stamp_duty_rate": stamp_duty,
-            "slippage": slippage,
-        }
-        if bt_start:
-            params["start_date"] = bt_start.strftime("%Y%m%d")
-        if bt_end:
-            params["end_date"] = bt_end.strftime("%Y%m%d")
-
-        with st.spinner("回测运行中..."):
-            result = _api_post("/product/jobs/backtest/start", params=params)
-
+    if st.button(t("compute_live_factors"), type="primary", key="compute_factors_btn"):
+        result = _post(
+            "/product/live-factors/compute",
+            params={"symbols": symbols, "start_date": start_date, "end_date": end_date},
+        )
         if result:
-            st.success(f"回测完成! Job ID: {result.get('job_id', 'N/A')}")
-
-            # 性能摘要
-            perf = result.get("performance", {})
-            if perf:
-                _section_header("性能摘要")
-                p1, p2, p3, p4 = st.columns(4)
-
-                annual_ret = perf.get('annual_return', 0)
-                max_dd = perf.get('max_drawdown', 0)
-                sharpe = perf.get('sharpe_ratio', 0)
-                win_rate = perf.get('win_rate', 0)
-
-                ret_color = "#10b981" if annual_ret > 0 else "#ef4444"
-                dd_color = "#ef4444" if max_dd < -0.15 else "#f59e0b"
-                sharpe_color = "#10b981" if sharpe > 1 else ("#f59e0b" if sharpe > 0 else "#ef4444")
-
-                with p1:
-                    st.markdown(_card_html("年化收益", f"{annual_ret:.1%}", "", ret_color), unsafe_allow_html=True)
-                with p2:
-                    st.markdown(_card_html("最大回撤", f"{max_dd:.1%}", "", dd_color), unsafe_allow_html=True)
-                with p3:
-                    st.markdown(_card_html("夏普比率", f"{sharpe:.2f}", "", sharpe_color), unsafe_allow_html=True)
-                with p4:
-                    st.markdown(_card_html("胜率", f"{win_rate:.1%}", "", "#3b82f6"), unsafe_allow_html=True)
-
-            # 成本假设
-            costs = result.get("cost_assumptions", {})
-            if costs:
-                _section_header("成本假设")
-                st.json(costs)
-
-            # 交易列表
-            trades = result.get("trades", [])
-            if trades:
-                _section_header("交易列表")
-                trade_df = pd.DataFrame(trades)
-                st.dataframe(trade_df, use_container_width=True, hide_index=True)
-
-            # 警告
-            warnings = result.get("warnings", [])
-            for w in warnings:
-                st.warning(w)
-
-            # 免责声明
-            disclaimer = result.get("disclaimer", "")
-            if disclaimer:
-                st.markdown(f'''<div class="alert-banner alert-info">{disclaimer}</div>''', unsafe_allow_html=True)
+            data_status = result.get("data_status", "UNKNOWN")
+            if data_status == "FAILED":
+                _banner("danger", f"{t('factor_compute_failed')} Data status: {data_status}")
+            elif data_status == "WARN":
+                _banner("warn", f"{t('factor_compute_partial')} Data status: {data_status}")
+            else:
+                _banner("safe", f"{t('factor_compute_ok')} Data status: {data_status}")
+            rows = []
+            for factor in result.get("factors", []):
+                rows.append({
+                    "Symbol": factor.get("symbol"),
+                    "Date": factor.get("trade_date"),
+                    "SMA_5": factor.get("sma_5"),
+                    "SMA_20": factor.get("sma_20"),
+                    "RSI": factor.get("rsi_14"),
+                    "MACD": factor.get("macd_line"),
+                    "BOLL_Mid": factor.get("boll_middle"),
+                })
+            st.dataframe(_df(rows), hide_index=True)
+            with st.expander(t("data_health")):
+                st.json(result.get("data_health", {}))
         else:
-            st.error("回测运行失败，请检查后端服务")
+            _banner("danger", t("failed_to_compute"))
 
 
-# ============================================================
-# 6. 信号中心 (Signal Center)
-# ============================================================
+def render_backtest() -> None:
+    st.subheader(t("backtest"))
+    st.caption(t("backtest_caption"))
+    col1, col2, col3 = st.columns(3)
+    symbols = col1.text_input(t("symbols"), "600000.SH,000001.SZ", key="backtest_symbols")
+    start_date = col2.text_input(t("start_date"), "20250101", key="backtest_start_date")
+    end_date = col3.text_input(t("end_date"), "20251231", key="backtest_end_date")
 
-def render_signal_center() -> None:
-    """渲染信号中心"""
-    dashboard = _api_get("/product/dashboard")
-
-    # ── 手动刷新 ──
-    if st.button("刷新信号", key="signal_refresh"):
-        refresh_result = _api_post("/signals/refresh")
-        if refresh_result:
-            st.success("信号已刷新")
-            st.rerun()
+    if st.button(t("run_live_backtest"), type="primary", key="run_backtest_btn"):
+        result = _post(
+            "/product/live-backtests/run",
+            params={"symbols": symbols, "start_date": start_date, "end_date": end_date},
+        )
+        if result:
+            bt_status = result.get("status", "unknown")
+            data_status = result.get("data_status", "UNKNOWN")
+            if bt_status == "failed" or data_status == "FAILED":
+                _banner("danger", f"{t('backtest_failed')} Data status: {data_status}")
+            elif bt_status == "insufficient_data":
+                _banner("warn", t("backtest_insufficient_data"))
+            else:
+                _banner("safe", f"{t('backtest_completed')} Strategy: {result.get('strategy', '')}. Data status: {data_status}")
+                results = result.get("results", {})
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric(t("total_return"), f"{results.get('total_return', 0):.2%}")
+                c2.metric(t("max_drawdown"), f"{results.get('max_drawdown', 0):.2%}")
+                c3.metric(t("sharpe"), f"{results.get('sharpe_ratio', 0):.2f}")
+                c4.metric(t("win_rate"), f"{results.get('win_rate', 0):.2%}")
+            with st.expander(t("data_health")):
+                st.json(result.get("health", {}))
         else:
-            st.warning("信号刷新失败，可能 SignalService 未配置")
-            dashboard = _api_get("/product/dashboard")
+            _banner("danger", t("failed_to_run_backtest"))
 
+
+def render_signals() -> None:
+    st.subheader(t("signals"))
+    dashboard = _get("/product/dashboard")
     if not dashboard:
-        st.warning("无法获取信号数据")
+        _banner("danger", t("signal_unavailable"))
         return
 
-    signals = dashboard.get("signals", [])
-    if not signals:
-        st.info("暂无信号数据")
-        return
-
-    # ── 信号统计 ──
-    buy_count = sum(1 for s in signals if s.get("signal_type") == "BUY")
-    sell_count = sum(1 for s in signals if s.get("signal_type") == "SELL")
-    hold_count = sum(1 for s in signals if s.get("signal_type") == "HOLD")
-
-    _section_header("信号概览")
-    sc1, sc2, sc3 = st.columns(3)
-    with sc1:
-        st.markdown(_card_html("买入信号", str(buy_count), "触发买入条件", "#ef4444"), unsafe_allow_html=True)
-    with sc2:
-        st.markdown(_card_html("卖出信号", str(sell_count), "触发卖出条件", "#10b981"), unsafe_allow_html=True)
-    with sc3:
-        st.markdown(_card_html("持有信号", str(hold_count), "维持持有", "#64748b"), unsafe_allow_html=True)
-
-    # ── 信号卡片 ──
-    _section_header("信号列表")
-
-    for s in signals:
-        sig_type = s.get("signal_type", "UNKNOWN")
-        symbol = s.get("symbol", "")
-        name = s.get("stock_name", symbol)
-        score = s.get("score", 0)
-        reason = s.get("reason", "")
-        stop_loss = s.get("stop_loss_price", 0)
-        take_profit = s.get("take_profit_price", 0)
-        position_pct = s.get("position_pct", 0)
-        risk_note = s.get("risk_note", "")
-
-        if sig_type == "BUY":
-            border_color = "#ef4444"
-            sig_label = "买入"
-            badge_class = "badge-error"
-        elif sig_type == "SELL":
-            border_color = "#10b981"
-            sig_label = "卖出"
-            badge_class = "badge-ok"
-        else:
-            border_color = "#64748b"
-            sig_label = "持有"
-            badge_class = "badge-info"
-
-        risk_html = f'''<div style="margin-top:8px;font-size:0.8rem;color:#fbbf24">
-            风险提示: {risk_note}</div>''' if risk_note else ""
-
-        st.markdown(f'''<div class="card" style="border-left:4px solid {border_color}">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div>
-                    <span class="badge {badge_class}">{sig_label}</span>
-                    <span style="font-weight:700;font-size:1rem;margin-left:8px">{name}</span>
-                    <span style="color:#64748b;font-size:0.8rem;margin-left:8px">{symbol}</span>
-                </div>
-                <div style="font-size:1.2rem;font-weight:700;color:{_score_color(score)}">{score:.0f}</div>
-            </div>
-            <div style="margin-top:8px;font-size:0.85rem;color:#94a3b8">{reason}</div>
-            <div style="display:flex;gap:16px;margin-top:8px;font-size:0.8rem">
-                <span style="color:#94a3b8">止损 <span style="color:#f87171">{stop_loss:.2f}</span></span>
-                <span style="color:#94a3b8">止盈 <span style="color:#34d399">{take_profit:.2f}</span></span>
-                <span style="color:#94a3b8">仓位 <span style="color:#60a5fa">{position_pct:.0%}</span></span>
-            </div>
-            {risk_html}
-        </div>''', unsafe_allow_html=True)
-
-    # ── 风控检查结果 ──
-    risk = dashboard.get("risk", {})
-    if risk:
-        _section_header("风控检查结果")
-        if risk.get("risk_pass"):
-            st.markdown(_badge_html("风控通过", "ok"), unsafe_allow_html=True)
-        else:
-            st.markdown(f'''<div class="alert-banner alert-critical">
-                风控阻断: {' / '.join(risk.get('messages', []))}
-            </div>''', unsafe_allow_html=True)
+    rows = []
+    for signal in dashboard.get("signals", []):
+        rows.append(
+            {
+                t("signal"): signal.get("signal_type"),
+                "Symbol": signal.get("symbol"),
+                "Name": signal.get("stock_name"),
+                t("score"): signal.get("score"),
+                t("trigger"): signal.get("price_trigger"),
+                t("stop"): signal.get("stop_loss_price"),
+                t("take_profit"): signal.get("take_profit_price"),
+                t("reason"): signal.get("reason"),
+                t("risk_note"): signal.get("risk_note"),
+            }
+        )
+    st.dataframe(_df(rows), width="stretch", hide_index=True)
 
 
-# ============================================================
-# 7. 人工确认 (Human Confirm)
-# ============================================================
-
-def render_human_confirm() -> None:
-    """渲染人工确认页面"""
-    pending_data = _api_get("/orders/pending")
-    dashboard = _api_get("/product/dashboard")
-
-    if not pending_data:
-        st.warning("无法连接交易服务")
-        return
-
-    orders = pending_data.get("orders", [])
-
-    # ── 账户摘要 ──
-    if dashboard and dashboard.get("account"):
-        acct = dashboard["account"]
-        _section_header("账户摘要")
-        a1, a2, a3 = st.columns(3)
-        a1.metric("总资产", f"{acct.get('total_assets', 0):,.0f}")
-        a2.metric("可用现金", f"{acct.get('cash', 0):,.0f}")
-        a3.metric("持仓市值", f"{acct.get('market_value', 0):,.0f}")
-
-    # ── 持仓摘要 ──
-    if dashboard and dashboard.get("positions"):
-        positions = dashboard["positions"]
-        _section_header("持仓摘要")
-        pos_rows = []
-        for p in positions:
-            pnl = p.get("pnl", 0)
-            pos_rows.append({
-                "代码": p.get("symbol", ""),
-                "名称": p.get("name", ""),
-                "数量": p.get("quantity", 0),
-                "成本价": f"{p.get('cost_price', 0):.2f}",
-                "现价": f"{p.get('current_price', 0):.2f}",
-                "市值": f"{p.get('market_value', 0):,.0f}",
-                "盈亏": f"{pnl:,.0f}",
-                "盈亏%": f"{p.get('pnl_pct', 0):.2%}",
-            })
-        if pos_rows:
-            st.dataframe(pd.DataFrame(pos_rows), use_container_width=True, hide_index=True)
-
-    # ── 待确认订单 ──
-    _section_header("待确认订单")
+def render_human_confirmation() -> None:
+    st.subheader(t("human_confirmation"))
+    _banner("warn", t("buy_orders_warning"))
+    pending = _get("/orders/pending") or {"orders": []}
+    orders = pending.get("orders", [])
 
     if not orders:
-        st.info("暂无待确认订单")
+        st.info(t("no_pending_orders"))
         return
 
-    # 批量操作
-    batch_col1, batch_col2 = st.columns(2)
-    with batch_col1:
-        if st.button("批量拒绝所有", key="batch_reject_all"):
-            rejected = 0
-            for o in orders:
-                if o.get("side") != "BUY":
-                    result = _api_post(f"/orders/{o.get('order_id', '')}/reject")
-                    if result and result.get("status") == "ok":
-                        rejected += 1
-            if rejected > 0:
-                st.success(f"已拒绝 {rejected} 个非买入订单")
-                st.rerun()
-            else:
-                st.info("没有可批量拒绝的订单（买入订单不允许批量操作）")
-
-    with batch_col2:
-        if st.button("批量取消所有", key="batch_cancel_all"):
-            cancelled = 0
-            for o in orders:
-                result = _api_post(f"/orders/{o.get('order_id', '')}/cancel")
-                if result and result.get("status") == "ok":
-                    cancelled += 1
-            if cancelled > 0:
-                st.success(f"已取消 {cancelled} 个订单")
-                st.rerun()
-
-    st.markdown('''<div class="alert-banner alert-warning">
-        买入订单必须逐笔确认，禁止一键确认 (EXECUTION_POLICY 5)
-    </div>''', unsafe_allow_html=True)
-
-    # ── 逐笔订单卡片 ──
     for order in orders:
-        order_id = order.get("order_id", "")
-        symbol = order.get("symbol", "")
-        side = order.get("side", "")
-        limit_price = order.get("limit_price", 0)
-        quantity = order.get("quantity", 0)
-        stock_name = order.get("stock_name", "")
-        stop_loss = order.get("stop_loss_price", 0)
-        take_profit = order.get("take_profit_price", 0)
-        risk_note = order.get("risk_note", "")
-        signal_id = order.get("signal_id", "")
-        risk_check_id = order.get("risk_check_id", "")
-        order_state = order.get("status", "")
+        title = f"{order.get('side')} {order.get('stock_name', '')} {order.get('symbol')} x{order.get('quantity')} @ {order.get('limit_price')}"
+        with st.expander(title):
+            st.json(order)
+            col1, col2, col3 = st.columns(3)
+            if col1.button(t("confirm_order"), key=f"confirm_{order.get('order_id')}", type="primary"):
+                st.write(_post(f"/orders/{order.get('order_id')}/confirm"))
+                st.rerun()
+            if col2.button(t("reject"), key=f"reject_{order.get('order_id')}"):
+                st.write(_post(f"/orders/{order.get('order_id')}/reject"))
+                st.rerun()
+            if col3.button(t("cancel"), key=f"cancel_{order.get('order_id')}"):
+                st.write(_post(f"/orders/{order.get('order_id')}/cancel"))
+                st.rerun()
 
-        amount = limit_price * quantity
-        side_label = "买入" if side == "BUY" else "卖出"
-        order_class = "order-buy" if side == "BUY" else "order-sell"
-        side_color = "#ef4444" if side == "BUY" else "#10b981"
-
-        risk_html = f'''<div style="margin-top:6px;font-size:0.8rem;color:#fbbf24">
-            风险提示: {risk_note}</div>''' if risk_note else ""
-
-        with st.container():
-            st.markdown(f'''<div class="order-card {order_class}">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                    <div>
-                        <span style="color:{side_color};font-weight:700;font-size:0.9rem">{side_label}</span>
-                        <span style="font-weight:700;font-size:1rem;margin-left:8px">{stock_name}</span>
-                        <span style="color:#64748b;font-size:0.8rem;margin-left:8px">{symbol}</span>
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-weight:700;font-size:1.1rem">{amount:,.0f} 元</div>
-                        <div style="font-size:0.8rem;color:#94a3b8">{quantity} 股 @ {limit_price:.2f}</div>
-                    </div>
-                </div>
-                <div style="display:flex;gap:16px;margin-top:8px;font-size:0.8rem;color:#94a3b8">
-                    <span>订单 <code style="color:#60a5fa">{order_id[:12]}...</code></span>
-                    <span>信号 <code style="color:#60a5fa">{signal_id[:12]}...</code></span>
-                    <span>状态 {_badge_html(order_state, 'info')}</span>
-                </div>
-                <div style="display:flex;gap:16px;margin-top:6px;font-size:0.8rem">
-                    <span style="color:#94a3b8">止损 <span style="color:#f87171">{stop_loss:.2f}</span></span>
-                    <span style="color:#94a3b8">止盈 <span style="color:#34d399">{take_profit:.2f}</span></span>
-                </div>
-                {risk_html}
-            </div>''', unsafe_allow_html=True)
-
-            # 操作按钮
-            btn_col1, btn_col2 = st.columns(2)
-            with btn_col1:
-                if st.button("确认执行", key=f"confirm_{order_id}", type="primary"):
-                    result = _api_post(f"/orders/{order_id}/confirm")
-                    if result and result.get("status") == "ok":
-                        st.success("订单已确认并执行")
-                        st.rerun()
-                    else:
-                        msg = result.get("message", "未知错误") if result else "API 连接失败"
-                        st.error(f"确认失败: {msg}")
-
-            with btn_col2:
-                if st.button("拒绝", key=f"reject_{order_id}"):
-                    result = _api_post(f"/orders/{order_id}/reject")
-                    if result and result.get("status") == "ok":
-                        st.success("订单已拒绝")
-                        st.rerun()
-                    else:
-                        msg = result.get("message", "未知错误") if result else "API 连接失败"
-                        st.error(f"拒绝失败: {msg}")
-
-
-# ============================================================
-# 8. 配置中心 (Configuration)
-# ============================================================
 
 def render_configuration() -> None:
-    """渲染配置中心"""
-    config_data = _api_get("/product/config")
-
+    st.subheader(t("configuration"))
+    config_data = _get("/product/config")
     if not config_data:
-        st.error("无法获取配置数据")
+        _banner("danger", t("config_unavailable"))
         return
+
+    validation = config_data.get("validation", {})
+    for error in validation.get("errors", []):
+        _banner("danger", error)
+    for warning in validation.get("warnings", []):
+        _banner("warn", warning)
 
     config = config_data.get("config", {})
-    groups = config_data.get("groups", {})
-    validation = config_data.get("validation", {})
+    provider = st.selectbox(
+        t("data_provider_select"),
+        ["akshare", "aktools"],
+        index=0 if config.get("DEFAULT_DATA_PROVIDER", "akshare") == "akshare" else 1,
+        key="config_provider",
+    )
+    log_level = st.selectbox(t("log_level"), ["DEBUG", "INFO", "WARNING", "ERROR"], index=1, key="config_log_level")
+    max_single = st.slider(t("max_single_position"), 0.01, 0.50, float(config.get("MAX_SINGLE_STOCK_POSITION", 0.15)), 0.01, key="config_max_single")
+    max_sector = st.slider(t("max_sector_position"), 0.10, 1.00, float(config.get("MAX_SECTOR_POSITION", 0.60)), 0.05, key="config_max_sector")
+    min_cash = st.slider(t("min_cash_ratio"), 0.0, 0.50, float(config.get("MIN_CASH_RATIO", 0.20)), 0.05, key="config_min_cash")
 
-    # ── 验证消息 ──
-    if validation.get("errors"):
-        for err in validation["errors"]:
-            st.markdown(f'''<div class="alert-banner alert-critical">{err}</div>''', unsafe_allow_html=True)
-    if validation.get("warnings"):
-        for warn in validation["warnings"]:
-            st.markdown(f'''<div class="alert-banner alert-warning">{warn}</div>''', unsafe_allow_html=True)
+    mode = st.selectbox(
+        t("trading_mode"),
+        ["LEVEL_0", "LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"],
+        index=1,
+        key="config_trading_mode",
+    )
+    if mode == "LEVEL_3_AUTO":
+        _banner("danger", t("level3_blocked"))
+    elif mode == "LEVEL_2_HUMAN_CONFIRM":
+        _banner("warn", t("level2_warning"))
 
-    # ── 交易模式 ──
-    _section_header("交易模式")
-    trading_mode = config.get("MAX_TRADING_LEVEL", "LEVEL_1_SIGNAL_ONLY")
-    mode_options = ["LEVEL_0", "LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"]
-    mode_labels = {
-        "LEVEL_0": "LEVEL_0 - 观察模式",
-        "LEVEL_1_SIGNAL_ONLY": "LEVEL_1 - 仅信号模式",
-        "LEVEL_2_HUMAN_CONFIRM": "LEVEL_2 - 人工确认模式",
-        "LEVEL_3_AUTO": "LEVEL_3 - 自动交易 (Demo V1 不可用)",
-    }
+    if st.button(t("save_safe_config"), type="primary", key="save_config_btn"):
+        updates = {
+            "DEFAULT_DATA_PROVIDER": provider,
+            "LOG_LEVEL": log_level,
+            "MAX_SINGLE_STOCK_POSITION": str(max_single),
+            "MAX_SECTOR_POSITION": str(max_sector),
+            "MIN_CASH_RATIO": str(min_cash),
+        }
+        results = [_post("/product/config", params={"key": key, "value": value}) for key, value in updates.items()]
+        if all(result and result.get("success") for result in results):
+            st.success(t("config_saved"))
+        else:
+            st.error(t("config_failed"))
 
-    new_mode = st.selectbox(
-        "交易模式",
-        mode_options,
-        index=mode_options.index(trading_mode) if trading_mode in mode_options else 0,
-        format_func=lambda x: mode_labels.get(x, x),
-        key="cfg_trading_mode",
+    if st.button(t("restore_safe_defaults"), key="restore_defaults_btn"):
+        st.write(_post("/product/config/restore-defaults"))
+        st.rerun()
+
+
+BUG_WORKFLOW_STATES = ["open", "analyzing", "proposed", "approved", "fixing", "verified", "fixed"]
+
+
+def _render_status_steps(current_status: str) -> None:
+    """Render a horizontal step indicator for the bug workflow status machine."""
+    current_status = (current_status or "open").lower()
+    current_idx = BUG_WORKFLOW_STATES.index(current_status) if current_status in BUG_WORKFLOW_STATES else 0
+
+    items_html = []
+    for i, state in enumerate(BUG_WORKFLOW_STATES):
+        if i < current_idx:
+            dot_cls = "step-completed"
+            label_cls = "step-label-completed"
+        elif i == current_idx:
+            dot_cls = "step-current"
+            label_cls = "step-label-current"
+        else:
+            dot_cls = ""
+            label_cls = ""
+        items_html.append(
+            f'<div class="step-item">'
+            f'<div class="step-dot {dot_cls}">{i + 1}</div>'
+            f'<div class="step-label {label_cls}">{state}</div>'
+            f'</div>'
+        )
+        if i < len(BUG_WORKFLOW_STATES) - 1:
+            conn_cls = "step-connector-completed" if i < current_idx else ""
+            items_html.append(f'<div class="step-connector {conn_cls}"></div>')
+
+    st.markdown(
+        f'<div class="step-indicator">{"".join(items_html)}</div>',
+        unsafe_allow_html=True,
     )
 
-    if new_mode == "LEVEL_3_AUTO":
-        st.markdown('''<div class="alert-banner alert-critical">
-            LEVEL_3_AUTO（自动交易）在 Demo V1 中不可用
-        </div>''', unsafe_allow_html=True)
 
-    # LEVEL_2 升级确认
-    if new_mode == "LEVEL_2_HUMAN_CONFIRM" and trading_mode != "LEVEL_2_HUMAN_CONFIRM":
-        st.markdown('''<div class="alert-banner alert-warning">
-            升级到 LEVEL_2_HUMAN_CONFIRM 需要：确认了解人工确认流程；BROKER_ADAPTER 将强制设为 paper
-        </div>''', unsafe_allow_html=True)
-        if st.button("确认升级到 LEVEL_2", key="confirm_level2_upgrade", type="primary"):
-            result = _api_post("/product/config/confirm-upgrade",
-                               params={"key": "MAX_TRADING_LEVEL", "value": "LEVEL_2_HUMAN_CONFIRM"})
-            if result and result.get("success"):
-                st.success("已升级为 LEVEL_2_HUMAN_CONFIRM")
-                st.rerun()
+def _render_analysis_report(report: dict[str, Any]) -> None:
+    """Render an expandable section for a bug's analysis report."""
+    with st.expander(f"🔍 {t('analysis_report')}", expanded=False):
+        root_cause = report.get("root_cause", "")
+        if root_cause:
+            st.markdown("**Root Cause:**")
+            st.write(root_cause)
+        affected_files = report.get("affected_files", [])
+        if affected_files:
+            st.markdown("**Affected Files:**")
+            if isinstance(affected_files, list):
+                for f in affected_files:
+                    st.markdown(f"- `{f}`")
             else:
-                st.error(f"升级失败: {result.get('message', '未知错误') if result else 'API 连接失败'}")
-    elif new_mode != trading_mode and new_mode != "LEVEL_3_AUTO":
-        if st.button("保存交易模式", key="save_trading_mode"):
-            result = _api_post("/product/config", params={"key": "MAX_TRADING_LEVEL", "value": new_mode})
-            if result and result.get("success"):
-                st.success("交易模式已更新")
-                st.rerun()
+                st.write(affected_files)
+        fix_steps = report.get("fix_steps", [])
+        if fix_steps:
+            st.markdown("**Fix Steps:**")
+            if isinstance(fix_steps, list):
+                for idx, step in enumerate(fix_steps, 1):
+                    st.markdown(f"{idx}. {step}")
             else:
-                msg = result.get("message", "未知错误") if result else "API 连接失败"
-                st.error(f"更新失败: {msg}")
+                st.write(fix_steps)
+        risk_level = report.get("risk_level", "")
+        if risk_level:
+            risk_colors = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+            emoji = risk_colors.get(risk_level.lower(), "⚪")
+            st.markdown(f"**Risk Level:** {emoji} {risk_level}")
+        estimated_impact = report.get("estimated_impact", "")
+        if estimated_impact:
+            st.markdown(f"**Estimated Impact:** {estimated_impact}")
+        extra_keys = set(report.keys()) - {"root_cause", "affected_files", "fix_steps", "risk_level", "estimated_impact"}
+        if extra_keys:
+            st.markdown("**Additional Details:**")
+            st.json({k: report[k] for k in extra_keys})
 
-    # ── 数据源设置 ──
-    _section_header("数据源设置")
-    ds_col1, ds_col2 = st.columns(2)
-    with ds_col1:
-        current_provider = config.get("DEFAULT_DATA_PROVIDER", "akshare")
-        provider = st.selectbox("默认数据源", ["akshare", "aktools"],
-                                index=["akshare", "aktools"].index(current_provider) if current_provider in ["akshare", "aktools"] else 0,
-                                key="cfg_data_provider")
-    with ds_col2:
-        eastmoney = st.checkbox("启用东方财富", value=bool(config.get("EASTMONEY_ENABLED", True)), key="cfg_eastmoney")
-    sina = st.checkbox("启用新浪行情", value=bool(config.get("SINA_QUOTE_ENABLED", True)), key="cfg_sina")
 
-    # ── 风控参数 ──
-    _section_header("风控参数")
-    risk_col1, risk_col2 = st.columns(2)
-
-    with risk_col1:
-        max_single = st.slider("单票最大仓位", 0.01, 0.50,
-                               float(config.get("MAX_SINGLE_STOCK_POSITION", 0.15)),
-                               step=0.01, format="%.2f", key="cfg_max_single")
-        max_sector = st.slider("板块最大仓位", 0.10, 1.00,
-                               float(config.get("MAX_SECTOR_POSITION", 0.60)),
-                               step=0.05, format="%.2f", key="cfg_max_sector")
-        min_cash = st.slider("最低现金比例", 0.0, 0.50,
-                             float(config.get("MIN_CASH_RATIO", 0.20)),
-                             step=0.05, format="%.2f", key="cfg_min_cash")
-
-    with risk_col2:
-        loss_warn = st.slider("单票亏损警戒线", -0.20, 0.0,
-                              float(config.get("SINGLE_STOCK_LOSS_WARN", -0.05)),
-                              step=0.01, format="%.2f", key="cfg_loss_warn")
-        loss_stop = st.slider("单票止损线", -0.20, 0.0,
-                              float(config.get("SINGLE_STOCK_LOSS_STOP", -0.08)),
-                              step=0.01, format="%.2f", key="cfg_loss_stop")
-        daily_warn = st.slider("日亏损警戒线", -0.10, 0.0,
-                               float(config.get("DAILY_LOSS_WARN", -0.02)),
-                               step=0.005, format="%.3f", key="cfg_daily_warn")
-
-    if loss_stop >= loss_warn:
-        st.markdown('''<div class="alert-banner alert-critical">止损线必须小于警戒线</div>''', unsafe_allow_html=True)
-
-    # ── 回测默认参数 ──
-    _section_header("回测默认参数")
-    bt_col1, bt_col2, bt_col3 = st.columns(3)
-    with bt_col1:
-        bt_commission = st.number_input("手续费率", min_value=0.0,
-                                        value=float(config.get("BACKTEST_COMMISSION_RATE", 0.0003)),
-                                        step=0.0001, format="%.4f", key="cfg_bt_commission")
-    with bt_col2:
-        bt_stamp = st.number_input("印花税率", min_value=0.0,
-                                   value=float(config.get("BACKTEST_STAMP_DUTY", 0.001)),
-                                   step=0.0001, format="%.4f", key="cfg_bt_stamp")
-    with bt_col3:
-        bt_slip = st.number_input("滑点", min_value=0.0,
-                                  value=float(config.get("BACKTEST_SLIPPAGE", 0.001)),
-                                  step=0.0001, format="%.4f", key="cfg_bt_slip")
-
-    # ── UI/运行时设置 ──
-    _section_header("运行时设置")
-    log_level = st.selectbox("日志级别", ["DEBUG", "INFO", "WARNING", "ERROR"],
-                             index=["DEBUG", "INFO", "WARNING", "ERROR"].index(
-                                 config.get("LOG_LEVEL", "INFO")),
-                             key="cfg_log_level")
-
-    # ── 保存/恢复 ──
-    _section_header("操作")
-    save_col1, save_col2 = st.columns(2)
-    with save_col1:
-        if st.button("保存配置", key="save_config", type="primary"):
-            updates = []
-            config_updates = {
-                "DEFAULT_DATA_PROVIDER": provider,
-                "EASTMONEY_ENABLED": str(eastmoney),
-                "SINA_QUOTE_ENABLED": str(sina),
-                "MAX_SINGLE_STOCK_POSITION": str(max_single),
-                "MAX_SECTOR_POSITION": str(max_sector),
-                "MIN_CASH_RATIO": str(min_cash),
-                "SINGLE_STOCK_LOSS_WARN": str(loss_warn),
-                "SINGLE_STOCK_LOSS_STOP": str(loss_stop),
-                "DAILY_LOSS_WARN": str(daily_warn),
-                "BACKTEST_COMMISSION_RATE": str(bt_commission),
-                "BACKTEST_STAMP_DUTY": str(bt_stamp),
-                "BACKTEST_SLIPPAGE": str(bt_slip),
-                "LOG_LEVEL": log_level,
-            }
-            for k, v in config_updates.items():
-                result = _api_post("/product/config", params={"key": k, "value": v})
-                if result and result.get("success"):
-                    updates.append(k)
-
-            if updates:
-                st.success(f"已保存 {len(updates)} 项配置")
+def _render_fix_proposal(proposal: dict[str, Any]) -> None:
+    """Render an expandable section for a bug's fix proposal."""
+    with st.expander(f"🔧 {t('fix_proposal')}", expanded=False):
+        fix_desc = proposal.get("fix_description", "")
+        if fix_desc:
+            st.markdown("**Fix Description:**")
+            st.write(fix_desc)
+        code_changes = proposal.get("code_changes", "")
+        if code_changes:
+            st.markdown("**Code Changes:**")
+            if isinstance(code_changes, (list, dict)):
+                st.json(code_changes)
             else:
-                st.error("配置保存失败")
-
-    with save_col2:
-        if st.button("恢复默认", key="restore_defaults"):
-            result = _api_post("/product/config/restore-defaults")
-            if result and result.get("status") == "ok":
-                st.success("配置已恢复默认值")
-                st.rerun()
+                st.code(str(code_changes))
+        risk_level = proposal.get("risk_level", "")
+        if risk_level:
+            risk_colors = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+            emoji = risk_colors.get(risk_level.lower(), "⚪")
+            st.markdown(f"**Risk Level:** {emoji} {risk_level}")
+        test_suggestions = proposal.get("test_suggestions", "")
+        if test_suggestions:
+            st.markdown("**Test Suggestions:**")
+            if isinstance(test_suggestions, list):
+                for s in test_suggestions:
+                    st.markdown(f"- {s}")
             else:
-                st.error("恢复默认配置失败")
+                st.write(test_suggestions)
+        extra_keys = set(proposal.keys()) - {"fix_description", "code_changes", "risk_level", "test_suggestions"}
+        if extra_keys:
+            st.markdown("**Additional Details:**")
+            st.json({k: proposal[k] for k in extra_keys})
 
 
-# ============================================================
-# 9. 反馈中心 (Feedback)
-# ============================================================
+def _render_fix_result(result: dict[str, Any]) -> None:
+    """Render the fix execution result (success/failure, test output, commit hash)."""
+    success = result.get("success", False)
+    if success:
+        st.success("✅ Fix applied successfully")
+    else:
+        st.error("❌ Fix failed")
+    test_output = result.get("test_output", "")
+    if test_output:
+        with st.expander("Test Output"):
+            st.code(str(test_output))
+    commit_hash = result.get("commit_hash", "")
+    if commit_hash:
+        st.markdown(f"**Commit:** `{commit_hash}`")
+    error_msg = result.get("error", "")
+    if error_msg:
+        st.error(f"Error: {error_msg}")
+    extra_keys = set(result.keys()) - {"success", "test_output", "commit_hash", "error"}
+    if extra_keys:
+        st.json({k: result[k] for k in extra_keys})
+
 
 def render_feedback() -> None:
-    """渲染反馈中心"""
-    feedback_data = _api_get("/product/feedback")
-
-    if not feedback_data:
-        st.warning("无法获取反馈数据")
+    st.subheader(t("feedback"))
+    data = _get("/product/feedback")
+    if not data:
+        _banner("danger", t("feedback_unavailable"))
         return
 
-    bugs = feedback_data.get("bugs", [])
-    count = feedback_data.get("count", 0)
+    jobs_data = _get("/product/jobs") or {}
+    bug_agent_job = _job_by_name(jobs_data, "bug_fix_agent")
+    agent_state = bug_agent_job.get("state", t("unknown")) if bug_agent_job else t("unknown")
+    agent_note = ""
+    if bug_agent_job:
+        agent_note = bug_agent_job.get("error_message") or bug_agent_job.get("last_result") or bug_agent_job.get("last_run_at", "")
 
-    _section_header("Bug 概览")
-    st.markdown(_card_html("Open Bug", str(count), "待处理 Bug 数量", "#f59e0b" if count > 0 else "#10b981"), unsafe_allow_html=True)
+    agent_col, bug_col = st.columns(2)
+    with agent_col:
+        _card(t("bug_fix_agent"), str(agent_state), agent_note)
+    with bug_col:
+        _card(t("open_bugs"), str(data.get("count", 0)), data.get("export_path", "feedback/bugs/open"))
 
+    start_col, stop_col = st.columns(2)
+    if start_col.button(t("start_bug_fix_agent"), key="start_bug_fix_agent", type="primary"):
+        result = _post("/product/jobs/bug_fix_agent/start")
+        if result and result.get("status") == "ok":
+            st.success(result.get("message", t("ok")))
+            st.rerun()
+        else:
+            st.error(f"{t('agent_start_failed')}: {result}")
+    if stop_col.button(t("stop_bug_fix_agent"), key="stop_bug_fix_agent"):
+        result = _post("/product/jobs/bug_fix_agent/stop")
+        if result and result.get("status") == "ok":
+            st.success(result.get("message", t("ok")))
+            st.rerun()
+        else:
+            st.error(f"{t('agent_stop_failed')}: {result}")
+
+    bugs = data.get("bugs", [])
     if not bugs:
-        st.info("暂无 Open 状态的 Bug")
+        st.info(t("no_open_bugs"))
         return
 
-    # ── Bug 列表 ──
-    _section_header("Bug 列表")
+    for bug in bugs:
+        bug_id = bug.get("bug_id")
+        bug_status = (bug.get("status") or "open").lower()
+        severity = bug.get("severity", "").upper()
+        title = bug.get("title", "")
 
-    for b in bugs:
-        bug_id = b.get("bug_id", "")
-        title = b.get("title", "")
-        severity = b.get("severity", "")
-        component = b.get("component", "")
-        status = b.get("status", "")
-        occurrence = b.get("occurrence_count", 1)
-        summary = b.get("summary", "")
+        with st.expander(f"{severity} {bug_id}: {title}"):
+            # --- Bug Status Step Indicator ---
+            st.markdown(f"**{t('workflow_status')}**")
+            _render_status_steps(bug_status)
 
-        # 严重程度颜色
-        sev_colors = {"critical": "#ef4444", "high": "#f59e0b", "medium": "#3b82f6", "low": "#64748b"}
-        sev_color = sev_colors.get(severity.lower(), "#64748b")
+            st.divider()
 
-        sev_badge_map = {"critical": "badge-error", "high": "badge-warn", "medium": "badge-info", "low": "badge-demo"}
-        sev_badge = sev_badge_map.get(severity.lower(), "badge-info")
+            # --- Summary ---
+            summary = bug.get("summary", "")
+            if summary:
+                st.write(summary)
 
-        with st.expander(f"[{severity.upper()}] {bug_id}: {title}"):
-            st.markdown(f'''
-            <div style="display:flex;gap:8px;margin-bottom:12px">
-                <span class="badge {sev_badge}">{severity.upper()}</span>
-                <span class="badge badge-info">{component}</span>
-                <span class="badge badge-ok">{status}</span>
-            </div>
-            <div style="font-size:0.85rem;color:#94a3b8;margin-bottom:8px">{summary}</div>
-            <div style="display:flex;gap:16px;font-size:0.8rem;color:#64748b">
-                <span>出现次数: {occurrence}</span>
-                <span>创建: {b.get('created_at', '')}</span>
-                <span>更新: {b.get('updated_at', '')}</span>
-            </div>
-            ''', unsafe_allow_html=True)
+            # --- Analysis Report ---
+            analysis_report = bug.get("analysis_report")
+            if analysis_report and isinstance(analysis_report, dict):
+                _render_analysis_report(analysis_report)
 
-            if b.get("user_action"):
-                st.caption(f"用户操作: {b['user_action']}")
-            if b.get("endpoint_or_page"):
-                st.caption(f"触发端点: {b['endpoint_or_page']}")
-            if b.get("exception_type"):
-                st.caption(f"异常类型: {b['exception_type']}")
-            if b.get("exception_message"):
-                st.caption(f"异常消息: {b['exception_message']}")
+            # --- Fix Proposal ---
+            fix_proposal = bug.get("fix_proposal")
+            if fix_proposal and isinstance(fix_proposal, dict):
+                _render_fix_proposal(fix_proposal)
 
-            # 状态操作按钮
-            btn_col1, btn_col2, btn_col3 = st.columns(3)
-            with btn_col1:
-                if st.button("已分诊", key=f"triage_{bug_id}"):
-                    result = _api_post(f"/product/feedback/{bug_id}/status", params={"status": "triaged"})
-                    if result and result.get("status") == "ok":
-                        st.success("已标记为分诊")
-                        st.rerun()
-                    else:
-                        st.error("操作失败")
-            with btn_col2:
-                if st.button("已修复", key=f"fix_{bug_id}"):
-                    result = _api_post(f"/product/feedback/{bug_id}/status", params={"status": "fixed"})
-                    if result and result.get("status") == "ok":
-                        st.success("已标记为修复")
-                        st.rerun()
-                    else:
-                        st.error("操作失败")
-            with btn_col3:
-                if st.button("忽略", key=f"ignore_{bug_id}"):
-                    result = _api_post(f"/product/feedback/{bug_id}/status", params={"status": "ignored"})
-                    if result and result.get("status") == "ok":
-                        st.success("已标记为忽略")
-                        st.rerun()
-                    else:
-                        st.error("操作失败")
+            # --- Fix Result ---
+            fix_result = bug.get("fix_result")
+            if fix_result and isinstance(fix_result, dict):
+                _render_fix_result(fix_result)
 
-    # ── 导出路径 ──
-    _section_header("导出路径")
-    st.code("feedback/bugs/")
+            st.divider()
+
+            # --- Action Buttons ---
+            if bug_status == "proposed":
+                approve_col, reject_col = st.columns(2)
+                with approve_col:
+                    if st.button(f"✅ {t('approve')}", key=f"approve_{bug_id}", type="primary"):
+                        result = _post(f"/product/feedback/{bug_id}/approve", params={"comment": t("approve_comment")})
+                        if result:
+                            st.success(t("approve_success"))
+                            st.rerun()
+                        else:
+                            st.error(t("approve_failed"))
+                with reject_col:
+                    if st.button(f"❌ {t('reject')}", key=f"reject_{bug_id}"):
+                        result = _post(f"/product/feedback/{bug_id}/reject", params={"comment": t("reject_comment")})
+                        if result:
+                            st.warning(t("reject_success"))
+                            st.rerun()
+                        else:
+                            st.error(t("reject_failed"))
+            else:
+                col1, col2, col3 = st.columns(3)
+                if col1.button(t("mark_triaged"), key=f"triage_{bug_id}"):
+                    st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "triaged"}))
+                    st.rerun()
+                if col2.button(t("mark_fixed"), key=f"fixed_{bug_id}"):
+                    st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "fixed"}))
+                    st.rerun()
+                if col3.button(t("ignore"), key=f"ignore_{bug_id}"):
+                    st.write(_post(f"/product/feedback/{bug_id}/status", params={"status": "ignored"}))
+                    st.rerun()
+
+            # --- Raw Bug Data ---
+            with st.expander(t("raw_bug_data")):
+                st.json(bug)
 
 
-# ============================================================
-# 主入口
-# ============================================================
+def render_live_data() -> None:
+    """Live Data Closed-Loop: 数据源诊断、实时行情、因子、回测、信号。"""
+    st.subheader(t("live_data"))
+    st.caption(t("live_data_caption"))
+
+    # ── Provider Diagnosis ───────────────────────────────────────
+    with st.expander(t("provider_diagnosis"), expanded=False):
+        if st.button(t("run_diagnosis"), key="live_diagnose_btn"):
+            diag = _post("/product/live-data/diagnose")
+            if diag:
+                for cap_name, cap_result in diag.get("results", {}).items():
+                    st.markdown(f"**{cap_name}**")
+                    st.json(cap_result)
+            else:
+                _banner("danger", t("diagnosis_failed"))
+
+    # ── Provider Status ──────────────────────────────────────────
+    providers = _get("/product/live-data/providers")
+    if providers:
+        st.markdown(f"**{t('provider_status')}**")
+        rows = []
+        for cap_name, prov_dict in providers.get("realtime_quotes", {}).items():
+            rows.append({"Capability": "realtime", t("provider"): cap_name, t("status"): prov_dict.get("status", "unknown"), t("latency_ms"): prov_dict.get("latency_ms", 0)})
+        for cap_name, prov_dict in providers.get("daily_bars", {}).items():
+            rows.append({"Capability": "daily_bars", t("provider"): cap_name, t("status"): prov_dict.get("status", "unknown"), t("latency_ms"): prov_dict.get("latency_ms", 0)})
+        for cap_name, prov_dict in providers.get("fundamentals", {}).items():
+            rows.append({"Capability": "fundamentals", t("provider"): cap_name, t("status"): prov_dict.get("status", "unknown"), t("latency_ms"): prov_dict.get("latency_ms", 0)})
+        st.dataframe(_df(rows), hide_index=True)
+
+    # ── Realtime Quotes ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"**{t('realtime_quotes_title')}**")
+    live_symbols = st.text_input(t("symbols"), "600000.SH,000001.SZ", key="live_symbols")
+    if st.button(t("fetch_live_quotes"), key="live_quotes_btn"):
+        result = _get("/product/live-data/quotes", params={"symbols": live_symbols})
+        if result:
+            data_status = result.get("data_status", "UNKNOWN")
+            if data_status == "FAILED":
+                _banner("danger", f"{t('realtime_failed_blocked')} Provider: {result.get('chosen_provider', '')}.")
+            elif data_status == "WARN":
+                _banner("warn", f"{t('realtime_partial')} Provider: {result.get('chosen_provider', '')}.")
+            else:
+                _banner("safe", f"{t('realtime_ok')} Provider: {result.get('chosen_provider', '')}.")
+            rows = []
+            for q in result.get("quotes", []):
+                rows.append({
+                    "Symbol": q.get("symbol"),
+                    "Name": q.get("name", ""),
+                    "Last": q.get("last_price", 0),
+                    "Change": _format_pct(q.get("pct_change")),
+                    "Volume": q.get("volume", 0),
+                    t("provider"): result.get("chosen_provider", ""),
+                })
+            st.dataframe(_df(rows), hide_index=True)
+            with st.expander(t("live_data")):
+                st.json(result.get("data_delay_report", {}))
+        else:
+            _banner("danger", t("failed_to_build"))
+
+    # ── Live Signal Draft ────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"**{t('signal_draft')}**")
+    signal_symbols = st.text_input(t("symbols"), "600000.SH,000001.SZ", key="live_signal_symbols")
+    signal_start = st.text_input(t("start_date"), "20250101", key="live_signal_start")
+    signal_end = st.text_input(t("end_date"), "20251231", key="live_signal_end")
+    signal_mode = st.selectbox(t("trading_mode"), ["LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM"], index=0, key="live_signal_mode")
+    if st.button(t("generate_signal_draft"), type="primary", key="live_signal_btn"):
+        result = _post(
+            "/product/signal/draft",
+            params={
+                "symbols": signal_symbols,
+                "start_date": signal_start,
+                "end_date": signal_end,
+                "trading_mode": signal_mode,
+            },
+        )
+        if result:
+            status = result.get("status", "unknown")
+            if status == "blocked":
+                _banner("danger", f"{t('signal_blocked')} Data health: {result.get('evidence', {}).get('data_health', {}).get('data_status', 'UNKNOWN')}")
+            else:
+                _banner("safe", f"{t('signal_draft_info')}: {result.get('signal_type', 'hold')} (confidence: {result.get('confidence', 0):.4f})")
+            with st.expander(t("signal_draft_info")):
+                st.json(result)
+        else:
+            _banner("danger", t("failed_to_build"))
+
+    # ── Research Context ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(f"**{t('research_context')}**")
+    if st.button(t("build_research_context"), key="live_research_btn"):
+        result = _post(
+            "/product/live-data/research-context",
+            params={"symbols": live_symbols, "start_date": "20250101", "end_date": "20251231"},
+        )
+        if result:
+            health = result.get("health", {})
+            if health.get("data_status") == "FAILED":
+                _banner("danger", f"{t('data_health_failed')} allow_signal={health.get('allow_signal')}")
+            elif health.get("data_status") == "WARN":
+                _banner("warn", f"{t('data_health_warn')} allow_signal={health.get('allow_signal')}")
+            else:
+                _banner("safe", f"{t('data_health_ok')} allow_signal={health.get('allow_signal')}")
+            with st.expander(t("data_health")):
+                st.json(result)
+        else:
+            _banner("danger", t("failed_to_build"))
+
 
 def main() -> None:
-    st.set_page_config(
-        page_title="QuantAgent Pro",
-        page_icon="",
-        layout="wide",
-        initial_sidebar_state="collapsed",
+    st.set_page_config(page_title=t("page_title"), layout="wide", initial_sidebar_state="expanded")
+    st.markdown(PAGE_CSS, unsafe_allow_html=True)
+
+    with st.sidebar:
+        st.title(t("sidebar_title"))
+        st.caption(t("sidebar_caption"))
+        st.session_state["api_base"] = st.text_input(t("sidebar_api_label"), st.session_state.get("api_base", DEFAULT_API_BASE), key="sidebar_api_base")
+        lang = st.selectbox(t("language"), ["中文", "English"], index=0 if st.session_state.get("ui_language", "zh") == "zh" else 1, key="sidebar_lang_selector")
+        st.session_state["ui_language"] = "zh" if lang == "中文" else "en"
+        st.divider()
+        st.caption(t("safety_invariant"))
+
+    st.title(t("app_title"))
+    st.caption(t("app_subtitle"))
+
+    tabs = st.tabs(
+        [
+            t("tab_system"),
+            t("tab_live_data"),
+            t("tab_realtime_market"),
+            t("tab_watchlist"),
+            t("tab_factor_lab"),
+            t("tab_backtest"),
+            t("tab_signals"),
+            t("tab_human_confirmation"),
+            t("tab_configuration"),
+            t("tab_feedback"),
+        ]
     )
 
-    # 注入深色主题 CSS
-    st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
-
-    # 品牌栏
-    st.markdown('''<div class="brand-bar">
-        <div>
-            <span class="brand-title">QuantAgent Pro</span>
-            <span class="brand-sub" style="margin-left:12px">量化交易智能体系统</span>
-        </div>
-        <div class="brand-sub">A-share / HK Connect</div>
-    </div>''', unsafe_allow_html=True)
-
-    tab_labels = [
-        "系统状态",
-        "实时行情",
-        "候选股监控",
-        "因子分析",
-        "回测实验室",
-        "信号中心",
-        "人工确认",
-        "配置中心",
-        "反馈中心",
-    ]
-
-    tabs = st.tabs(tab_labels)
-
     with tabs[0]:
-        render_home()
-
+        render_system()
     with tabs[1]:
-        render_market()
-
+        render_live_data()
     with tabs[2]:
-        render_watchlist()
-
+        render_market()
     with tabs[3]:
-        render_factor_lab()
-
+        render_watchlist()
     with tabs[4]:
-        render_backtest_lab()
-
+        render_factor_lab()
     with tabs[5]:
-        render_signal_center()
-
+        render_backtest()
     with tabs[6]:
-        render_human_confirm()
-
+        render_signals()
     with tabs[7]:
-        render_configuration()
-
+        render_human_confirmation()
     with tabs[8]:
+        render_configuration()
+    with tabs[9]:
         render_feedback()
 
 

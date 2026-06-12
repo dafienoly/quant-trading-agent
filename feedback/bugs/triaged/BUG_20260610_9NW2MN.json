@@ -1,0 +1,47 @@
+{
+  "bug_id": "BUG_20260610_9NW2MN",
+  "created_at": "2026-06-10 14:16:42",
+  "updated_at": "2026-06-12 16:22:23",
+  "status": "open",
+  "severity": "medium",
+  "component": "data_gateway",
+  "title": "Realtime provider returned no quotes",
+  "summary": "akshare returned no rows for 002463.SZ, 600584.SH, 603228.SH, 002916.SZ, 002371.SZ, 002156.SZ, 603986.SH, 002281.SZ, 600183.SH, 000988.SZ",
+  "user_action": "Refresh realtime quotes",
+  "endpoint_or_page": "/product/quotes",
+  "exception_type": "",
+  "exception_message": "",
+  "sanitized_traceback": "",
+  "runtime_context": {
+    "provider": "akshare",
+    "symbols": [
+      "002463.SZ",
+      "600584.SH",
+      "603228.SH",
+      "002916.SZ",
+      "002371.SZ",
+      "002156.SZ",
+      "603986.SH",
+      "002281.SZ",
+      "600183.SH",
+      "000988.SZ"
+    ]
+  },
+  "config_snapshot_masked": {},
+  "reproduction_steps": [
+    "Open product dashboard",
+    "Select Realtime Market",
+    "Refresh realtime quotes"
+  ],
+  "dedupe_hash": "1cccc370326c30ff",
+  "related_log_files": [
+    "logs/quant_trading.log"
+  ],
+  "occurrence_count": 61,
+  "analysis_report": null,
+  "fix_proposal": null,
+  "approval_status": "pending",
+  "approval_comment": "",
+  "fix_result": null,
+  "git_commit_hash": ""
+}

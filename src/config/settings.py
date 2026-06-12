@@ -72,6 +72,7 @@ TUSHARE_TOKEN: str = _get_env("TUSHARE_TOKEN", "")
 EASTMONEY_ENABLED: bool = _get_bool("EASTMONEY_ENABLED", True)
 SINA_QUOTE_ENABLED: bool = _get_bool("SINA_QUOTE_ENABLED", True)
 DEFAULT_DATA_PROVIDER: str = _get_env("DEFAULT_DATA_PROVIDER", "akshare")
+REALTIME_REQUEST_INTERVAL_MS: int = _get_int("REALTIME_REQUEST_INTERVAL_MS", 500)
 
 
 # ============================================================
