@@ -344,8 +344,10 @@ def main() -> None:
     parser.add_argument("--api-port", type=int, default=DEFAULT_API_PORT, help="FastAPI 端口")
     parser.add_argument("--streamlit-port", type=int, default=DEFAULT_STREAMLIT_PORT, help="Streamlit 端口")
     parser.add_argument("--aktools-port", type=int, default=DEFAULT_AKTOOLS_PORT, help="AkTools 端口")
-    parser.add_argument("--with-aktools", action="store_true", help="启动 AkTools 兼容服务")
+    parser.add_argument("--with-aktools", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--no-aktools", action="store_true", help="不启动 AkTools 兼容服务")
     parser.add_argument("--with-bugfix", action="store_true", help="启动 BugFix Agent job")
+    parser.add_argument("--full", action="store_true", help="启动全部服务（AkTools + BugFixAgent）")
     parser.add_argument("--force", action="store_true", help="强制终止占用端口的旧进程后启动")
     parser.add_argument("--dry-run", action="store_true", help="仅打印计划，不实际启动")
     args = parser.parse_args()
@@ -353,6 +355,14 @@ def main() -> None:
     api_port = args.api_port
     streamlit_port = args.streamlit_port
     aktools_port = args.aktools_port
+
+    # Compute service modes:
+    # Default: AkTools + FastAPI + Streamlit
+    # --no-aktools: skip AkTools
+    # --with-aktools: backward compat (kept for scripts that pass it)
+    # --full: implies AkTools + BugFixAgent
+    start_aktools = not args.no_aktools or args.with_aktools or args.full
+    start_bugfix = args.with_bugfix or args.full
 
     _log("=" * 60)
     _log("量化交易系统 - 产品启动")
@@ -374,7 +384,24 @@ def main() -> None:
     if not _check_live_trading_safety():
         sys.exit(1)
 
-    # --- Step 3: Port conflict check with auto-resolution ---
+    # --- Step 3: Dry-run mode (return before port/process changes) ---
+    if args.dry_run:
+        _log(f"DRY-RUN 模式: show planned services (start_aktools={start_aktools}, start_bugfix={start_bugfix})")
+        print("\n[DRY-RUN] 计划启动以下服务:")
+        svc_idx = 1
+        if start_aktools:
+            print(f"  {svc_idx}. AkTools  -> http://localhost:{aktools_port}")
+            svc_idx += 1
+        print(f"  {svc_idx}. FastAPI   -> http://localhost:{api_port}")
+        print(f"  {svc_idx + 1}. Streamlit -> http://localhost:{streamlit_port}")
+        if start_bugfix:
+            print(f"  {svc_idx + 2}. BugFixAgent (job, requires DEEPSEEK_API_KEY)")
+        print(f"\nPID 文件: {PID_FILE}")
+        print(f"启动日志: {STARTUP_LOG}")
+        _log("DRY-RUN 模式，未启动任何服务")
+        return
+
+    # --- Step 4: Port conflict check with auto-resolution ---
     force = args.force
     port_issues = False
 
@@ -396,7 +423,7 @@ def main() -> None:
             _write_port_conflict_bug(streamlit_port, "Streamlit")
             port_issues = True
 
-    if args.with_aktools and _port_in_use(aktools_port):
+    if start_aktools and _port_in_use(aktools_port):
         _log(f"检测到端口 {aktools_port} 已被占用 (AkTools)")
         if _resolve_port_conflict(aktools_port, "AkTools", force):
             _log(f"端口 {aktools_port} 已释放")
@@ -409,16 +436,6 @@ def main() -> None:
         _log("请释放占用端口或使用 --api-port / --streamlit-port 指定其他端口")
         sys.exit(1)
 
-    # --- Step 4: Dry-run mode ---
-    if args.dry_run:
-        print("\n[DRY-RUN] 计划启动以下服务:")
-        print(f"  1. FastAPI   -> http://localhost:{api_port}")
-        print(f"  2. Streamlit -> http://localhost:{streamlit_port}")
-        print(f"\nPID 文件: {PID_FILE}")
-        print(f"启动日志: {STARTUP_LOG}")
-        _log("DRY-RUN 模式，未启动任何服务")
-        return
-
     # --- Step 5: Start services ---
     cmds = _build_service_commands(
         python_executable=sys.executable,
@@ -428,7 +445,7 @@ def main() -> None:
     )
 
     aktools_proc = None
-    if args.with_aktools:
+    if start_aktools:
         aktools_proc = _start_process(cmds["aktools"], "AkTools")
 
     api_proc = _start_process(cmds["api"], "FastAPI")
@@ -451,10 +468,10 @@ def main() -> None:
         "aktools_pid": aktools_proc.pid if aktools_proc else None,
         "api_pid": api_proc.pid,
         "streamlit_pid": streamlit_proc.pid,
-        "aktools_port": aktools_port if args.with_aktools else None,
+        "aktools_port": aktools_port if start_aktools else None,
         "api_port": api_port,
         "streamlit_port": streamlit_port,
-        "bug_fix_agent_requested": args.with_bugfix,
+        "bug_fix_agent_requested": start_bugfix,
         "started_at": datetime.now().isoformat(),
     }
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -466,7 +483,7 @@ def main() -> None:
     time.sleep(12)
 
     # --- Step 8: Start BugFix Agent job (if requested) ---
-    if args.with_bugfix:
+    if start_bugfix:
         _start_bugfix_job(api_port)
 
     # --- Done ---

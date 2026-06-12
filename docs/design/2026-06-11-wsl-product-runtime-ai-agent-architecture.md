@@ -744,6 +744,14 @@ docs/dev_reports/2026-06-11-wsl-product-runtime-ai-agent-dev-report.md
 
 ---
 
+## 9.5 启动行为说明 / Startup Behavior
+
+Default `bash scripts/start.sh` starts AkTools compatibility service at port 8080, FastAPI at port 8000, and Streamlit Dashboard at port 8771. AkShare is not a daemon; it is imported by in-process data providers inside FastAPI. BugFixAgent is a persistent watchdog job and starts only when `--with-bugfix` or `--full` is passed and `DEEPSEEK_API_KEY` exists. FactorDiscoveryAgent, RecommendationAgent, SignalExplanationAgent, LiveSignalOrchestrator, Risk Agent, and factor/backtest services are API-internal modules invoked on demand, not independent OS processes.
+
+默认 `bash scripts/start.sh` 启动 AkTools 兼容服务（8080端口）、FastAPI（8000端口）和 Streamlit Dashboard（8771端口）。AkShare 不是守护进程，由 FastAPI 内部的数据提供者按需导入。BugFixAgent 是持久化 watchdog 任务，仅在传入 `--with-bugfix` 或 `--full` 且 `DEEPSEEK_API_KEY` 存在时启动。FactorDiscoveryAgent、RecommendationAgent、SignalExplanationAgent、LiveSignalOrchestrator、Risk Agent 以及因子/回测服务都是 API 内部模块，按需调用，不是独立 OS 进程。
+
+---
+
 ## 10. 架构门禁结论
 
 本设计满足：
