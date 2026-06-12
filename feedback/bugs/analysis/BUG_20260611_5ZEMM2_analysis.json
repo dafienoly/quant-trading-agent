@@ -1,0 +1,17 @@
+{
+  "root_cause": "Dashboard 前端或后端在调用 /product/live-data/diagnose 接口时，连接 localhost:8000 的量化服务读取超时（超时时间设置为8秒）。可能原因是诊断接口处理耗时过长（如计算密集、数据库查询慢、外部服务依赖延迟），或量化服务本身负载过高、资源不足导致响应缓慢，甚至服务可能已挂起或死锁。",
+  "affected_files": [
+    "src/frontend/dashboard/product_live_data.js 或类似调用的文件",
+    "src/backend/services/diagnose_service.py 或类似负责诊断逻辑的文件",
+    "src/quant_agent/api/diagnose.py 或处理 /product/live-data/diagnose 路由的文件"
+  ],
+  "fix_steps": [
+    "1. 增加诊断接口的超时时间配置（如从8秒改为30秒或根据业务调整），并确保前端/网关的请求超时设置匹配。",
+    "2. 检查量化服务的诊断逻辑，优化性能（例如添加缓存、异步处理、分批计算或限制数据量）。",
+    "3. 为诊断接口加入异步任务队列，将耗时操作异步执行，返回任务ID供轮询结果。",
+    "4. 在 dashboard 调用时增加重试机制和用户友好提示（如“诊断进行中，请稍后查看”）。",
+    "5. 监控量化服务的资源使用（CPU、内存、数据库连接），确认是否需要扩容或优化部署。"
+  ],
+  "risk_level": "medium",
+  "estimated_impact": "影响 dashboard 模块的产品实时数据诊断功能，用户无法获取诊断结果；若该接口用于实时决策，可能间接影响交易策略的触发。但超时通常为临时性问题，不影响其他核心交易功能。"
+}

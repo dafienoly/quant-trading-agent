@@ -12,6 +12,7 @@ Safety invariants:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -61,14 +62,38 @@ class BugFixBranchManager:
     # Public API
     # ------------------------------------------------------------------
 
+    _BUG_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+    @staticmethod
+    def _sanitize_bug_id(bug_id: str) -> str:
+        """Validate and sanitize bug_id for use in branch names and paths.
+
+        Raises:
+            ValueError: If bug_id contains dangerous characters like ``..``,
+                ``/``, or shell metacharacters.
+        """
+        if not bug_id:
+            raise ValueError("bug_id must not be empty")
+        if ".." in bug_id:
+            raise ValueError(f"bug_id must not contain '..' (got: {bug_id!r})")
+        if bug_id.startswith("/") or bug_id.startswith("-"):
+            raise ValueError(f"bug_id must not start with '/' or '-' (got: {bug_id!r})")
+        if not BugFixBranchManager._BUG_ID_RE.match(bug_id):
+            raise ValueError(
+                f"bug_id must match {BugFixBranchManager._BUG_ID_RE.pattern!r} "
+                f"(got: {bug_id!r})"
+            )
+        return bug_id
+
     def _make_worktree_info(self, bug_id: str) -> tuple[str, Path]:
         """Compute branch name and worktree path without running git.
 
         Returns ``(branch_name, worktree_path)``.
         """
+        sanitized = self._sanitize_bug_id(bug_id)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        branch_name = f"bugfix/{bug_id}-{timestamp}"
-        worktree_path = self._worktree_root / f"{bug_id}-{timestamp}"
+        branch_name = f"bugfix/{sanitized}-{timestamp}"
+        worktree_path = self._worktree_root / f"{sanitized}-{timestamp}"
         return branch_name, worktree_path
 
     def prepare_worktree(self, bug_id: str) -> BugFixWorktree:
@@ -101,10 +126,20 @@ class BugFixBranchManager:
         except Exception:
             pass
 
-        # Get base SHA
-        base_sha = self._git(["rev-parse", self._base_branch]).strip()
+        # After fetch, prefer origin/<base_branch> for base SHA
+        # to avoid using stale local branch state
+        try:
+            origin_ref = f"origin/{self._base_branch}"
+            self._git(["rev-parse", "--verify", origin_ref], check=True)
+            base_ref = origin_ref
+        except RuntimeError:
+            # origin/<base_branch> not available; fall back to local
+            pass
 
-        # Create worktree
+        # Record the actual base SHA (resolves the chosen ref)
+        base_sha = self._git(["rev-parse", base_ref]).strip()
+
+        # Create worktree from the resolved ref
         self._git([
             "worktree", "add", "-b", branch_name,
             str(worktree_path), base_ref,
@@ -230,10 +265,20 @@ class BugFixBranchManager:
                 indicating a path traversal attempt.
         """
         resolved_path = worktree.path.resolve()
-        if not str(resolved_path).startswith(str(self._worktree_root)):
+        allowed_root = self._worktree_root.resolve()
+        try:
+            is_safe = resolved_path.is_relative_to(allowed_root)
+        except (ValueError, AttributeError):
+            # Python <3.9 fallback: check via prefix with trailing separator
+            root_str = str(allowed_root)
+            path_str = str(resolved_path)
+            is_safe = path_str.startswith(root_str) and (
+                len(path_str) == len(root_str) or path_str[len(root_str)] == "/"
+            )
+        if not is_safe:
             raise ValueError(
                 f"Worktree path {resolved_path} is outside allowed root "
-                f"{self._worktree_root}. Refusing to delete."
+                f"{allowed_root}. Refusing to delete."
             )
 
         if not resolved_path.exists():

@@ -1,0 +1,16 @@
+{
+  "root_cause": "`AkShareProvider.get_realtime_quotes` 抛出 `NotImplementedError`，被 fallback 机制捕获后视为空数据，导致所有 provider 均返回空。同时 `AkToolsProvider` 的实时行情接口可能因外部服务（如 Aktools HTTP API）不可用或数据为空也返回空，最终触发 `AllProvidersFailed` 异常。",
+  "affected_files": [
+    "src/data_gateway/akshare_provider.py",
+    "src/data_gateway/aktools_provider.py",
+    "src/data_gateway/base.py（可能涉及 fallback 逻辑）"
+  ],
+  "fix_steps": [
+    "在 `AkShareProvider` 中实现 `get_realtime_quotes` 方法，使用 `ak.stock_zh_a_spot_em` 等函数获取 A 股实时行情，并参考 `AkToolsProvider` 的实现模式，支持港股等。",
+    "检查 `AkToolsProvider` 的 `_get` 方法中的端点（如 `stock_zh_a_spot_em` 和 `stock_hk_spot_em`）是否在 Aktools API 中可用，确保 Aktools 服务正常运行且返回非空数据。",
+    "调整 fallback 链，如果在 `AkShareProvider` 实现完成前该功能仍不可用，可暂时移除 `akshare_realtime` provider 或降级处理。",
+    "加强异常处理与日志，区分 `NotImplementedError` 和真正的空数据情况，避免错误归因。"
+  ],
+  "risk_level": "high",
+  "estimated_impact": "实时行情端点 `/product/live-data/realtime_quotes` 完全失效，影响依赖实时行情的所有下游功能（如实时监控、交易决策）。"
+}

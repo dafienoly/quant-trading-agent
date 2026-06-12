@@ -1,0 +1,13 @@
+{
+  "root_cause": "Dashboard 组件向 localhost:8000 的 /product/live-factors/compute 端点发送 POST 请求时，读取超时（8秒）。可能原因：后端计算服务负载过高或存在性能瓶颈，导致响应时间超过配置的超时时间。",
+  "affected_files": [],
+  "fix_steps": [
+    "检查后端计算服务（端口 8000）的日志，定位慢查询或阻塞操作。",
+    "优化 live-factors 计算逻辑，减少数据处理量或增加索引。",
+    "增加请求超时时间（从 8 秒调整为更合适的值，如 30 秒）。",
+    "实现重试机制，在超时后自动重试有限次数。",
+    "考虑添加异步处理或缓存机制，避免同步阻塞。"
+  ],
+  "risk_level": "medium",
+  "estimated_impact": "用户无法正常使用 product_dashboard 页面，导致量化交易决策延迟或失败。"
+}

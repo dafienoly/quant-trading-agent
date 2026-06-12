@@ -41,14 +41,15 @@ class TestBranchNaming:
 class TestWorktreePath:
     def test_worktree_path_under_configured_root(self):
         """Worktree path must be under configured root."""
+        root = Path("/tmp/project/runtime/bugfix_worktrees")
         manager = BugFixBranchManager(
             project_root=Path("/tmp/project"),
-            worktree_root=Path("/tmp/project/runtime/bugfix_worktrees"),
+            worktree_root=root,
         )
         name, path = manager._make_worktree_info("BUG_001")
-        expected_parent = Path("/tmp/project/runtime/bugfix_worktrees")
-        assert str(path).startswith(str(expected_parent)), (
-            f"Worktree {path} not under {expected_parent}"
+        # Use is_relative_to() instead of string prefix matching
+        assert path.resolve().is_relative_to(root.resolve()), (
+            f"Worktree {path} not under {root}"
         )
 
     def test_worktree_path_includes_bug_id(self):
@@ -59,6 +60,57 @@ class TestWorktreePath:
         )
         name, path = manager._make_worktree_info("BUG_ABC123")
         assert "BUG_ABC123" in str(path)
+
+    def test_sibling_prefix_not_mistaken_for_child(self):
+        """A path like 'bugfix_worktrees_evil' must NOT be treated as child."""
+        root = Path("/tmp/project/runtime/bugfix_worktrees").resolve()
+        manager = BugFixBranchManager(
+            project_root=Path("/tmp/project"),
+            worktree_root=root,
+        )
+        # Simulate a BugFixWorktree whose path is under a *sibling* directory
+        evil_path = Path("/tmp/project/runtime/bugfix_worktrees_evil/escape")
+        malicious = BugFixWorktree(
+            bug_id="EVIL",
+            base_branch="main",
+            branch_name="bugfix/EVIL",
+            path=evil_path,
+            base_sha="abc123",
+        )
+        with pytest.raises(ValueError, match="outside|invalid"):
+            manager.cleanup_worktree(malicious, keep_on_failure=False)
+
+
+class TestSanitizeBugId:
+    def test_rejects_empty_bug_id(self):
+        manager = BugFixBranchManager(project_root=Path("/tmp/project"))
+        with pytest.raises(ValueError, match="empty"):
+            manager._sanitize_bug_id("")
+
+    def test_rejects_dot_dot(self):
+        manager = BugFixBranchManager(project_root=Path("/tmp/project"))
+        with pytest.raises(ValueError, match="'..'"):
+            manager._sanitize_bug_id("BUG_../etc")
+
+    def test_rejects_slash(self):
+        manager = BugFixBranchManager(project_root=Path("/tmp/project"))
+        with pytest.raises(ValueError):
+            manager._sanitize_bug_id("BUG_001/../../secrets")
+
+    def test_rejects_hyphen_prefix(self):
+        manager = BugFixBranchManager(project_root=Path("/tmp/project"))
+        with pytest.raises(ValueError, match="'-'"):
+            manager._sanitize_bug_id("-rf")
+
+    def test_allows_normal_bug_id(self):
+        manager = BugFixBranchManager(project_root=Path("/tmp/project"))
+        sanitized = manager._sanitize_bug_id("BUG_20260612_ABC123")
+        assert sanitized == "BUG_20260612_ABC123"
+
+    def test_allows_hyphen_and_dot_in_id(self):
+        manager = BugFixBranchManager(project_root=Path("/tmp/project"))
+        sanitized = manager._sanitize_bug_id("BUG-20260612.v2")
+        assert sanitized == "BUG-20260612.v2"
 
 
 class TestPathValidation:

@@ -1,0 +1,16 @@
+{
+  "root_cause": "AkShareProvider和AkToolsProvider均未实现'get_fundamentals'方法，导致调用时抛出AttributeError。同时eastmoney提供商返回空数据，触发AllProvidersFailed异常。",
+  "affected_files": [
+    "src/data_gateway/akshare_provider.py",
+    "src/data_gateway/aktools_provider.py",
+    "src/data_gateway/base.py（基类定义，可能包含抽象方法）"
+  ],
+  "fix_steps": [
+    "在AkShareProvider中添加'get_fundamentals'方法，利用akshare接口（如ak.stock_fundamental_xxx）获取基本面数据并映射为统一格式。",
+    "在AkToolsProvider中添加'get_fundamentals'方法，通过HTTP请求调用Aktools服务的对应端点获取基本面数据。",
+    "检查eastmoney提供商的实现，确保其能正确返回非空基本面数据。",
+    "统一'get_fundamentals'方法签名，确保返回DataFrame并符合预期格式。"
+  ],
+  "risk_level": "high",
+  "estimated_impact": "影响所有依赖于获取基本面数据的下游功能，如产品/live-data/fundamentals端点，可能导致交易策略、分析模块不可用。"
+}
