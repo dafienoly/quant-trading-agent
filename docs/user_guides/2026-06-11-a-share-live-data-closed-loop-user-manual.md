@@ -108,40 +108,70 @@ API 健康检查：
 curl http://127.0.0.1:8000/product/health
 ```
 
-### 3.2 WSL / Linux
+### 3.2 WSL / Linux — 一键启动（推荐）
 
-启动 AkTools 本地 HTTP 服务：
+默认启动 AkTools + FastAPI + Streamlit：
 
 ```bash
-./.venv/bin/python -m aktools --host 127.0.0.1 --port 8080
+bash scripts/start.sh
 ```
 
-验证 AkTools：
+全量启动（含 BugFixAgent，需要 `DEEPSEEK_API_KEY`）：
 
 ```bash
+export DEEPSEEK_API_KEY="your_key"
+bash scripts/start.sh --full
+```
+
+仅启动 API 和 Dashboard（不启动 AkTools）：
+
+```bash
+bash scripts/start.sh --no-aktools
+```
+
+Dry-run 预览：
+
+```bash
+bash scripts/start.sh --dry-run
+bash scripts/start.sh --dry-run --no-aktools
+bash scripts/start.sh --dry-run --full
+```
+
+验证服务：
+
+```bash
+curl http://127.0.0.1:8000/product/health
 curl http://127.0.0.1:8080/version
-curl "http://127.0.0.1:8080/api/public/stock_zh_a_spot_em"
+curl http://127.0.0.1:8000/product/runtime/services
 ```
 
-启动产品 Dashboard：
+停止服务：
 
 ```bash
+bash scripts/stop.sh
+```
+
+> **AkShare 不是独立服务。** AkShare 是 Python 包，由 FastAPI 内部的数据提供者按需导入，不应作为守护进程启动。AkTools 兼容服务（`src/integrations/aktools_compat_app.py`）通过 `scripts/start_product.py` 自动管理。
+
+### 3.3 WSL / Linux — 手动启动（排查用）
+
+个别排查场景下可手动启动某个服务：
+
+```bash
+# AkTools（仅在需要单独调试时）
+./.venv/bin/python -m uvicorn src.integrations.aktools_compat_app:app --host 127.0.0.1 --port 8080
+
+# Streamlit Dashboard
 ./.venv/bin/python -m streamlit run src/ui_report/product_dashboard.py --server.address 127.0.0.1 --server.port 8771 --server.headless true
-```
 
-打开：
-
-```text
-http://127.0.0.1:8771
-```
-
-启动 API：
-
-```bash
+# FastAPI
 ./.venv/bin/python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000
+
+# 验证
+curl http://127.0.0.1:8000/product/health
 ```
 
-### 3.3 WSL 与 Windows 混合运行
+### 3.4 WSL 与 Windows 混合运行
 
 如果 API 在 WSL 中运行，AkTools 也建议在同一个 WSL 环境启动，并保持：
 

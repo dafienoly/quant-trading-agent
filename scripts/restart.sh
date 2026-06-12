@@ -2,7 +2,9 @@
 # ============================================================
 # 量化交易系统 - 一键重启 (Linux/macOS)
 # 先停止所有服务，再重新启动
-# 用法: bash scripts/restart.sh [--api-port 8000] [--aktools-port 8080] [--streamlit-port 8771] [--with-aktools] [--with-bugfix] [--force]
+# 用法: bash scripts/restart.sh [--api-port 8000] [--aktools-port 8080] [--streamlit-port 8771] [--no-aktools] [--with-bugfix] [--full] [--force]
+# 默认启动: AkTools + FastAPI + Streamlit
+# --full 额外启动 BugFixAgent; AkShare 是 Python 包, 不是独立服务
 # ============================================================
 
 set -e
