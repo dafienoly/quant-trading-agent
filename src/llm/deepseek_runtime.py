@@ -229,16 +229,22 @@ class DeepSeekRuntime:
             call_list = _convert_tool_calls(tool_calls_raw)
             all_tool_calls.extend(call_list)
 
-            # Preserve full assistant message including reasoning_content
-            # (DeepSeek thinking-mode tool-calling spec requires this)
-            assistant_msg: dict[str, Any] = {"role": "assistant", "content": raw_data or None}
-            if reasoning_content:
-                assistant_msg["reasoning_content"] = reasoning_content
-            if call_list:
-                assistant_msg["tool_calls"] = call_list
+            # Capture reasoning_content from current response before it gets overwritten
+            current_reasoning = getattr(response.choices[0].message, "reasoning_content", None)
 
             # Prepare tool result messages for next round
             tool_messages = self._execute_tools(call_list)
+
+            # Build full assistant message preserving reasoning_content for DeepSeek thinking-mode
+            # compatibility. The API requires reasoning_content in the next request when the
+            # previous response had it; dropping it can cause HTTP 400.
+            assistant_msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": response.choices[0].message.content,
+                "tool_calls": call_list,
+            }
+            if current_reasoning:
+                assistant_msg["reasoning_content"] = current_reasoning
             kwargs["messages"].append(assistant_msg)
             kwargs["messages"].extend(tool_messages)
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 
-
 from src.llm.deepseek_runtime import DeepSeekRuntime
 from src.llm.schemas import DeepSeekRequest, DeepSeekResult, get_profile
 
@@ -413,3 +412,29 @@ class TestDeepSeekRuntimeResultModel:
         )
         assert result.status == "tool_error"
         assert len(result.tool_calls) == 1
+
+
+class TestDeepSeekRuntimeToolLoopReasoning:
+    """工具循环中 reasoning_content 保留测试"""
+
+    def test_tool_round_message_preserves_reasoning_content(self):
+        """工具循环的 assistant message 必须保留 reasoning_content"""
+        call_list = [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "read_project_file", "arguments": '{"path": "src/test.py"}'},
+        }]
+        msg_with_reasoning = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": call_list,
+            "reasoning_content": "Deep thinking about the bug...",
+        }
+        # reasoning_content should be present when available
+        assert "reasoning_content" in msg_with_reasoning
+        assert msg_with_reasoning["reasoning_content"] is not None
+        # Verify it survives in kwargs for the next model call
+        kwargs_messages = [msg_with_reasoning]
+        assert kwargs_messages[0].get("reasoning_content") is not None
+
+

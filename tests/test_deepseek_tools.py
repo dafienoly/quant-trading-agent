@@ -10,6 +10,7 @@ from pathlib import Path
 from src.llm.tool_registry import (
     _is_path_allowed,
     _list_feedback_bugs,
+    _search_project_text,
     get_tool_registry,
 )
 
@@ -123,7 +124,6 @@ class TestSearchProjectText:
 
     def test_directory_traversal_upwards(self, monkeypatch):
         """directory=\"../../\" 应被拒绝"""
-        from src.llm.tool_registry import _search_project_text
 
         monkeypatch.setattr("src.llm.tool_registry._PROJECT_ROOT", Path("/tmp/test_project"))
         result = _search_project_text(pattern="test", directory="../../", max_results=5)
@@ -131,7 +131,6 @@ class TestSearchProjectText:
 
     def test_directory_traversal_parent(self, monkeypatch):
         """directory=\"../\" 应被拒绝"""
-        from src.llm.tool_registry import _search_project_text
 
         monkeypatch.setattr("src.llm.tool_registry._PROJECT_ROOT", Path("/tmp/test_project"))
         result = _search_project_text(pattern="test", directory="../", max_results=5)
@@ -139,7 +138,6 @@ class TestSearchProjectText:
 
     def test_allowed_directory_passes(self, monkeypatch, tmp_path):
         """合法的 src/ 目录可以通过路径校验（但 rg 可能不存在）"""
-        from src.llm.tool_registry import _search_project_text
 
         # Create a tmp_path with a src/ subdirectory
         src_dir = tmp_path / "src"
