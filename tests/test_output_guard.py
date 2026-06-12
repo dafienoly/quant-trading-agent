@@ -358,3 +358,133 @@ class TestOutputGuardEdgeCases:
         raw = {"status": "ok", "hypotheses": [{"name": "Buy_signal", "confidence": 0.7}]}
         result = sanitize_llm_output(raw)
         assert result["blocked"] is True
+
+
+class TestOutputGuardChineseCJK:
+    """R3 edge cases: Chinese direct buy/sell and CJK-adjacent English.
+
+    Python 3 treats CJK characters as ``\\w``, so ``\\b`` does NOT create
+    boundaries between CJK and ASCII. The output guard uses
+    ``(?:^|[^a-zA-Z])`` instead of ``\\b``.
+    """
+
+    # ── Chinese direct trading terms ──
+
+    def test_chinese_buy_in_reason(self):
+        """建议买入该股票 is blocked."""
+        raw = {"status": "ok", "reason": "建议买入该股票"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True, f"Expected blocked, got {result}"
+
+    def test_chinese_sell_in_reason(self):
+        """建议卖出该股票 is blocked."""
+        raw = {"status": "ok", "reason": "建议卖出该股票"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_action_buy(self):
+        """{'action': '买入'} is blocked by generic decision field check."""
+        raw = {"status": "ok", "action": "买入"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_decision_sell(self):
+        """{'decision': '卖出'} is blocked."""
+        raw = {"status": "ok", "decision": "卖出"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_buyjin_in_reason(self):
+        """买进 is blocked."""
+        raw = {"status": "ok", "reason": "建议买进"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_selldiao_in_reason(self):
+        """卖掉 is blocked."""
+        raw = {"status": "ok", "reason": "建议卖掉持仓"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_action_buyjin(self):
+        """{'action': '买进'} is blocked."""
+        raw = {"status": "ok", "action": "买进"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_decision_sell_diao(self):
+        """{'decision': '卖掉'} is blocked."""
+        raw = {"status": "ok", "decision": "卖掉"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    # ── CJK-adjacent English ──
+
+    def test_cjk_adjacent_buy(self):
+        """建议buy该股票 is blocked (CJK before and after 'buy')."""
+        raw = {"status": "ok", "reason": "建议buy该股票"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_cjk_adjacent_sell(self):
+        """建议sell该股票 is blocked."""
+        raw = {"status": "ok", "reason": "建议sell该股票"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_cjk_adjacent_buy_with_action(self):
+        """{'action': '买入'} is already tested; CJK-adjacent action check."""
+        raw = {"status": "ok", "action": "建议buy"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_recommendation_field_buy(self):
+        """{'recommendation': '买入'} is blocked."""
+        raw = {"status": "ok", "recommendation": "买入"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    def test_chinese_suggestion_field_sell(self):
+        """{'suggestion': '卖出'} is blocked."""
+        raw = {"status": "ok", "suggestion": "卖出"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    # ── Nested Chinese patterns ──
+
+    def test_chinese_nested_list_item(self):
+        """List item containing Chinese buy term is blocked."""
+        raw = {
+            "status": "ok",
+            "hypotheses": [
+                {"name": "candidate_1", "action": "买入"},
+            ],
+        }
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is True
+
+    # ── Research-safe Chinese terms NOT blocked ──
+
+    def test_goumai_not_blocked(self):
+        """'购买' (general purchase) should NOT be blocked."""
+        raw = {"status": "ok", "analysis": "用户购买意愿增强"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is False
+
+    def test_maimai_not_blocked(self):
+        """'买卖' (general trade/business) should NOT be blocked."""
+        raw = {"status": "ok", "analysis": "买卖双方博弈加剧"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is False
+
+    def test_maipan_not_blocked(self):
+        """'买盘' (buy orders, market data) should NOT be blocked."""
+        raw = {"status": "ok", "analysis": "买盘力量增强"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is False
+
+    def test_maijia_not_blocked(self):
+        """'买家' (buyer) should NOT be blocked."""
+        raw = {"status": "ok", "analysis": "买家谨慎观望"}
+        result = sanitize_llm_output(raw)
+        assert result["blocked"] is False

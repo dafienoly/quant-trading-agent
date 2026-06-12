@@ -50,14 +50,29 @@ _GENERIC_DECISION_KEYS: set[str] = {
 }
 
 # Regex patterns catching executable instructions in string values
+#
+# NOTE: Python 3 treats CJK characters as \w (Unicode word chars),
+# so \b does NOT match between CJK and ASCII.  We use explicit
+# ASCII-aware boundaries (^|[^a-zA-Z]) instead of \b.
+
 _FORBIDDEN_VALUE_PATTERNS: list[re.Pattern] = [
-    # Case-insensitive BUY/SELL with word or underscore boundaries
-    # Catches "buy", "Buy", "BUY", "BUY_signal", "sell_now", "_BUY_"
-    re.compile(r'(?:\b|_)BUY(?:\b|_)', re.IGNORECASE),
-    re.compile(r'(?:\b|_)SELL(?:\b|_)', re.IGNORECASE),
+    # ── English direct trade decisions ──
+    # Case-insensitive BUY/SELL with ASCII-aware boundaries.
+    # Catches "buy", "Buy", "BUY", "建议buy该股票", "BUY_signal".
+    # Does NOT catch "buyback", "seller", "mybuyorder".
+    re.compile(r'(?:^|[^a-zA-Z])BUY(?:[^a-zA-Z]|$)', re.IGNORECASE),
+    re.compile(r'(?:^|[^a-zA-Z])SELL(?:[^a-zA-Z]|$)', re.IGNORECASE),
+    # English order phrases
     re.compile(r'\b(place|submit|execute)\s+order\b', re.IGNORECASE),
     re.compile(r'\b(position|allocation)\s*(=|:)\s*\d', re.IGNORECASE),
     re.compile(r'\bat\s*(market|limit)\s*price', re.IGNORECASE),
+    # ── Chinese direct trade decisions ──
+    # Standard Chinese stock trading terms (2-char compounds).
+    # These are unambiguous enough to block in AI output context.
+    re.compile(r'买入'),
+    re.compile(r'买进'),
+    re.compile(r'卖出'),
+    re.compile(r'卖掉'),
 ]
 
 
@@ -209,19 +224,24 @@ def _find_forbidden_keys_nested(d: dict[str, Any], depth: int = 0) -> set[str]:
 def _find_generic_decision_values(d: dict[str, Any], depth: int = 0) -> list[str]:
     """Check generic decision/action fields for direct buy/sell values.
 
-    Catches patterns like ``{"action": "buy"}`` or ``{"decision": "sell"}``
+    Catches patterns like ``{"action": "buy"}`` or ``{"action": "买入"}``
     that use non-forbidden keys but still convey a direct trade decision.
     """
     if depth > 5:
         return []
+    _CHINESE_DECISION_VALUES = frozenset({"买入", "买进", "卖出", "卖掉"})
     violations: list[str] = []
     for key, value in d.items():
         key_lower = key.lower()
         if key_lower in _GENERIC_DECISION_KEYS and isinstance(value, str):
             value_lower = value.strip().lower()
-            if value_lower in ("buy", "sell") or any(
+            # English check
+            is_english_decision = value_lower in ("buy", "sell") or any(
                 p.search(value) for p in _FORBIDDEN_VALUE_PATTERNS
-            ):
+            )
+            # Chinese check
+            is_chinese_decision = value_lower in _CHINESE_DECISION_VALUES
+            if is_english_decision or is_chinese_decision:
                 violations.append(
                     f"Generic decision field '{key}' has value '{value}' "
                     "that indicates a direct trade decision"
