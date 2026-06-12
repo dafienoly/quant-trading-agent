@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-
+from pathlib import Path
 
 from src.llm.tool_registry import (
     _is_path_allowed,
@@ -116,3 +116,49 @@ class TestPathValidation:
         runtime_path.write_text("", encoding="utf-8")
         allowed = _is_path_allowed(runtime_path.resolve())
         assert allowed is False
+
+
+class TestSearchProjectText:
+    """search_project_text 路径逃逸测试"""
+
+    def test_directory_traversal_upwards(self, monkeypatch):
+        """directory=\"../../\" 应被拒绝"""
+        from src.llm.tool_registry import _search_project_text
+
+        monkeypatch.setattr("src.llm.tool_registry._PROJECT_ROOT", Path("/tmp/test_project"))
+        result = _search_project_text(pattern="test", directory="../../", max_results=5)
+        assert "Access denied" in result["result"]
+
+    def test_directory_traversal_parent(self, monkeypatch):
+        """directory=\"../\" 应被拒绝"""
+        from src.llm.tool_registry import _search_project_text
+
+        monkeypatch.setattr("src.llm.tool_registry._PROJECT_ROOT", Path("/tmp/test_project"))
+        result = _search_project_text(pattern="test", directory="../", max_results=5)
+        assert "Access denied" in result["result"]
+
+    def test_allowed_directory_passes(self, monkeypatch, tmp_path):
+        """合法的 src/ 目录可以通过路径校验（但 rg 可能不存在）"""
+        from src.llm.tool_registry import _search_project_text
+
+        # Create a tmp_path with a src/ subdirectory
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(parents=True)
+
+        # Must update _PROJECT_ROOT, _ALLOWED_READ_PREFIXES, and _FORBIDDEN_PATTERNS
+        # because all are computed at module import time
+        monkeypatch.setattr("src.llm.tool_registry._PROJECT_ROOT", tmp_path)
+        monkeypatch.setattr("src.llm.tool_registry._ALLOWED_READ_PREFIXES", (
+            str(tmp_path / "src"),
+            str(tmp_path / "docs"),
+            str(tmp_path / "tests"),
+        ))
+        monkeypatch.setattr("src.llm.tool_registry._FORBIDDEN_PATTERNS", (
+            ".env",
+            "__pycache__",
+            ".git/",
+            ".venv/",
+        ))
+
+        result = _search_project_text(pattern="test", directory="src/", max_results=5)
+        assert "Access denied" not in result["result"]

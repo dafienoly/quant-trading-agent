@@ -205,10 +205,10 @@ class DeepSeekRuntime:
         coro = client.chat.completions.create(**kwargs)
         response = await asyncio.wait_for(coro, timeout=profile.timeout_seconds)
 
-        # Extract reasoning content if present (for internal use only)
+        # Track reasoning_content for thinking-mode tool rounds
         reasoning_content = getattr(response.choices[0].message, "reasoning_content", None)
         if reasoning_content and profile.thinking_enabled:
-            logger.debug("Thinking mode output available for profile={}", profile.name)
+            logger.debug("Thinking mode reasoning_content available for profile={}", profile.name)
 
         # Tool call loop
         raw_data = response.choices[0].message.content or ""
@@ -226,13 +226,20 @@ class DeepSeekRuntime:
                 )
 
             round_count += 1
-            # Append assistant message with tool_calls
             call_list = _convert_tool_calls(tool_calls_raw)
             all_tool_calls.extend(call_list)
 
+            # Preserve full assistant message including reasoning_content
+            # (DeepSeek thinking-mode tool-calling spec requires this)
+            assistant_msg: dict[str, Any] = {"role": "assistant", "content": raw_data or None}
+            if reasoning_content:
+                assistant_msg["reasoning_content"] = reasoning_content
+            if call_list:
+                assistant_msg["tool_calls"] = call_list
+
             # Prepare tool result messages for next round
             tool_messages = self._execute_tools(call_list)
-            kwargs["messages"].append({"role": "assistant", "content": None, "tool_calls": call_list})
+            kwargs["messages"].append(assistant_msg)
             kwargs["messages"].extend(tool_messages)
 
             # Next API call
@@ -258,6 +265,9 @@ class DeepSeekRuntime:
 
             raw_data = response.choices[0].message.content or ""
             tool_calls_raw = getattr(response.choices[0].message, "tool_calls", None)
+            # Capture reasoning_content from each tool round for next iteration
+            reasoning_content = getattr(response.choices[0].message, "reasoning_content",
+                                        reasoning_content)
 
         if tool_calls_raw and round_count >= profile.max_tool_rounds:
             return DeepSeekResult(
@@ -285,6 +295,16 @@ class DeepSeekRuntime:
                 status="invalid_response",
                 model=self._config.model,
                 error={"reason": parse_error, "raw_excerpt": raw_data[:300]},
+                tool_calls=all_tool_calls,
+            )
+
+        # Schema validation at runtime layer (F-007)
+        validation_error = self._validate_output(request, parsed)
+        if validation_error:
+            return DeepSeekResult(
+                status="invalid_response",
+                model=self._config.model,
+                error=validation_error,
                 tool_calls=all_tool_calls,
             )
 
@@ -383,6 +403,30 @@ class DeepSeekRuntime:
                 pass
 
         return None, "parse_failed"
+
+    @staticmethod
+    def _validate_output(request: DeepSeekRequest, parsed: dict[str, Any]) -> dict[str, Any] | None:
+        """Validate parsed JSON against registered schema, if any.
+
+        Returns:
+            ``None`` if valid or no schema registered.
+            An error dict ``{"reason": "schema_validation_failed", "detail": ...}``
+            if validation fails.
+        """
+        schema_name = request.schema_name
+        if not schema_name:
+            return None
+        try:
+            from src.llm.schemas import validate_schema
+            validate_schema(schema_name, parsed)
+            return None
+        except KeyError:
+            # schema_name not in registry — not an error, just no validation
+            logger.debug("No schema registered for {!r}, skipping validation", schema_name)
+            return None
+        except Exception as ve:
+            logger.warning("Schema validation failed for {}: {}", schema_name, ve)
+            return {"reason": "schema_validation_failed", "detail": str(ve)}
 
     @staticmethod
     def _max_concurrency() -> int:

@@ -43,6 +43,21 @@ class _FakeResponse:
         self.usage = _FakeUsage()
 
 
+class _FakeToolCall:
+    """Simulates an OpenAI SDK ToolCall object."""
+
+    def __init__(self, id: str = "call_1", name: str = "read_project_file", arguments: str = "{}"):
+        self.id = id
+        self.type = "function"
+        self.function = _FakeFunction(name=name, arguments=arguments)
+
+
+class _FakeFunction:
+    def __init__(self, name: str, arguments: str):
+        self.name = name
+        self.arguments = arguments
+
+
 class _FakeAsyncClient:
     """Simulates AsyncOpenAI for testing."""
 
@@ -195,6 +210,158 @@ class TestDeepSeekRuntimeThinking:
         """thinking disabled 的 profile 设置正确"""
         profile = get_profile("signal_explanation")
         assert profile.thinking_enabled is False
+
+
+class TestDeepSeekRuntimeToolLoopReasoningContent:
+    """Tool 循环中 reasoning_content 的保留测试"""
+
+    def test_assistant_msg_includes_reasoning_content(self, monkeypatch):
+        """tool 循环中的 assistant 消息保留 reasoning_content"""
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+
+        # Build a response that simulates thinking + tool calls
+        tool_calls = [_FakeToolCall(id="call_1", name="read_project_file",
+                                    arguments='{"path": "test"}')]
+
+        first_response = _FakeResponse(
+            content="需要查阅文件",
+            reasoning_content="让我先查看相关文件...",
+            tool_calls=tool_calls,
+        )
+        second_response = _FakeResponse(
+            content='{"root_cause": "测试根因", "affected_files": ["a.py"], '
+                    '"fix_steps": ["修复"], "risk_level": "low", '
+                    '"estimated_impact": "低", "needs_human_review": true}',
+            reasoning_content="分析完成",
+        )
+
+        runtime = DeepSeekRuntime()
+        request = DeepSeekRequest(
+            profile="bugfix_analysis",
+            schema_name="bugfix_analysis",
+            system_prompt="Analyze.",
+            user_prompt="Test bug.",
+            tools=["read_project_file"],
+        )
+
+        import asyncio
+
+        # Patch AsyncOpenAI to return our canned responses
+        class _CannedChat:
+            def __init__(self):
+                self.call_count = 0
+
+            @property
+            def completions(self):
+                return self
+
+            async def create(self, **kwargs):
+                self.call_count += 1
+                if self.call_count == 1:
+                    # Verify first call does not yet carry reasoning
+                    return first_response
+                # Verify second call includes reasoning_content in messages
+                msgs = kwargs.get("messages", [])
+                assistant_msgs = [m for m in msgs if m.get("role") == "assistant"]
+                if assistant_msgs:
+                    last_asst = assistant_msgs[-1]
+                    assert last_asst.get("reasoning_content") == "让我先查看相关文件...", (
+                        "reasoning_content missing or wrong in tool loop"
+                    )
+                return second_response
+
+        class _CannedClient:
+            def __init__(self, api_key=None, base_url=None):
+                self.chat = _CannedChat()
+
+        monkeypatch.setattr("openai.AsyncOpenAI", _CannedClient)
+
+        # Execute
+        result = asyncio.run(runtime.chat_json_async(request))
+        assert result.status == "ok"
+
+
+class TestDeepSeekRuntimeSchemaValidation:
+    """Runtime schema 校验测试"""
+
+    def _make_schema_client(self, content: str):
+        """Create a fake AsyncOpenAI client that returns given content."""
+        class _FakeCompletions:
+            async def create(self, **kwargs):
+                return _FakeResponse(content=content)
+
+        class _FakeChat:
+            completions = _FakeCompletions()
+
+        class _FakeClient:
+            chat = _FakeChat()
+            def __init__(self, api_key=None, base_url=None):
+                pass
+
+        return _FakeClient
+
+    def test_registered_schema_valid_data(self, monkeypatch):
+        """合法数据通过 schema 校验返回 ok"""
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+        valid_json = ('{"root_cause": "测试", "affected_files": ["a.py"], '
+                      '"fix_steps": ["修复1"], "risk_level": "low", '
+                      '"estimated_impact": "低", "needs_human_review": true}')
+
+        fake_cls = self._make_schema_client(valid_json)
+        monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
+
+        import asyncio
+        runtime = DeepSeekRuntime()
+        request = DeepSeekRequest(
+            profile="bugfix_analysis",
+            schema_name="bugfix_analysis",
+            system_prompt="test",
+            user_prompt="test",
+        )
+        result = asyncio.run(runtime.chat_json_async(request))
+        assert result.status == "ok"
+        assert result.data is not None
+        assert result.data["root_cause"] == "测试"
+
+    def test_registered_schema_invalid_data(self, monkeypatch):
+        """非法 schema 数据返回 invalid_response"""
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+        invalid_json = '{"fix_steps": ["步骤"]}'  # Missing required "root_cause"
+
+        fake_cls = self._make_schema_client(invalid_json)
+        monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
+
+        import asyncio
+        runtime = DeepSeekRuntime()
+        request = DeepSeekRequest(
+            profile="bugfix_analysis",
+            schema_name="bugfix_analysis",
+            system_prompt="test",
+            user_prompt="test",
+        )
+        result = asyncio.run(runtime.chat_json_async(request))
+        assert result.status == "invalid_response"
+        assert result.error is not None
+        assert "schema_validation_failed" in str(result.error.get("reason", ""))
+
+    def test_unknown_schema_name_does_not_block(self, monkeypatch):
+        """未知 schema_name 不会阻断调用"""
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+        valid_json = '{"result": "ok"}'
+
+        fake_cls = self._make_schema_client(valid_json)
+        monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
+
+        import asyncio
+        runtime = DeepSeekRuntime()
+        request = DeepSeekRequest(
+            profile="signal_explanation",
+            schema_name="unknown_schema",
+            system_prompt="test",
+            user_prompt="test",
+        )
+        result = asyncio.run(runtime.chat_json_async(request))
+        assert result.status == "ok"
 
 
 class TestDeepSeekRuntimeResultModel:

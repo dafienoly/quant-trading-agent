@@ -136,6 +136,7 @@ class DeepSeekResult(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
 
 
+
 # ============================================================
 # BugFix Agent Schemas
 # ============================================================
@@ -173,3 +174,30 @@ class BugFixProposal(BaseModel):
     estimated_impact: str = ""
     test_suggestions: list[str] = Field(default_factory=list)
     requires_approval: bool = True
+
+
+# ============================================================
+# Schema Registry — maps schema_name to Pydantic model class
+# ============================================================
+# Used by DeepSeekRuntime to validate JSON output at the framework
+# layer before returning ``status="ok"``.
+
+SCHEMA_REGISTRY: dict[str, type[BaseModel]] = {
+    "bugfix_analysis": BugFixAnalysis,
+    "bugfix_proposal": BugFixProposal,
+}
+
+
+def validate_schema(schema_name: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Validate *data* against the registered schema for *schema_name*.
+
+    Returns:
+        The validated dict (with defaults filled in).
+
+    Raises:
+        KeyError: if *schema_name* is not in the registry.
+        pydantic.ValidationError: if validation fails.
+    """
+    model_cls = SCHEMA_REGISTRY[schema_name]
+    validated = model_cls(**data)
+    return validated.model_dump()
