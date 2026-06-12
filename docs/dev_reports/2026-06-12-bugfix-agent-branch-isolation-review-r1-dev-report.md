@@ -26,6 +26,13 @@
 | Test path assertion not portable | S3 | Replaced string prefix assertions with `is_relative_to()` in tests |
 | Missing `bug_id` sanitization | S3 | Added `_sanitize_bug_id()`: rejects empty, `..`, `/`, leading `-`/`/`, and characters outside `[A-Za-z0-9_.-]` |
 
+## Second Review Round Fixes
+
+| Issue | Type | Fix |
+|---|---|---|
+| Approve Merge 确认流跨 rerun 不可靠 | S2 | 改用 `st.session_state` 持久化确认状态；确认后重置标志；增加取消按钮 |
+| PR 混入无关 feedback runtime 文件 | S2 | `git rm --cached` 移除 `analysis/`、`fixed/`、`open/` 下 50+ 个运行时文件；更新 `.gitignore` 精确控制 `feedback/` 跟踪规则 |
+
 ## Changed Files
 
 | File | Change | Purpose |

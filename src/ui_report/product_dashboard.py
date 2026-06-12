@@ -772,25 +772,38 @@ def render_feedback() -> None:
 
                 # --- Merge + Cleanup Buttons ---
                 merge_col, cleanup_col = st.columns(2)
+
+                # Use session_state to persist merge confirmation across reruns
+                confirm_key = f"merge_confirm_{bug_id}"
+                if confirm_key not in st.session_state:
+                    st.session_state[confirm_key] = False
+
                 with merge_col:
                     merge_disabled = (merge_status == "merged")
                     merge_btn_label = t("approve_merge") if not merge_disabled else t("merged")
                     if merge_disabled:
                         st.button(merge_btn_label, key=f"merge_{bug_id}", disabled=True)
                     else:
-                        if st.button(f"🔀 {merge_btn_label}", key=f"merge_{bug_id}", type="primary"):
-                            # Show confirmation dialog
-                            with st.form(key=f"merge_confirm_{bug_id}"):
-                                st.markdown(f"**{t('merge_confirmation_title')}**")
-                                st.warning(t("merge_warning"))
-                                if fix_branch:
-                                    st.markdown(t("merge_confirmation_message").format(
-                                        fix_branch=fix_branch, base_branch=base_branch or "main"
-                                    ))
-                                confirm_text = st.text_input(
-                                    t("merge_confirmation_input_label"), key=f"merge_input_{bug_id}"
-                                )
-                                if st.form_submit_button(t("confirm"), type="primary"):
+                        # Show merge init button when confirmation not active
+                        if not st.session_state[confirm_key]:
+                            if st.button(f"🔀 {merge_btn_label}", key=f"merge_{bug_id}", type="primary"):
+                                st.session_state[confirm_key] = True
+                                st.rerun()
+                        else:
+                            # Confirmation dialog — persists across reruns via session_state
+                            st.markdown(f"**{t('merge_confirmation_title')}**")
+                            st.warning(t("merge_warning"))
+                            if fix_branch:
+                                st.markdown(t("merge_confirmation_message").format(
+                                    fix_branch=fix_branch, base_branch=base_branch or "main"
+                                ))
+                            input_key = f"merge_input_{bug_id}"
+                            confirm_text = st.text_input(
+                                t("merge_confirmation_input_label"), key=input_key
+                            )
+                            confirm_btn_col, cancel_btn_col = st.columns(2)
+                            with confirm_btn_col:
+                                if st.button(f"✅ {t('confirm')}", key=f"merge_confirm_btn_{bug_id}", type="primary"):
                                     if confirm_text.strip().lower() == "yes":
                                         result = _post(
                                             f"/product/feedback/{bug_id}/merge",
@@ -798,11 +811,16 @@ def render_feedback() -> None:
                                         )
                                         if result and result.get("status") == "fixed":
                                             st.success(t("merge_success"))
+                                            st.session_state[confirm_key] = False
                                             st.rerun()
                                         else:
                                             st.error(f"{t('merge_failed')}: {result}")
                                     else:
                                         st.warning(t("merge_confirmed"))
+                            with cancel_btn_col:
+                                if st.button(f"❌ {t('cancel')}", key=f"merge_cancel_{bug_id}"):
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
 
                 with cleanup_col:
                     if st.button(f"🗑️ {t('cleanup_worktree')}", key=f"cleanup_{bug_id}"):

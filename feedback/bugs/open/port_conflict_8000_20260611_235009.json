@@ -1,8 +1,0 @@
-{
-  "type": "port_conflict",
-  "service": "FastAPI",
-  "port": 8000,
-  "timestamp": "2026-06-11T23:50:09.723888",
-  "message": "端口 8000 已被占用，无法启动 FastAPI",
-  "remedy": "请释放端口 8000 或使用 --fastapi-port 指定其他端口"
-}
