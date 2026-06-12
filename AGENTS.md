@@ -30,7 +30,9 @@ Before starting any non-trivial task, read in this order:
 5. `docs/policy/EXECUTION_POLICY.md`
 6. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
 7. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-8. Current handoff reports when applicable:
+8. Current task development guide when applicable:
+   - `docs/design/YYYY-MM-DD-<feature>-development-guide.md`
+9. Current handoff reports when applicable:
    - `docs/dev_reports/`
    - `docs/test_reports/`
    - `docs/review/`
@@ -39,6 +41,11 @@ Before starting any non-trivial task, read in this order:
 
 Historical reports should be read only when directly related to the assigned
 feature, regression, or bug fix.
+
+Feature-level architecture documents and development guidance must live under
+`docs/design/`. `docs/superpowers/plans/` is reserved for internal planning
+scratchpads and must not be used as the canonical handoff location for
+Developer Agents or Test Engineer Agents.
 
 ## Hard Safety Invariants
 
