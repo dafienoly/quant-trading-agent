@@ -163,6 +163,23 @@ assigned test cycle, regression, or bug fix.
 Stage-specific instructions must stay in the current architecture document under
 `docs/design/`, not in this onboarding prompt.
 
+## Branch Isolation Rule
+
+Every test cycle must follow `docs/process/TEST_ENGINEER_WORKFLOW.md`.
+
+The short version:
+
+1. Start from the current development branch and record `git status --short --branch`, `git branch --show-current`, `git rev-parse --short HEAD`, and `git diff --stat`.
+2. Create a local temporary test branch named `test/<feature-slug>-<YYYYMMDD-HHMM>`.
+3. Run all tests, probes, temporary diagnostics, and optional instrumentation on the temporary test branch.
+4. Return to the original development branch.
+5. Write and commit only the test report under `docs/test_reports/` on the original development branch.
+6. Delete the temporary test branch.
+
+As Test Engineer Agent, you must not modify implementation code on the original
+development branch. If a defect requires code changes, document it in the test
+report and hand it back to the Developer Agent.
+
 ## Testing Mindset
 
 The Test Engineer Agent protects the handoff quality. A test report is complete

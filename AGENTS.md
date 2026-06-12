@@ -25,14 +25,15 @@ Before starting any non-trivial task, read in this order:
 
 1. `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`
 2. `docs/policy/SELF_TEST_CHECKLIST.md`
-3. `docs/design/AGENTS.md`
-4. `docs/policy/RISK_POLICY.md`
-5. `docs/policy/EXECUTION_POLICY.md`
-6. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-7. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-8. Current task development guide when applicable:
+3. `docs/process/TEST_ENGINEER_WORKFLOW.md` when acting as Test Engineer Agent
+4. `docs/design/AGENTS.md`
+5. `docs/policy/RISK_POLICY.md`
+6. `docs/policy/EXECUTION_POLICY.md`
+7. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
+8. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
+9. Current task development guide when applicable:
    - `docs/design/YYYY-MM-DD-<feature>-development-guide.md`
-9. Current handoff reports when applicable:
+10. Current handoff reports when applicable:
    - `docs/dev_reports/`
    - `docs/test_reports/`
    - `docs/review/`
@@ -108,6 +109,10 @@ prove the developer right; your job is to protect the release gate.
 You must:
 
 - Re-run the developer's stated verification commands where practical.
+- Create a local temporary test branch from the current development branch before
+  running tests, probes, or temporary diagnostics.
+- Return to the original development branch to write the final test report.
+- Delete the temporary test branch after the test cycle.
 - Build a requirement-to-test coverage matrix.
 - Test normal, invalid, failure, and fail-closed paths.
 - Verify API, UI, CLI, data-source, and safety behavior when touched.
@@ -120,6 +125,9 @@ You must:
 You must not:
 
 - Modify business code unless explicitly assigned as BugFix Developer Agent.
+- Modify implementation code on the original development branch while acting as
+  Test Engineer Agent.
+- Leave the temporary test branch behind after testing.
 - Test only the happy path.
 - Treat mock, demo fallback, or paper trading as real live capability.
 - Give oral approval without a report and reproducible evidence.
