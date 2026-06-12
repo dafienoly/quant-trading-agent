@@ -24,16 +24,17 @@ handoff evidence as first-class requirements.
 Before starting any non-trivial task, read in this order:
 
 1. `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`
-2. `docs/policy/SELF_TEST_CHECKLIST.md`
-3. `docs/process/TEST_ENGINEER_WORKFLOW.md` when acting as Test Engineer Agent
-4. `docs/design/AGENTS.md`
-5. `docs/policy/RISK_POLICY.md`
-6. `docs/policy/EXECUTION_POLICY.md`
-7. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-8. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-9. Current task development guide when applicable:
+2. `docs/process/BRANCH_WORKFLOW.md`
+3. `docs/policy/SELF_TEST_CHECKLIST.md`
+4. `docs/process/TEST_ENGINEER_WORKFLOW.md` when acting as Test Engineer Agent
+5. `docs/design/AGENTS.md`
+6. `docs/policy/RISK_POLICY.md`
+7. `docs/policy/EXECUTION_POLICY.md`
+8. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
+9. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
+10. Current task development guide when applicable:
    - `docs/design/YYYY-MM-DD-<feature>-development-guide.md`
-10. Current handoff reports when applicable:
+11. Current handoff reports when applicable:
    - `docs/dev_reports/`
    - `docs/test_reports/`
    - `docs/review/`
@@ -151,25 +152,34 @@ Every stage gate must produce its required document before moving forward. If a
 stage fails, return to the responsible prior stage instead of patching around the
 process.
 
+Branching and parallel work must follow `docs/process/BRANCH_WORKFLOW.md`.
+In short: `main` stays stable, `epic/<date-feature>` is the integration branch,
+developers work on `feat/<feature>/<module>`, testers verify on temporary local
+`test/<feature>/<scope>-<tester>-<timestamp>` branches, and review fixes happen
+on `fix/<feature>/<issue>` branches. Test Engineer Agents must not change
+business code on the original development branch.
+
 ## Quick Commands
 
-Use Windows venv commands in this workspace unless the environment clearly
-differs:
+Use WSL/Linux venv commands by default:
 
-```powershell
+```bash
 git status --short --branch
 git diff --stat
-.\.venv\Scripts\python.exe -m ruff check <touched-python-files-and-tests>
-.\.venv\Scripts\python.exe -m py_compile <touched-src-python-files>
-.\.venv\Scripts\python.exe -m pytest <related-test-files> -q --basetemp=runtime\pytest-tmp-<feature>
+./.venv/bin/python -m ruff check <touched-python-files-and-tests>
+./.venv/bin/python -m py_compile <touched-src-python-files>
+./.venv/bin/python -m pytest <related-test-files> -q --basetemp=runtime/pytest-tmp-<feature>
 git diff --check
 ```
+
+If the task is explicitly running in a Windows-only workspace, record that fact
+in the report and use the equivalent Windows interpreter path.
 
 Run broader regression when touching shared models, config, data contracts,
 risk, execution, backtest, provider hubs, product routes, or UI entrypoints:
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests -q --tb=short --basetemp=runtime\pytest-tmp-<feature>-full
+```bash
+./.venv/bin/python -m pytest tests -q --tb=short --basetemp=runtime/pytest-tmp-<feature>-full
 ```
 
 If broad checks fail due to pre-existing unrelated issues, report the failure,
