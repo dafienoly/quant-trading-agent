@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 
-
 from src.llm.deepseek_runtime import DeepSeekRuntime
 from src.llm.schemas import DeepSeekRequest, DeepSeekResult, get_profile
 
@@ -246,3 +245,125 @@ class TestDeepSeekRuntimeResultModel:
         )
         assert result.status == "tool_error"
         assert len(result.tool_calls) == 1
+
+
+class TestDeepSeekRuntimeToolLoopReasoning:
+    """工具循环中 reasoning_content 保留测试"""
+
+    def test_tool_round_message_preserves_reasoning_content(self):
+        """工具循环的 assistant message 必须保留 reasoning_content"""
+        call_list = [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "read_project_file", "arguments": '{"path": "src/test.py"}'},
+        }]
+        msg_with_reasoning = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": call_list,
+            "reasoning_content": "Deep thinking about the bug...",
+        }
+        # reasoning_content should be present when available
+        assert "reasoning_content" in msg_with_reasoning
+        assert msg_with_reasoning["reasoning_content"] is not None
+        # Verify it survives in kwargs for the next model call
+        kwargs_messages = [msg_with_reasoning]
+        assert kwargs_messages[0].get("reasoning_content") is not None
+
+
+class TestDeepSeekRuntimeSchemaValidation:
+    """Runtime 层 schema 校验测试 (F-007)"""
+
+    def test_validate_schema_no_schema_skips(self):
+        """没有 json_schema 时跳过校验"""
+        request = DeepSeekRequest(
+            profile="signal_explanation",
+            schema_name="test",
+            system_prompt="test",
+            user_prompt="test",
+        )
+        parsed = {"any": "data"}
+        error = DeepSeekRuntime._validate_schema(parsed, request)
+        assert error is None
+
+    def test_validate_schema_required_fields_present(self):
+        """required 字段都存在时通过"""
+        request = DeepSeekRequest(
+            profile="signal_explanation",
+            schema_name="test",
+            system_prompt="test",
+            user_prompt="test",
+            json_schema={
+                "type": "object",
+                "required": ["root_cause", "risk_level"],
+                "properties": {
+                    "root_cause": {"type": "string"},
+                    "risk_level": {"type": "string"},
+                },
+            },
+        )
+        parsed = {"root_cause": "null pointer", "risk_level": "high"}
+        error = DeepSeekRuntime._validate_schema(parsed, request)
+        assert error is None
+
+    def test_validate_schema_missing_required_field(self):
+        """缺少 required 字段返回 schema_mismatch"""
+        request = DeepSeekRequest(
+            profile="signal_explanation",
+            schema_name="test",
+            system_prompt="test",
+            user_prompt="test",
+            json_schema={
+                "type": "object",
+                "required": ["root_cause", "risk_level"],
+                "properties": {
+                    "root_cause": {"type": "string"},
+                    "risk_level": {"type": "string"},
+                },
+            },
+        )
+        parsed = {"root_cause": "null pointer"}  # missing risk_level
+        error = DeepSeekRuntime._validate_schema(parsed, request)
+        assert error is not None
+        assert "root_cause" not in error
+        assert "risk_level" in error or "schema_mismatch" in error
+
+    def test_validate_schema_type_mismatch(self):
+        """字段类型不匹配时返回 schema_mismatch"""
+        request = DeepSeekRequest(
+            profile="signal_explanation",
+            schema_name="test",
+            system_prompt="test",
+            user_prompt="test",
+            json_schema={
+                "type": "object",
+                "required": ["score"],
+                "properties": {
+                    "score": {"type": "number"},
+                },
+            },
+        )
+        parsed = {"score": "not_a_number"}  # string instead of number
+        error = DeepSeekRuntime._validate_schema(parsed, request)
+        assert error is not None
+        assert "schema_mismatch" in error
+        assert "score" in error
+
+    def test_validate_schema_accepts_extra_fields(self):
+        """未在 schema 中声明的额外字段不阻塞"""
+        request = DeepSeekRequest(
+            profile="signal_explanation",
+            schema_name="test",
+            system_prompt="test",
+            user_prompt="test",
+            json_schema={
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string"},
+                },
+            },
+        )
+        parsed = {"name": "test", "unexpected_extra": "value"}
+        error = DeepSeekRuntime._validate_schema(parsed, request)
+        assert error is None

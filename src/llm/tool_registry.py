@@ -300,7 +300,9 @@ def _read_project_file(path: str, max_lines: int = 200) -> dict[str, Any]:
 
 def _search_project_text(pattern: str, max_results: int = 10, directory: str = "src/") -> dict[str, Any]:
     """Search project text using ripgrep."""
-    search_path = _PROJECT_ROOT / directory
+    search_path = (_PROJECT_ROOT / directory).resolve()
+    if not _is_path_allowed(search_path):
+        return {"result": f"Access denied: directory={directory!r}", "truncated": False}
     if not search_path.exists():
         return {"result": f"Directory not found: {directory}", "truncated": False}
 

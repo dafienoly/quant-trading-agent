@@ -230,9 +230,23 @@ class DeepSeekRuntime:
             call_list = _convert_tool_calls(tool_calls_raw)
             all_tool_calls.extend(call_list)
 
+            # Capture reasoning_content from current response before it gets overwritten
+            current_reasoning = getattr(response.choices[0].message, "reasoning_content", None)
+
             # Prepare tool result messages for next round
             tool_messages = self._execute_tools(call_list)
-            kwargs["messages"].append({"role": "assistant", "content": None, "tool_calls": call_list})
+
+            # Build full assistant message preserving reasoning_content for DeepSeek thinking-mode
+            # compatibility. The API requires reasoning_content in the next request when the
+            # previous response had it; dropping it can cause HTTP 400.
+            assistant_msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": response.choices[0].message.content,
+                "tool_calls": call_list,
+            }
+            if current_reasoning:
+                assistant_msg["reasoning_content"] = current_reasoning
+            kwargs["messages"].append(assistant_msg)
             kwargs["messages"].extend(tool_messages)
 
             # Next API call
@@ -285,6 +299,19 @@ class DeepSeekRuntime:
                 status="invalid_response",
                 model=self._config.model,
                 error={"reason": parse_error, "raw_excerpt": raw_data[:300]},
+                tool_calls=all_tool_calls,
+            )
+
+        # Runtime-level schema validation — requirement F-007
+        # Validate parsed JSON against the declared schema before returning
+        # "ok". If json_schema is provided and validation fails, return
+        # invalid_response so callers never receive unvalidated data.
+        schema_validation_error = self._validate_schema(parsed, request)
+        if schema_validation_error:
+            return DeepSeekResult(
+                status="invalid_response",
+                model=self._config.model,
+                error={"reason": schema_validation_error, "raw_excerpt": raw_data[:300]},
                 tool_calls=all_tool_calls,
             )
 
@@ -383,6 +410,47 @@ class DeepSeekRuntime:
                 pass
 
         return None, "parse_failed"
+
+    @staticmethod
+    def _validate_schema(parsed: dict[str, Any], request: DeepSeekRequest) -> str | None:
+        """Validate parsed JSON against the request schema.
+
+        Returns None on success, or an error string on mismatch.
+        This is the runtime-level gate required by F-007: the framework
+        must reject schema violations even if the caller doesn't check.
+        """
+        json_schema = request.json_schema
+        if not json_schema:
+            return None  # No schema declared → skip validation
+
+        required = json_schema.get("required", [])
+        for field in required:
+            if field not in parsed:
+                return f"schema_mismatch: missing required field {field!r}"
+
+        properties = json_schema.get("properties", {})
+        for field, value in parsed.items():
+            prop = properties.get(field)
+            if prop is None:
+                continue  # Extra fields are allowed
+            expected_type = prop.get("type")
+            if expected_type:
+                type_map = {
+                    "string": str,
+                    "integer": int,
+                    "number": (int, float),
+                    "boolean": bool,
+                    "object": dict,
+                    "array": list,
+                }
+                py_type = type_map.get(expected_type)
+                if py_type and not isinstance(value, py_type):
+                    return (
+                        f"schema_mismatch: field {field!r} expected {expected_type}, "
+                        f"got {type(value).__name__}"
+                    )
+
+        return None
 
     @staticmethod
     def _max_concurrency() -> int:
