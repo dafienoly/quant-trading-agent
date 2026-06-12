@@ -98,9 +98,9 @@
       "severity": "high",
       "status": "open",
       "created_at": "2026-06-11 08:57:36",
-      "updated_at": "2026-06-11 21:28:35",
+      "updated_at": "2026-06-11 23:44:34",
       "dedupe_hash": "d9ed1c04affb17c4",
-      "occurrence_count": 27
+      "occurrence_count": 28
     },
     {
       "bug_id": "BUG_20260611_8VXTL0",
@@ -120,9 +120,9 @@
       "severity": "high",
       "status": "open",
       "created_at": "2026-06-11 08:57:43",
-      "updated_at": "2026-06-11 21:28:36",
+      "updated_at": "2026-06-11 23:44:35",
       "dedupe_hash": "b426d3ac7e79d7c5",
-      "occurrence_count": 14
+      "occurrence_count": 15
     },
     {
       "bug_id": "BUG_20260611_W7M8ZP",
@@ -131,9 +131,9 @@
       "severity": "high",
       "status": "open",
       "created_at": "2026-06-11 08:57:44",
-      "updated_at": "2026-06-11 21:28:34",
+      "updated_at": "2026-06-11 23:44:24",
       "dedupe_hash": "cd28307de7641369",
-      "occurrence_count": 13
+      "occurrence_count": 15
     },
     {
       "bug_id": "BUG_20260611_EHY3UA",
@@ -180,5 +180,5 @@
       "occurrence_count": 1
     }
   ],
-  "updated_at": "2026-06-11 21:28:37"
+  "updated_at": "2026-06-11 23:44:35"
 }
