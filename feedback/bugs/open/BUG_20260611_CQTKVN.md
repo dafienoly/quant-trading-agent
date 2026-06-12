@@ -1,11 +1,11 @@
 # Bug: dashboard error
 
 - **Bug ID**: BUG_20260611_CQTKVN
-- **状态**: open
+- **状态**: blocked
 - **严重程度**: medium
 - **组件**: dashboard
 - **创建时间**: 2026-06-11 21:28:06
-- **更新时间**: 2026-06-11 21:28:06
+- **更新时间**: 2026-06-12 14:59:23
 - **出现次数**: 1
 - **去重哈希**: 84d43acb14b424fd
 
@@ -20,3 +20,47 @@ POST /product/live-data/research-context failed: HTTPConnectionPool(host='localh
 ## 异常信息
 
 - **异常消息**: `POST /product/live-data/research-context failed: HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=8)`
+
+## Agent 分析报告
+
+```json
+{
+  "root_cause": "仪表板组件向本地服务（localhost:8000）发送 POST 请求 /product/live-data/research-context 时，由于服务端处理超时或网络阻塞，导致在 8 秒内未收到响应，触发读超时异常。",
+  "affected_files": [
+    "dashboard 组件中处理 product_dashboard 端点的代码文件",
+    "负责与 localhost:8000 服务通信的 HTTP 客户端模块"
+  ],
+  "fix_steps": [
+    "1. 检查 localhost:8000 服务是否正常运行，确认服务进程是否存在且无死锁。",
+    "2. 增加客户端的超时时间（例如从 8 秒提升到 30 秒），以应对可能的延迟波动。",
+    "3. 优化服务端 /product/live-data/research-context 的查询或计算逻辑，减少响应时间。",
+    "4. 在客户端添加重试机制（如指数退避重试），避免单次超时导致完全失败。",
+    "5. 考虑添加异步处理或缓存机制，减少实时请求的压力。"
+  ],
+  "risk_level": "medium",
+  "estimated_impact": "影响仪表板的产品研究上下文数据加载功能，导致页面局部或整体无法正常显示相关数据，但不会影响其他核心交易逻辑。"
+}
+```
+
+## 修复方案
+
+```json
+{
+  "fix_description": "增加客户端超时时间并添加重试机制，以缓解因服务端延迟或网络波动导致的仪表板数据加载失败问题。",
+  "code_changes": [
+    {
+      "file_path": "dashboard/api_client.py",
+      "change_type": "modify",
+      "diff": "--- a/dashboard/api_client.py\n+++ b/dashboard/api_client.py\n@@ -5,3 +5,10 @@\n+from requests.adapters import HTTPAdapter\n+from requests.packages.urllib3.util.retry import Retry\n+\n+def get_session():\n+    session = requests.Session()\n+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])\n+    session.mount('http://', HTTPAdapter(max_retries=retries))\n+    return session\n+\n-def fetch_research_context(url, data):\n-    response = requests.post(url, json=data, timeout=8)\n+def fetch_research_context(url, data):\n+    session = get_session()\n+    response = session.post(url, json=data, timeout=30)\n     return response.json()"
+    }
+  ],
+  "risk_level": "medium",
+  "estimated_impact": "影响仪表板的产品研究上下文数据加载功能，增加超时容忍度和自动重试机制后，数据加载失败概率显著降低，仅极端服务故障时可能仍会失败。",
+  "test_suggestions": [
+    "单元测试：验证get_session()返回的session具有正确的重试配置（最大重试次数3、退避因子1、状态码列表）。",
+    "单元测试：模拟服务端超时（timeout exception），验证重试机制被触发且请求最终抛出异常时应正确处理。",
+    "集成测试：启动本地HTTP服务，模拟正常响应与延迟响应，验证仪表板组件能成功获取数据或给出恰当的错误提示。",
+    "压力测试：模拟高并发请求下服务端响应缓慢，观察超时设置和重试是否导致资源耗尽或雪崩，必要时调整参数。"
+  ]
+}
+```

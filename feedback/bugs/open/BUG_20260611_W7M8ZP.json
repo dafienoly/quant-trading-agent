@@ -1,8 +1,8 @@
 {
   "bug_id": "BUG_20260611_W7M8ZP",
   "created_at": "2026-06-11 08:57:44",
-  "updated_at": "2026-06-11 23:44:24",
-  "status": "open",
+  "updated_at": "2026-06-12 15:01:10",
+  "status": "proposed",
   "severity": "high",
   "component": "data_gateway",
   "title": "All providers failed for realtime_quotes",
@@ -33,9 +33,53 @@
   ],
   "dedupe_hash": "cd28307de7641369",
   "related_log_files": [],
-  "occurrence_count": 15,
-  "analysis_report": null,
-  "fix_proposal": null,
+  "occurrence_count": 18,
+  "analysis_report": {
+    "root_cause": "`AkShareProvider.get_realtime_quotes` 抛出 `NotImplementedError`，被 fallback 机制捕获后视为空数据，导致所有 provider 均返回空。同时 `AkToolsProvider` 的实时行情接口可能因外部服务（如 Aktools HTTP API）不可用或数据为空也返回空，最终触发 `AllProvidersFailed` 异常。",
+    "affected_files": [
+      "src/data_gateway/akshare_provider.py",
+      "src/data_gateway/aktools_provider.py",
+      "src/data_gateway/base.py（可能涉及 fallback 逻辑）"
+    ],
+    "fix_steps": [
+      "在 `AkShareProvider` 中实现 `get_realtime_quotes` 方法，使用 `ak.stock_zh_a_spot_em` 等函数获取 A 股实时行情，并参考 `AkToolsProvider` 的实现模式，支持港股等。",
+      "检查 `AkToolsProvider` 的 `_get` 方法中的端点（如 `stock_zh_a_spot_em` 和 `stock_hk_spot_em`）是否在 Aktools API 中可用，确保 Aktools 服务正常运行且返回非空数据。",
+      "调整 fallback 链，如果在 `AkShareProvider` 实现完成前该功能仍不可用，可暂时移除 `akshare_realtime` provider 或降级处理。",
+      "加强异常处理与日志，区分 `NotImplementedError` 和真正的空数据情况，避免错误归因。"
+    ],
+    "risk_level": "high",
+    "estimated_impact": "实时行情端点 `/product/live-data/realtime_quotes` 完全失效，影响依赖实时行情的所有下游功能（如实时监控、交易决策）。"
+  },
+  "fix_proposal": {
+    "fix_description": "在 AkShareProvider 中实现 get_realtime_quotes 方法，使用 akshare 的 stock_zh_a_spot_em 接口获取 A 股实时行情，并兼容港股等其他市场。同时优化 fallback 链中的异常处理，将 NotImplementedError 明确标记为未实现而非空数据，避免错误归因。并在 AktoolsProvider 中添加对端点可用性的检查日志。",
+    "code_changes": [
+      {
+        "file_path": "src/data_gateway/akshare_provider.py",
+        "change_type": "modify",
+        "diff": "--- a/src/data_gateway/akshare_provider.py\n+++ b/src/data_gateway/akshare_provider.py\n@@ -1,5 +1,7 @@\n import akshare as ak\n from .base import DataProvider, DataProviderError\n+from typing import Dict, List\n+import pandas as pd\n \n class AkShareProvider(DataProvider):\n     def __init__(self):\n@@ -10,13 +12,41 @@\n         return [\"realtime_quotes\"]\n \n     def get_realtime_quotes(self, symbols, **kwargs):\n-        raise NotImplementedError(\"AkShare实时行情尚未实现\")\n+        \"\"\"\n+        获取实时行情数据，支持A股（intraday）和港股。\n+        :param symbols: 股票代码列表，如 ['600000.SH', '000001.SZ']\n+        :return: dict {symbol: {字段名: 值}}\n+        \"\"\"\n+        result = {}\n+        try:\n+            # 获取A股实时行情（包含沪深所有股票）\n+            df_a = ak.stock_zh_a_spot_em()\n+            df_a['代码'] = df_a['代码'].astype(str)\n+            # 获取港股实时行情（若后续需要扩展）\n+            # df_hk = ak.stock_hk_spot_em() if any('HK' in s for s in symbols) else pd.DataFrame()\n+\n+            for symbol in symbols:\n+                # 解析交易所后缀\n+                code, market = symbol.split('.')\n+                if market in ['SH', 'SZ']:\n+                    row = df_a[df_a['代码'] == code]\n+                elif market == 'HK':\n+                    # 港股待实现，暂时跳过\n+                    continue\n+                else:\n+                    continue\n+                if not row.empty:\n+                    result[symbol] = {\n+                        'current_price': row['最新价'].values[0],\n+                        'open_price': row['今开'].values[0],\n+                        'high_price': row['最高'].values[0],\n+                        'low_price': row['最低'].values[0],\n+                        'volume': row['成交量'].values[0],\n+                        'amount': row['成交额'].values[0],\n+                        'change_percent': row['涨跌幅'].values[0],\n+                        'turnover_rate': row['换手率'].values[0],\n+                    }\n+            return result\n+        except Exception as e:\n+            raise DataProviderError(f\"AkShare provider failed to get realtime quotes: {e}\")"
+      },
+      {
+        "file_path": "src/data_gateway/base.py",
+        "change_type": "modify",
+        "diff": "--- a/src/data_gateway/base.py\n+++ b/src/data_gateway/base.py\n@@ -1,6 +1,7 @@\n import logging\n from typing import List, Dict, Any, Optional\n from .exceptions import AllProvidersFailed, DataProviderError\n+import traceback\n \n logger = logging.getLogger(__name__)\n \n@@ -30,8 +31,12 @@\n             try:\n                 data = provider.get_data(capability, symbols, **kwargs)\n                 if data:\n                     return data\n-            except (DataProviderError, NotImplementedError) as e:\n-                logger.warning(f\"Provider {provider_name} failed: {e}\")\n+            except NotImplementedError as e:\n+                logger.warning(f\"Provider {provider_name} capability {capability} not implemented, skipping. Detail: {e}\")\n+                continue  # 明确跳过未实现的方法，不作为空数据处理\n+            except DataProviderError as e:\n+                logger.warning(f\"Provider {provider_name} failed with data error: {e}\")\n+                # 继续尝试下一个\n+            except Exception as e:\n+                logger.error(f\"Provider {provider_name} unexpected error: {e}\\n{traceback.format_exc()}\")\n         raise AllProvidersFailed(capability, symbols, fallback_chain=errors)"
+      },
+      {
+        "file_path": "src/data_gateway/aktools_provider.py",
+        "change_type": "modify",
+        "diff": "--- a/src/data_gateway/aktools_provider.py\n+++ b/src/data_gateway/aktools_provider.py\n@@ -1,5 +1,6 @@\n import requests\n from .base import DataProvider, DataProviderError\n+import logging\n \n+logger = logging.getLogger(__name__)\n class AkToolsProvider(DataProvider):\n     def __init__(self, base_url=\"http://127.0.0.1:8080\"):\n         self.base_url = base_url\n@@ -20,6 +21,10 @@\n     def _get(self, endpoint, params=None):\n         url = f\"{self.base_url}/{endpoint}\"\n         try:\n             response = requests.get(url, params=params, timeout=5)\n             response.raise_for_status()\n-            return response.json()\n+            data = response.json()\n+            if not data:\n+                logger.warning(f\"Aktools API returned empty data for {endpoint}\")\n+            return data\n         except requests.exceptions.RequestException as e:\n+            logger.error(f\"Aktools API request failed for {endpoint}: {e}\")\n             raise DataProviderError(f\"Aktools request failed: {e}\")"
+      }
+    ],
+    "risk_level": "high",
+    "estimated_impact": "修复后，AkShareProvider 将提供实时行情数据，AktoolsProvider 增加日志便于排查，fallback 链提升健壮性。实时行情端点恢复可用，依赖该数据的所有下游功能（实时监控、交易信号生成等）恢复正常。但需注意 AkShare 接口 data 格式可能随版本变更，且港股支持仍需单独实现。",
+    "test_suggestions": [
+      "单元测试：Mock akshare 的 stock_zh_a_spot_em 返回数据，验证 get_realtime_quotes 能正确解析并返回预期字段。",
+      "单元测试：传入无效代码或空列表，验证返回空字典。",
+      "集成测试：连接可用数据源，测试 realtime_quotes 接口返回非空数据。",
+      "回归测试：确保其他 provider（如 eastmoney）不受影响。",
+      "异常测试：模拟 akshare API 异常，验证抛出 DataProviderError 并被 fallback 机制正确处理。",
+      "测试港股代码（如 '00700.HK'）时，当前实现会跳过，应确认日志记录并确保 fallback 不因空数据失败。"
+    ]
+  },
   "approval_status": "pending",
   "approval_comment": "",
   "fix_result": null,

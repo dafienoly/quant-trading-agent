@@ -1,12 +1,12 @@
 # Bug: dashboard error
 
 - **Bug ID**: BUG_20260610_IIYBFS
-- **状态**: proposed
+- **状态**: fix_failed
 - **严重程度**: medium
 - **组件**: dashboard
 - **创建时间**: 2026-06-10 19:54:23
-- **更新时间**: 2026-06-11 21:28:37
-- **出现次数**: 10
+- **更新时间**: 2026-06-12 15:01:45
+- **出现次数**: 17
 - **去重哈希**: a4f1829bc8a8a9a2
 
 ## 摘要
@@ -76,3 +76,51 @@ GET /product/quotes failed: HTTPConnectionPool(host='localhost', port=8000): Rea
   ]
 }
 ```
+
+## 修复结果
+
+```json
+{
+  "success": false,
+  "error": "工作区存在未提交变更，自动修复已拒绝执行",
+  "dirty_files": [
+    "docs/design/2026-06-11-wsl-product-runtime-ai-agent-architecture.md",
+    "docs/user_guides/2026-06-11-a-share-live-data-closed-loop-user-manual.md",
+    "feedback/bugs/open/BUG_20260610_IIYBFS.json",
+    "feedback/bugs/open/BUG_20260610_IIYBFS.md",
+    "feedback/bugs/open/BUG_20260610_P9HDJS.json",
+    "feedback/bugs/open/BUG_20260610_P9HDJS.md",
+    "feedback/bugs/open/BUG_20260610_Z55D6Z.json",
+    "feedback/bugs/open/BUG_20260610_Z55D6Z.md",
+    "feedback/bugs/open/BUG_20260611_5ZEMM2.json",
+    "feedback/bugs/open/BUG_20260611_5ZEMM2.md",
+    "feedback/bugs/open/BUG_20260611_8VXTL0.json",
+    "feedback/bugs/open/BUG_20260611_8VXTL0.md",
+    "feedback/bugs/open/BUG_20260611_8YVE01.json",
+    "feedback/bugs/open/BUG_20260611_8YVE01.md",
+    "feedback/bugs/open/BUG_20260611_9U1N80.json",
+    "feedback/bugs/open/BUG_20260611_9U1N80.md",
+    "feedback/bugs/open/BUG_20260611_CQTKVN.json",
+    "feedback/bugs/open/BUG_20260611_CQTKVN.md",
+    "feedback/bugs/open/BUG_20260611_EHY3UA.json",
+    "feedback/bugs/open/BUG_20260611_EHY3UA.md",
+    "feedback/bugs/open/BUG_20260611_U5D5K3.json",
+    "feedback/bugs/open/BUG_20260611_U5D5K3.md",
+    "feedback/bugs/open/BUG_20260611_W7M8ZP.json",
+    "feedback/bugs/open/BUG_20260611_W7M8ZP.md",
+    "feedback/bugs/triaged/BUG_20260610_9NW2MN.json",
+    "feedback/bugs/triaged/BUG_20260610_9NW2MN.md",
+    "feedback/index.json",
+    "scripts/restart.sh",
+    "scripts/start.sh",
+    "scripts/start_product.py",
+    "tests/test_product_process_manager.py",
+    "docs/dev_reports/2026-06-12-product-startup-services-dev-report.md"
+  ]
+}
+```
+
+## 审批信息
+
+- **审批状态**: approved
+- **审批备注**: 已通过控制台批准
