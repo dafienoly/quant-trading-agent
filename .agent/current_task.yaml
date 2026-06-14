@@ -1,0 +1,58 @@
+feature_id: smoke-test-full-team-pipeline-v4
+title: '[Feature] Smoke Test Full Team Pipeline V4'
+risk_level: unknown
+issue_number: 18
+issue_url: https://github.com/dafienoly/quant-trading-agent/issues/18
+epic_branch: epic/20260614-smoke-test-full-team-pipeline-v4
+current_stage: pm_pending
+created_at: '2026-06-14T10:29:24.947973+00:00'
+required_docs:
+  requirements: docs/requirements/20260614-smoke-test-full-team-pipeline-v4-requirements.md
+  architecture: docs/design/20260614-smoke-test-full-team-pipeline-v4-architecture.md
+  team_plan: docs/dev_plans/20260614-smoke-test-full-team-pipeline-v4-team-plan.md
+  phase_dev_report_pattern: docs/dev_reports/20260614-smoke-test-full-team-pipeline-v4-phase-<n>-dev-report.md
+  phase_test_report_pattern: docs/test_reports/20260614-smoke-test-full-team-pipeline-v4-phase-<n>-test-report.md
+  claude_lead_review: docs/review/20260614-smoke-test-full-team-pipeline-v4-claude-lead-review.md
+  codex_review: docs/review/20260614-smoke-test-full-team-pipeline-v4-codex-review-r1.md
+  acceptance: docs/acceptance/20260614-smoke-test-full-team-pipeline-v4-acceptance.md
+  user_guide: docs/user_guides/20260614-smoke-test-full-team-pipeline-v4-user-guide.md
+  postmortem: docs/postmortems/20260614-smoke-test-full-team-pipeline-v4-r3-failure.md
+team_pipeline:
+  mode: claude_first_review
+  default_team_id: claude-team-a
+  max_parallel_teams: 3
+  max_codex_review_attempts: 3
+  current_phase: 1
+  all_phases_tested: false
+  codex_review_attempts: 0
+agent_roles:
+  codex_a:
+  - pm
+  - acceptance
+  codex_b:
+  - architecture
+  - codex_review
+  claude_a:
+  - team_plan
+  - claude_lead_review
+  - team_performance
+  claude_b:
+  - phase_dev
+  claude_c:
+  - phase_test
+manual_approval_required_for:
+- restricted-module
+- live-trading
+- risk-policy-change
+- execution-policy-change
+- main-merge-when-auto-merge-gate-fails
+- codex-review-fails-three-times
+stage_status:
+  pm: pending
+  architecture: pending
+  team_plan: pending
+  phase_dev: pending
+  phase_test: pending
+  claude_lead_review: pending
+  codex_review: pending
+  acceptance: pending
