@@ -378,8 +378,10 @@ class BugFixWorkflow:
                 # 7. 保存修复报告
                 self._save_analysis_file(bug_id, "fix_report", fix_result)
 
-                # 8. 清理 worktree
-                self.branch_manager.cleanup_worktree(worktree, keep_on_failure=True)
+                # NOTE: 不在 verify 成功时自动清理 worktree。
+                # Worktree 保留到用户通过 Dashboard approve merge
+                # 或显式执行 cleanup 为止。这样用户可以审查 worktree
+                # 中的修复结果，再决定是否合并。
 
                 return {
                     "status": "verified",

@@ -516,7 +516,7 @@ def render_configuration() -> None:
         st.rerun()
 
 
-BUG_WORKFLOW_STATES = ["open", "analyzing", "proposed", "approved", "fixing", "verified", "fixed"]
+BUG_WORKFLOW_STATES = ["open", "analyzing", "proposed", "approved", "fixing", "verified", "merge_pending", "fixed"]
 
 
 def _render_status_steps(current_status: str) -> None:
@@ -738,6 +738,99 @@ def render_feedback() -> None:
                             st.rerun()
                         else:
                             st.error(t("reject_failed"))
+
+            elif bug_status in ("verified", "merge_pending"):
+                # --- Branch Metadata ---
+                fix_branch = bug.get("fix_branch", "")
+                fix_commit = bug.get("fix_commit", "")
+                base_branch = bug.get("base_branch", "")
+                base_sha = bug.get("base_sha", "")
+                merge_status = bug.get("merge_status", "pending_approval")
+                worktree_path = bug.get("fix_worktree_path", "")
+
+                if fix_branch or fix_commit:
+                    st.markdown(f"**{t('branch_metadata')}**")
+                    md_items = []
+                    if base_branch:
+                        md_items.append(f"- {t('base_branch')}: `{base_branch}`")
+                    if base_sha:
+                        md_items.append(f"- {t('base_sha')}: `{base_sha[:12]}`")
+                    if fix_branch:
+                        md_items.append(f"- {t('fix_branch')}: `{fix_branch}`")
+                    if fix_commit:
+                        md_items.append(f"- {t('fix_commit')}: `{fix_commit[:12]}`")
+                    if worktree_path:
+                        md_items.append(f"- {t('worktree_path')}: `{worktree_path}`")
+                    if merge_status:
+                        merge_label = {
+                            "pending_approval": t("merge_pending"),
+                            "merged": t("merged"),
+                            "merge_failed": t("merge_failed"),
+                        }.get(merge_status, merge_status)
+                        md_items.append(f"- {t('merge_status')}: {merge_label}")
+                    st.markdown("\n".join(md_items))
+
+                # --- Merge + Cleanup Buttons ---
+                merge_col, cleanup_col = st.columns(2)
+
+                # Use session_state to persist merge confirmation across reruns
+                confirm_key = f"merge_confirm_{bug_id}"
+                if confirm_key not in st.session_state:
+                    st.session_state[confirm_key] = False
+
+                with merge_col:
+                    merge_disabled = (merge_status == "merged")
+                    merge_btn_label = t("approve_merge") if not merge_disabled else t("merged")
+                    if merge_disabled:
+                        st.button(merge_btn_label, key=f"merge_{bug_id}", disabled=True)
+                    else:
+                        # Show merge init button when confirmation not active
+                        if not st.session_state[confirm_key]:
+                            if st.button(f"🔀 {merge_btn_label}", key=f"merge_{bug_id}", type="primary"):
+                                st.session_state[confirm_key] = True
+                                st.rerun()
+                        else:
+                            # Confirmation dialog — persists across reruns via session_state
+                            st.markdown(f"**{t('merge_confirmation_title')}**")
+                            st.warning(t("merge_warning"))
+                            if fix_branch:
+                                st.markdown(t("merge_confirmation_message").format(
+                                    fix_branch=fix_branch, base_branch=base_branch or "main"
+                                ))
+                            input_key = f"merge_input_{bug_id}"
+                            confirm_text = st.text_input(
+                                t("merge_confirmation_input_label"), key=input_key
+                            )
+                            confirm_btn_col, cancel_btn_col = st.columns(2)
+                            with confirm_btn_col:
+                                if st.button(f"✅ {t('confirm')}", key=f"merge_confirm_btn_{bug_id}", type="primary"):
+                                    if confirm_text.strip().lower() == "yes":
+                                        result = _post(
+                                            f"/product/feedback/{bug_id}/merge",
+                                            params={"force": True},
+                                        )
+                                        if result and result.get("status") == "fixed":
+                                            st.success(t("merge_success"))
+                                            st.session_state[confirm_key] = False
+                                            st.rerun()
+                                        else:
+                                            st.error(f"{t('merge_failed')}: {result}")
+                                    else:
+                                        st.warning(t("merge_confirmed"))
+                            with cancel_btn_col:
+                                if st.button(f"❌ {t('cancel')}", key=f"merge_cancel_{bug_id}"):
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
+
+                with cleanup_col:
+                    if st.button(f"🗑️ {t('cleanup_worktree')}", key=f"cleanup_{bug_id}"):
+                        result = _post(f"/product/feedback/{bug_id}/cleanup-worktree")
+                        if result and result.get("status") == "ok":
+                            st.success(t("cleanup_success"))
+                            st.rerun()
+                        else:
+                            st.error(f"{t('cleanup_failed')}: {result}")
+
             else:
                 col1, col2, col3 = st.columns(3)
                 if col1.button(t("mark_triaged"), key=f"triage_{bug_id}"):

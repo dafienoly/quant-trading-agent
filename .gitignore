@@ -1,63 +1,64 @@
+
+!data/reference/
+!data/reference/theme_pools/
+!feedback/README.md
+!feedback/index.json
+# Only track triaged bugs and the README/index under feedback/bugs
+!feedback/bugs/triaged/
+!feedback/bugs/triaged/*
+!feedback/bugs/README.md
+# analysis/, fixed/, open/ dirs are runtime artifacts — not tracked
+feedback/bugs/analysis/
+feedback/bugs/fixed/
+feedback/bugs/open/
+# But keep the .gitkeep files if they exist
+!feedback/bugs/analysis/.gitkeep
+!feedback/bugs/fixed/.gitkeep
+!feedback/bugs/open/.gitkeep
+# IDE
+# OS
+# Python
+# Trae IDE
+# Trae/Claude IDE
+# pip 离线包缓存
+# 数据目录（不提交行情数据，但跟踪参考数据）
+# 日志
+# 测试与覆盖率
 # 环境与密钥
+# 运行时反馈数据
+# 运行时状态
+*.egg
+*.egg-info/
+*.pyc
+*.pyo
+*.swo
+*.swp
+*~
+.DS_Store
+.claude/
+.coverage
 .env
 .env.local
 .env.production
-
-# Python
-*.pyc
-*.pyo
-__pycache__/
-*.egg-info/
-*.egg
-dist/
-build/
-.venv/
-venv/
-env/
-
-# 数据目录（不提交行情数据，但跟踪参考数据）
-data/*
-!data/reference/
-data/reference/*
-!data/reference/theme_pools/
-
-# pip 离线包缓存
+.idea/
+.mypy_cache/
 .pip_packages/
-
-# Trae/Claude IDE
-.claude/
-
-# 日志
-logs/*.log
-
-# 测试与覆盖率
 .pytest_cache/
 .ruff_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Trae IDE
 .trae/
-
-# 运行时状态
-runtime/
-
-# 运行时反馈数据
-feedback/
-!feedback/bugs/
-!feedback/index.json
-!feedback/README.md
+.venv/
+.vscode/
+Thumbs.db
+__pycache__/
 aktools_log.log*
+build/
+data/*
+data/reference/*
+dist/
+env/
+feedback/
+htmlcov/
+logs/*.log
 memory/
+runtime/
+venv/
