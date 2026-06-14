@@ -237,6 +237,8 @@ jobs:
             "codex_acceptance" {
               Remove-CurrentLabel "stage:pm-acceptance-pending"
               Add-NextLabel "stage:merge-ready"
+              gh workflow run agent-main-merge-gate.yml --ref $branch -f pr_number=$pr
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             }
           }
 
