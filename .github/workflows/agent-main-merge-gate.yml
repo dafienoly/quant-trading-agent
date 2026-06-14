@@ -8,12 +8,16 @@ on:
       feature_id:
         description: Feature ID to check. Defaults to .agent/current_task.yaml.
         required: false
+      pr_number:
+        description: Pull request number when dispatched by Agent Stage Runner
+        required: false
       force_manual_check_only:
         description: Do not merge, only emit gate result
         required: false
         default: "false"
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   issues: write
@@ -107,7 +111,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $pr = "${{ github.event.pull_request.number || '' }}"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number || '' }}"
           if ($pr) {
             gh pr edit $pr --add-label "stage:manual-approval-required"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -124,7 +128,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $pr = "${{ github.event.pull_request.number || '' }}"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number || '' }}"
           if (-not $pr) {
             Write-Host "Workflow dispatch without PR context: gate passed, but no PR to merge."
             exit 0
