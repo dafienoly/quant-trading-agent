@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "feature_id": "smoke-test-full-team-pipeline-v4",
+  "checked_stages": [
+    "pm",
+    "architecture",
+    "team_plan",
+    "phase_dev",
+    "phase_test"
+  ],
+  "missing": {},
+  "found": {
+    "pm": [
+      "docs\\requirements\\2026-06-14-smoke-test-full-team-pipeline-v4-requirements.md"
+    ],
+    "architecture": [
+      "docs\\design\\2026-06-14-smoke-test-full-team-pipeline-v4-architecture.md"
+    ],
+    "team_plan": [
+      "docs\\dev_plans\\2026-06-14-smoke-test-full-team-pipeline-v4-team-plan.md"
+    ],
+    "phase_dev": [
+      "docs\\dev_reports\\2026-06-14-smoke-test-full-team-pipeline-v4-phase-1-dev-report.md"
+    ],
+    "phase_test": [
+      "docs\\test_reports\\2026-06-14-smoke-test-full-team-pipeline-v4-phase-1-test-report.md"
+    ]
+  },
+  "reasons": [
+    "all_required_reports_found"
+  ]
+}
