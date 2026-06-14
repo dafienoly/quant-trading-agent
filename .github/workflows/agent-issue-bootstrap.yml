@@ -21,6 +21,7 @@ on:
         default: "false"
 
 permissions:
+  actions: write
   contents: write
   issues: write
   pull-requests: write
@@ -223,7 +224,11 @@ jobs:
 
           if ("${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}" -eq "true") {
             gh pr edit $pr --add-label "stage:team-plan-pending"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh workflow run agent-stage-runner.yml --ref $branch -f stage=claude_lead_plan -f pr_number=$pr
           } else {
             gh pr edit $pr --add-label "stage:team-dev-pending"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh workflow run agent-stage-runner.yml --ref $branch -f stage=claude_developer -f pr_number=$pr
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

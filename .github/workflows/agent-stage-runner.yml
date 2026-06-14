@@ -18,18 +18,22 @@ on:
           - codex_reviewer
           - codex_acceptance
           - postmortem
+      pr_number:
+        description: Pull request number for label advancement when dispatched by another workflow
+        required: false
       dry_run:
         description: Generate handoff only
         required: false
         default: "false"
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   issues: write
 
 concurrency:
-  group: agent-stage-pr-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.label.name || inputs.stage }}
+  group: agent-stage-pr-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.event.label.name || inputs.stage }}
   cancel-in-progress: true
 
 defaults:
@@ -176,13 +180,15 @@ jobs:
           }
 
       - name: Advance PR label for next automated stage
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
           STAGE: ${{ steps.stage.outputs.stage }}
         run: |
           $ErrorActionPreference = "Stop"
-          $pr = "${{ github.event.pull_request.number }}"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+          $branch = gh pr view $pr --json headRefName --jq ".headRefName"
+          if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
 
           function Remove-CurrentLabel([string]$label) {
             gh pr edit $pr --remove-label $label
@@ -194,14 +200,17 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+          $nextStage = ""
           switch ($env:STAGE) {
             "claude_lead_plan" {
               Remove-CurrentLabel "stage:team-plan-pending"
               Add-NextLabel "stage:team-dev-pending"
+              $nextStage = "claude_developer"
             }
             "claude_developer" {
               Remove-CurrentLabel "stage:team-dev-pending"
               Add-NextLabel "stage:team-test-pending"
+              $nextStage = "claude_tester"
             }
             "claude_tester" {
               Remove-CurrentLabel "stage:team-test-pending"
@@ -209,20 +218,29 @@ jobs:
               if ($LASTEXITCODE -ne 0) { $allDone = "false" }
               if ($allDone -eq "true" -or $allDone -eq "True") {
                 Add-NextLabel "stage:claude-lead-review-pending"
+                $nextStage = "claude_lead_review"
               } else {
                 Add-NextLabel "stage:team-dev-pending"
+                $nextStage = "claude_developer"
               }
             }
             "claude_lead_review" {
               Remove-CurrentLabel "stage:claude-lead-review-pending"
               Add-NextLabel "stage:codex-review-pending"
+              $nextStage = "codex_reviewer"
             }
             "codex_reviewer" {
               Remove-CurrentLabel "stage:codex-review-pending"
               Add-NextLabel "stage:pm-acceptance-pending"
+              $nextStage = "codex_acceptance"
             }
             "codex_acceptance" {
               Remove-CurrentLabel "stage:pm-acceptance-pending"
               Add-NextLabel "stage:merge-ready"
             }
+          }
+
+          if ($nextStage) {
+            gh workflow run agent-stage-runner.yml --ref $branch -f stage=$nextStage -f pr_number=$pr
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
