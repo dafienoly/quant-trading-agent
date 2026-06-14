@@ -94,6 +94,8 @@ jobs:
       - name: Run configured Agent command
         env:
           STAGE: ${{ steps.stage.outputs.stage }}
+          AGENT_REAL_CLAUDE_LEAD_PLAN: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN || '' }}
+          AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT || '' }}
           CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
           CLAUDE_DEVELOPER_AGENT_COMMAND: ${{ secrets.CLAUDE_DEVELOPER_AGENT_COMMAND || vars.CLAUDE_DEVELOPER_AGENT_COMMAND }}
           CLAUDE_TESTER_AGENT_COMMAND: ${{ secrets.CLAUDE_TESTER_AGENT_COMMAND || vars.CLAUDE_TESTER_AGENT_COMMAND }}

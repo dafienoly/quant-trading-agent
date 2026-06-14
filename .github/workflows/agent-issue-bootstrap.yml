@@ -64,12 +64,22 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title || inputs.title }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
           ISSUE_URL: ${{ github.event.issue.html_url || '' }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
           FEATURE_ID: ${{ inputs.feature_id }}
-          RISK_LEVEL: ${{ inputs.risk_level || 'unknown' }}
+          RISK_LEVEL: ${{ inputs.risk_level || '' }}
         run: |
           $ErrorActionPreference = "Stop"
 
-          $argsList = @("--title", $env:ISSUE_TITLE, "--risk-level", $env:RISK_LEVEL)
+          $riskLevel = $env:RISK_LEVEL
+          if (-not $riskLevel) {
+              $body = $env:ISSUE_BODY
+              if ($body -match '(?m)^## Risk Level[ \t]*\r?\n[ \t]*([^\r\n]+)') {
+                  $riskLevel = $matches[1].Trim()
+              }
+              if (-not $riskLevel) { $riskLevel = "unknown" }
+          }
+
+          $argsList = @("--title", $env:ISSUE_TITLE, "--risk-level", $riskLevel)
           if ($env:FEATURE_ID) {
             $argsList += @("--feature-id", $env:FEATURE_ID)
           }
@@ -153,6 +163,8 @@ jobs:
         env:
           STAGE: claude_lead_plan
           CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
+          AGENT_REAL_CLAUDE_LEAD_PLAN: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN || '' }}
+          AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT || '' }}
           DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
         run: |
           $ErrorActionPreference = "Stop"
