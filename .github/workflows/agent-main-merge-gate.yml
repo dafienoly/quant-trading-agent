@@ -118,7 +118,8 @@ jobs:
             gh pr comment $pr --body "Auto-main merge blocked by policy. See .agent/gates/auto_merge_gate.json."
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          exit 1
+          Write-Host "Manual approval required by auto-main policy; workflow completed after labeling the PR."
+          exit 0
 
       - name: Auto merge PR to main when allowed
         if: >-
