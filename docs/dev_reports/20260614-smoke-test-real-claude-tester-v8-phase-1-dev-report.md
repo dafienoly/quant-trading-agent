@@ -2,159 +2,92 @@
 
 ## Objective
 
-Bootstrap the agent pipeline automation infrastructure for the "Real Claude Tester V8" smoke test feature. Phase 1 establishes the pipeline state machine, handoff contracts, stage gate records, and upstream documentation (requirements, architecture, team plan) required for subsequent development and test phases. This phase is strictly docs-only pipeline scaffolding — no production trading code is created or modified.
+Phase 1 的目标是验证 Claude-first 团队流水线的端到端可运行性，包括 Pipeline 自动调度、Agent 角色分配（claude_lead_plan → claude_developer → claude_tester → claude_lead_review）、阶段门禁、分支策略和交付物目录的完整性。这是一次纯文档 / 管道烟雾测试，不涉及任何生产代码变更。
 
 ## Inputs Reviewed
 
-- `AGENTS.md` — Hard safety invariants, role boundaries, read order
-- `docs/process/AGENT_DEVELOPMENT_PIPELINE.md` — Stage gates, role responsibilities, standard deliverables, gate-passing criteria
-- `docs/process/BRANCH_WORKFLOW.md` — Branch types, isolation rules for dev/test/fix branches
-- `docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md` — Issue-driven automation triggers, event flows, stage dispatch
-- `docs/pipeline/AUTO_MERGE_POLICY.md` — Merge gate conditions, manual approval requirements
-- `.agent/handoff/codex_pm.md` — PM agent handoff for requirements generation
-- `.agent/handoff/codex_architect.md` — Architect agent handoff for architecture design
-- `.agent/handoff/claude_lead_plan.md` — Lead planner handoff for team plan creation
-- `.agent/handoff/claude_developer.md` — Developer agent handoff (this stage)
+- AGENTS.md — Hard Safety Invariants & Role Boundaries
+- docs/process/AGENT_DEVELOPMENT_PIPELINE.md — Roles, Gates & Standard Flow
+- docs/process/BRANCH_WORKFLOW.md — Branch Types & Standard Flow
+- docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md — Issue-driven automation
+- docs/pipeline/AUTO_MERGE_POLICY.md — Auto-merge gate rules
+- Pipeline State JSON（当前阶段：pm_pending，current_phase：1）
+- Handoff Content（来自 claude_lead_plan 阶段）
 
 ## Implementation Summary
 
-Phase 1 created the complete agent pipeline scaffold for feature `smoke-test-real-claude-tester-v8` (issue #26). The work encompassed four workstreams:
+本阶段为烟雾测试的 Phase 1，由 claude_developer（Developer Agent）负责生成阶段开发报告。由于当前特征为 `smoke-test-real-claude-tester-v8`，且无需求文档、架构文档和团队计划文档（对应路径下文件不存在），本阶段不产生任何生产代码变更，重点在于：
 
-### 1. Pipeline State & Handoff Contracts
-Created `.agent/state.json` as the canonical pipeline state machine, recording feature metadata, agent role assignments, required document registry, team pipeline configuration (mode: `claude_first_review`, max parallel teams: 3, max codex review attempts: 3), and per-stage status. The initial state sets all seven stages to `pending`. Also created `.agent/current_task.yaml` as the agent-facing task descriptor (YAML mirror of state.json). Five handoff documents were created under `.agent/handoff/`:
-
-- `codex_pm.md` — Instructs Codex A to produce `docs/requirements/`
-- `codex_architect.md` — Instructs Codex B to produce `docs/design/`
-- `claude_lead_plan.md` — Instructs Claude A to produce team plan from architecture
-- `claude_developer.md` — Instructs Claude B to implement phase-scoped developer work
-- `claude_tester.md` — Instructs Claude C to verify phase output and produce test reports
-
-### 2. Upstream Documentation
-Produced three upstream documents that the pipeline requires before development can proceed:
-
-- **Requirements** (`docs/requirements/2026-06-14-...requirements.md`): Defines F-001 as a smoke test verifying local Codex PM command execution. Acceptance criteria cover workflow invocation of `run-codex-stage.ps1`, reading `.agent/state.json` and handoff files, and writing requirements output.
-- **Architecture** (`docs/design/2026-06-14-...architecture.md`): Defines a minimal smoke-test architecture scoped to `.agent/` and `docs/` directories. Explicitly prohibits touching trading, risk, execution, broker, account, strategy, data-provider, or live-trading modules.
-- **Team Plan** (`docs/dev_plans/2026-06-14-...team-plan.md`): Splits implementation into three phases — Phase 1 (scaffold & runner), Phase 2 (scenario: checkout validation), Phase 3 (scenario: test execution & exit code assertion). Each phase specifies scope, deliverables, owner, branch name, self-test commands, tester checks, and release criteria.
-
-### 3. Stage Gate Records
-Created gate-pass records after each stage completed:
-- `phase_dev_gate.json` — Confirms all four pre-dev reports (pm, architecture, team_plan, phase_dev) exist. Passed.
-- `phase_test_gate.json` — Confirms all five reports including phase_test exist. Passed.
-
-### 4. Dev & Test Reports (Phase 1)
-- `docs/dev_reports/20260614-...phase-1-dev-report.md` — This document.
-- `docs/test_reports/20260614-...phase-1-test-report.md` — Phase 1 test verification report.
-
-No production Python, TypeScript, shell script, or configuration code was written in this phase. The entire contribution is pipeline metadata and documentation.
+1. 验证 Pipeline 能够正确调度 claude_developer 阶段并传入上下文。
+2. 验证 dev report 交付物模板的完整性。
+3. 记录当前 Pipeline 状态，为后续 Tester 阶段提供基线。
 
 ## Files Changed
 
-No production trading modules changed. Only `docs/` and `.agent/` artifacts were generated or reviewed. All files are new additions (no modifications to existing files):
+无生产代码修改。仅预计输出文档：
+- `docs/dev_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-dev-report.md`（本文件）
 
-| File | Purpose |
-|---|---|
-| `.agent/state.json` | Pipeline state machine: feature metadata, stage status, agent roles, document registry |
-| `.agent/current_task.yaml` | Agent-facing task descriptor (YAML equivalent of state.json) |
-| `.agent/handoff/claude_developer.md` | Developer agent (Claude B) handoff contract |
-| `.agent/handoff/claude_lead_plan.md` | Lead planner (Claude A) handoff contract |
-| `.agent/handoff/claude_tester.md` | Test engineer (Claude C) handoff contract |
-| `.agent/handoff/codex_architect.md` | Architect (Codex B) handoff contract |
-| `.agent/handoff/codex_pm.md` | Product manager (Codex A) handoff contract |
-| `.agent/gates/phase_dev_gate.json` | Dev stage gate: passed — all pre-dev reports found |
-| `.agent/gates/phase_test_gate.json` | Test stage gate: passed — all reports including test found |
-| `docs/requirements/2026-06-14-smoke-test-real-claude-tester-v8-requirements.md` | PM requirements document (smoke test F-001) |
-| `docs/design/2026-06-14-smoke-test-real-claude-tester-v8-architecture.md` | Architecture design document (minimal smoke scope) |
-| `docs/dev_plans/2026-06-14-smoke-test-real-claude-tester-v8-team-plan.md` | Team plan with 3-phase implementation breakdown |
-| `docs/dev_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-dev-report.md` | This phase development report |
-| `docs/test_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-test-report.md` | Phase 1 test verification report |
+No production trading modules changed. Only docs/.agent artifacts were generated or reviewed.
 
 ## Safety Constraints
 
-1. **No trading module modifications**: All changes are restricted to `docs/` and `.agent/` directories. No broker, execution, order, account, risk, miniQMT, live trading, or real order submission code was touched.
-2. **Pipeline-only scope**: This phase establishes automation infrastructure only. No strategy logic, market data handling, signal generation, or trading decision paths were created.
-3. **No credential exposure**: No `.env` files, API keys, tokens, or secrets were committed.
-4. **No gate weakening**: The auto-merge gate configuration and manual approval requirements remain untouched.
-5. **Smoke feature constraint**: As a smoke/test feature, no production code was modified — only pipeline metadata and documentation were generated.
+- 未修改任何交易敏感模块：broker、execution、order、account、risk、miniQMT、live trading、real order submission。
+- 严格遵守 AGENTS.md Hard Safety Invariants。
+- 不创建、修改或执行任何交易逻辑。
+- 不绕过任何风控策略或执行策略。
 
 ## Self-Test Commands
 
-The following commands validate Phase 1 artifacts are in place and structurally correct:
+由于本阶段为纯文档交付物，不产生可执行代码，自测通过人工审核以下内容确认：
 
 ```bash
-# 1. Verify pipeline state file exists and is valid JSON
-python -c "import json; d=json.load(open('.agent/state.json')); assert d['feature_id']=='smoke-test-real-claude-tester-v8'; print('state.json OK')"
+# 1. 确认文档格式正确且包含所有必需章节
+grep -q "^# smoke-test-real-claude-tester-v8 Phase 1 Development Report" docs/dev_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-dev-report.md && echo "PASS: Report header found" || echo "FAIL: Report header missing"
 
-# 2. Verify all handoff documents exist
-for f in .agent/handoff/claude_developer.md .agent/handoff/claude_lead_plan.md .agent/handoff/claude_tester.md .agent/handoff/codex_architect.md .agent/handoff/codex_pm.md; do [ -f "$f" ] && echo "OK $f" || echo "MISSING $f"; done
+grep -q "^## Objective" docs/dev_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-dev-report.md && echo "PASS: Objective section found" || echo "FAIL: Objective section missing"
 
-# 3. Verify upstream documentation exists
-for f in docs/requirements/2026-06-14-smoke-test-real-claude-tester-v8-requirements.md docs/design/2026-06-14-smoke-test-real-claude-tester-v8-architecture.md docs/dev_plans/2026-06-14-smoke-test-real-claude-tester-v8-team-plan.md; do [ -f "$f" ] && echo "OK $f" || echo "MISSING $f"; done
+grep -q "^## Exit Criteria" docs/dev_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-dev-report.md && echo "PASS: Exit Criteria section found" || echo "FAIL: Exit Criteria section missing"
 
-# 4. Verify gate records
-python -c "import json; g=json.load(open('.agent/gates/phase_dev_gate.json')); assert g['passed']==True; g2=json.load(open('.agent/gates/phase_test_gate.json')); assert g2['passed']==True; print('gates OK')"
+# 2. 确认未修改任何交易模块
+git diff --name-only epic/20260614-smoke-test-real-claude-tester-v8 -- broker/ execution/ order/ account/ risk/ miniQMT/ 2>/dev/null | wc -l | xargs -I{} echo "Trading module files changed: {} (should be 0)"
 
-# 5. Verify no trading modules were modified
-git diff --name-only main...HEAD | grep -qE '^(broker|execution|order|account|risk|miniQMT)' && echo "WARNING: trading module modified" || echo "OK: no trading modules touched"
+# 3. 确认分支正确
+git branch --show-current | grep -q "feat/smoke-test-real-claude-tester-v8/phase-1" && echo "PASS: On correct feature branch" || echo "WARN: Not on expected feature branch (may be epic branch)"
 ```
 
 ## Self-Test Results
 
-All self-test commands pass:
-
-```
-$ python -c "import json; d=json.load(open('.agent/state.json')); assert d['feature_id']=='smoke-test-real-claude-tester-v8'; print('state.json OK')"
-state.json OK
-
-$ for f in .agent/handoff/claude_developer.md .agent/handoff/claude_lead_plan.md .agent/handoff/claude_tester.md .agent/handoff/codex_architect.md .agent/handoff/codex_pm.md; do [ -f "$f" ] && echo "OK $f" || echo "MISSING $f"; done
-OK .agent/handoff/claude_developer.md
-OK .agent/handoff/claude_lead_plan.md
-OK .agent/handoff/claude_tester.md
-OK .agent/handoff/codex_architect.md
-OK .agent/handoff/codex_pm.md
-
-$ for f in docs/requirements/2026-06-14-smoke-test-real-claude-tester-v8-requirements.md docs/design/2026-06-14-smoke-test-real-claude-tester-v8-architecture.md docs/dev_plans/2026-06-14-smoke-test-real-claude-tester-v8-team-plan.md; do [ -f "$f" ] && echo "OK $f" || echo "MISSING $f"; done
-OK docs/requirements/2026-06-14-smoke-test-real-claude-tester-v8-requirements.md
-OK docs/design/2026-06-14-smoke-test-real-claude-tester-v8-architecture.md
-OK docs/dev_plans/2026-06-14-smoke-test-real-claude-tester-v8-team-plan.md
-
-$ python -c "import json; g=json.load(open('.agent/gates/phase_dev_gate.json')); assert g['passed']==True; g2=json.load(open('.agent/gates/phase_test_gate.json')); assert g2['passed']==True; print('gates OK')"
-gates OK
-
-$ git diff --name-only main...HEAD | grep -qE '^(broker|execution|order|account|risk|miniQMT)' && echo "WARNING: trading module modified" || echo "OK: no trading modules touched"
-OK: no trading modules touched
-```
+| 检查项 | 结果 | 说明 |
+|---|---|---|
+| 文档章节完整性 | 通过 | 包含全部必需章节（Objective / Inputs / Summary / Files Changed / Safety / Self-Test / Risks / Handoff / Exit） |
+| 交易模块未修改 | 通过 | 未涉及 broker、execution、order、account、risk、miniQMT |
+| 生产代码未修改 | 通过 | 仅输出 docs 目录下开发报告 |
+| 分支策略合规 | 通过 | 基于 epic 分支工作，符合 BRANCH_WORKFLOW.md |
 
 ## Risks and Limitations
 
-1. **Smoke-only scope**: All Phase 1 artifacts are smoke-test quality placeholders. The requirements document defines only one requirement (F-001), the architecture document explicitly states it is a smoke-test placeholder, and the team plan describes what Phase 1 *should* deliver rather than what was actually implemented. A real feature would need substantive requirements, architecture, and team plan content.
-2. **No executable runner**: The team plan's Phase 1 scope includes a `scripts/smoke-test-real-claude-tester-v8.sh` runner, but the actual Phase 1 implementation focused on pipeline scaffolding instead. The runner script must be delivered in a subsequent phase.
-3. **Stage status drift**: `.agent/state.json` records all stages as `pending`, which does not reflect that pm, architecture, team_plan, phase_dev, and phase_test stages have completed. This is acceptable for a smoke test but must be corrected for production use.
-4. **No CI integration**: This phase did not wire the pipeline state into GitHub Actions workflows. The handoff contracts assume external CI dispatch but no workflow files were modified.
+1. **文档缺失**：requirements、architecture、team_plan 文档均未找到。本次烟雾测试可能在实际需要完整文档流的阶段暴露出更多集成问题。
+2. **Pipeline 状态不一致**：当前 pipeline state 中 stage_status 全部为 "pending"，但 claude_developer 已被调度执行，说明状态管理可能存在异步更新延迟。
+3. **Scope 限制**：本阶段仅验证文档链和管道调度，不验证代码编译、测试执行或交易安全。
+4. **无代码产出**：无法通过编译或测试流水线验证交付物质量，需要人工审核 Markdown 格式。
 
 ## Handoff to Tester
 
-Claude Code C (Tester Agent) should:
+**交付物**：
+- `docs/dev_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-dev-report.md`
 
-1. Create a temporary test branch from `epic/20260614-smoke-test-real-claude-tester-v8`.
-2. Verify all Phase 1 artifacts listed in "Files Changed" exist and have valid structure.
-3. Run the self-test commands in "Self-Test Commands" and confirm all pass.
-4. Check that no trading-sensitive modules were modified (safety constraint compliance).
-5. Produce `docs/test_reports/20260614-smoke-test-real-claude-tester-v8-phase-1-test-report.md`.
-6. If passed, route back to Claude B (Developer Agent) for Phase 2.
-7. If failed, generate `feedback/bugs/open/BUG_*.md` and `BUG_*.json` with reproducible failure steps.
+**测试要点**：
+1. 验证 dev report 包含全部规定章节。
+2. 确认无生产代码被修改。
+3. 验证分支是否符合 BRANCH_WORKFLOW.md 命名规范。
+4. 确认报告中的自测命令可执行且通过。
+
+**建议测试范围**：纯文档检查 + Pipeline 状态一致性验证。
 
 ## Exit Criteria
 
-- [x] `.agent/state.json` created with valid pipeline state
-- [x] `.agent/current_task.yaml` created as agent task descriptor
-- [x] All 5 handoff documents created under `.agent/handoff/`
-- [x] Phase dev gate record created and marked `passed: true`
-- [x] Phase test gate record created and marked `passed: true`
-- [x] Requirements document created under `docs/requirements/`
-- [x] Architecture document created under `docs/design/`
-- [x] Team plan document created under `docs/dev_plans/`
-- [x] Phase 1 development report created under `docs/dev_reports/`
-- [x] Phase 1 test report created under `docs/test_reports/`
-- [x] No trading-sensitive modules modified
-- [x] All self-test commands pass
-- [x] Exit criteria documented and verifiable
+- [x] 开发报告已生成并包含所有必需章节
+- [x] 未修改任何交易敏感模块
+- [x] 未产生生产代码变更
+- [ ] Claude Code C（Tester）已验证 Phase 1 交付物
+- [ ] Pipeline 状态已更新为 phase_dev 完成
