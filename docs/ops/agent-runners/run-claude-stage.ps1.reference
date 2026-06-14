@@ -49,8 +49,10 @@ $realLeadPlan = $env:AGENT_REAL_CLAUDE_LEAD_PLAN
 $realLeadPlanStrict = $env:AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT
 $realDeveloper = $env:AGENT_REAL_CLAUDE_DEVELOPER
 $realDeveloperStrict = $env:AGENT_REAL_CLAUDE_DEVELOPER_STRICT
+$realTester = $env:AGENT_REAL_CLAUDE_TESTER
+$realTesterStrict = $env:AGENT_REAL_CLAUDE_TESTER_STRICT
 
-$command = "cd '$wslRepo' && AGENT_REAL_CLAUDE_LEAD_PLAN='$realLeadPlan' AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT='$realLeadPlanStrict' AGENT_REAL_CLAUDE_DEVELOPER='$realDeveloper' AGENT_REAL_CLAUDE_DEVELOPER_STRICT='$realDeveloperStrict' bash scripts/run_claude_stage.sh '$Stage'"
+$command = "cd '$wslRepo' && AGENT_REAL_CLAUDE_LEAD_PLAN='$realLeadPlan' AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT='$realLeadPlanStrict' AGENT_REAL_CLAUDE_DEVELOPER='$realDeveloper' AGENT_REAL_CLAUDE_DEVELOPER_STRICT='$realDeveloperStrict' AGENT_REAL_CLAUDE_TESTER='$realTester' AGENT_REAL_CLAUDE_TESTER_STRICT='$realTesterStrict' bash scripts/run_claude_stage.sh '$Stage'"
 wsl.exe -- bash -lc $command
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
