@@ -25,16 +25,23 @@ Before starting any non-trivial task, read in this order:
 
 1. `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`
 2. `docs/process/BRANCH_WORKFLOW.md`
-3. `docs/policy/SELF_TEST_CHECKLIST.md`
-4. `docs/process/TEST_ENGINEER_WORKFLOW.md` when acting as Test Engineer Agent
-5. `docs/design/AGENTS.md`
-6. `docs/policy/RISK_POLICY.md`
-7. `docs/policy/EXECUTION_POLICY.md`
-8. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-9. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-10. Current task development guide when applicable:
+3. `docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md` when using Issue-driven automation
+4. `docs/pipeline/TEAM_PIPELINE_V2.md` when using Claude-first team automation
+5. `docs/pipeline/LOCAL_AGENT_RUNTIME_SETUP.md` when configuring local Windows/WSL agent runners
+6. `docs/pipeline/AUTO_MERGE_POLICY.md` when a branch may be auto-merged
+7. `docs/pipeline/AGENT_HANDOFF_CONTRACT.md` when receiving an automated handoff
+8. `docs/policy/SELF_TEST_CHECKLIST.md`
+9. `docs/process/TEST_ENGINEER_WORKFLOW.md` when acting as Test Engineer Agent
+10. `docs/design/AGENTS.md`
+11. `docs/policy/RISK_POLICY.md`
+12. `docs/policy/EXECUTION_POLICY.md`
+13. Current task state when available: `.agent/current_task.yaml`
+14. Current task handoff when available: `.agent/handoff/<stage>.md`
+15. Current task requirement: `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
+16. Current task architecture: `docs/design/YYYY-MM-DD-<feature>-architecture.md`
+17. Current task development guide when applicable:
    - `docs/design/YYYY-MM-DD-<feature>-development-guide.md`
-11. Current handoff reports when applicable:
+18. Current handoff reports when applicable:
    - `docs/dev_reports/`
    - `docs/test_reports/`
    - `docs/review/`
@@ -141,8 +148,10 @@ This repository uses a document-driven pipeline:
 User request
   -> PM requirement document
   -> Architect design document
-  -> Developer implementation + self-test + dev report
-  -> Test Engineer verification + test report
+  -> Claude team phase plan when Team Pipeline V2 is active
+  -> Claude phase implementation + self-test + dev report
+  -> Claude phase verification + test report
+  -> Claude team lead review after all phases pass
   -> Architect code review
   -> PM acceptance
   -> log update + merge/release

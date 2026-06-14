@@ -1,0 +1,403 @@
+"""Issue-driven Agent pipeline helpers.
+
+This module is intentionally deterministic. It does not call an LLM or modify
+GitHub by itself; GitHub Actions and external Agent commands use it to create
+state, handoff prompts, and safety gates.
+
+Safety invariants:
+- Trading-sensitive paths are never eligible for unattended main merge.
+- Gate checks are file/report based and fail closed when state is missing.
+- Agent handoff state is written to repository files for auditability.
+"""
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable
+
+import yaml
+
+PIPELINE_ROOT = Path(".agent")
+STATE_PATH = PIPELINE_ROOT / "state.json"
+CURRENT_TASK_PATH = PIPELINE_ROOT / "current_task.yaml"
+AUTO_MERGE_GATE_PATH = PIPELINE_ROOT / "gates" / "auto_merge_gate.json"
+
+RESTRICTED_PATH_PREFIXES: tuple[str, ...] = (
+    "src/risk_engine/",
+    "src/execution_engine/",
+    "src/broker/",
+    "src/order/",
+    "src/account/",
+    "src/live_trading/",
+    "src/strategy_engine/live",
+    "src/strategy_engine/live_",
+    "integrations/miniqmt/",
+    "src/data_gateway/miniqmt",
+    "src/data_gateway/providers/miniqmt",
+    "docs/policy/RISK_POLICY.md",
+    "docs/policy/EXECUTION_POLICY.md",
+    "docs/policy/SELF_TEST_CHECKLIST.md",
+    ".env",
+    ".env.",
+)
+
+RESTRICTED_PATH_CONTAINS: tuple[str, ...] = (
+    "miniqmt",
+    "xtquant",
+    "broker",
+    "order_checker",
+    "execution_service",
+    "trade_recorder",
+    "risk_engine",
+    "account",
+    "credential",
+    "secret",
+)
+
+SAFE_AUTO_MAIN_PREFIXES: tuple[str, ...] = (
+    "docs/",
+    "tests/",
+    ".github/ISSUE_TEMPLATE/",
+    ".agent/",
+)
+
+REPORT_GLOBS_BY_STAGE: dict[str, list[str]] = {
+    "pm": ["docs/requirements/*-{feature_id}-requirements.md"],
+    "architecture": ["docs/design/*-{feature_id}-architecture.md"],
+    "team_plan": ["docs/dev_plans/*-{feature_id}*team-plan.md"],
+    "phase_dev": ["docs/dev_reports/*-{feature_id}*phase-*dev-report.md"],
+    "phase_test": ["docs/test_reports/*-{feature_id}*phase-*test-report.md"],
+    "claude_lead_review": ["docs/review/*-{feature_id}*claude-lead-review.md"],
+    "codex_review": ["docs/review/*-{feature_id}*codex-review*.md"],
+    "acceptance": ["docs/acceptance/*-{feature_id}*acceptance.md"],
+}
+
+STAGE_ORDER: tuple[str, ...] = (
+    "pm",
+    "architecture",
+    "team_plan",
+    "phase_dev",
+    "phase_test",
+    "claude_lead_review",
+    "codex_review",
+    "acceptance",
+)
+
+LEGACY_STAGE_ALIASES: dict[str, str] = {
+    "dev": "phase_dev",
+    "test": "phase_test",
+    "review": "codex_review",
+}
+
+TEAM_HANDOFF_STAGES: tuple[str, ...] = (
+    "codex_pm",
+    "codex_architect",
+    "claude_lead_plan",
+    "claude_developer",
+    "claude_tester",
+    "claude_lead_review",
+    "codex_reviewer",
+    "codex_acceptance",
+    "bugfix",
+    "postmortem",
+)
+
+
+@dataclass(frozen=True)
+class PipelineFeature:
+    """Metadata for one issue-driven feature pipeline."""
+
+    feature_id: str
+    title: str
+    risk_level: str
+    issue_number: int | None = None
+    issue_url: str | None = None
+    epic_branch: str | None = None
+    current_stage: str = "pm_pending"
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def with_default_branch(self) -> "PipelineFeature":
+        branch = self.epic_branch or f"epic/{today_slug()}-{self.feature_id}"
+        return PipelineFeature(
+            feature_id=self.feature_id,
+            title=self.title,
+            risk_level=self.risk_level,
+            issue_number=self.issue_number,
+            issue_url=self.issue_url,
+            epic_branch=branch,
+            current_stage=self.current_stage,
+            created_at=self.created_at,
+        )
+
+
+@dataclass(frozen=True)
+class AutoMergeDecision:
+    """Result of risk classification for unattended main merge."""
+
+    eligible_for_auto_main_merge: bool
+    requires_manual_approval: bool
+    risk_level: str
+    changed_files: list[str]
+    restricted_files: list[str]
+    unsafe_files: list[str]
+    safe_files: list[str]
+    reasons: list[str]
+
+
+@dataclass(frozen=True)
+class GateCheckResult:
+    """Report presence gate result."""
+
+    passed: bool
+    feature_id: str
+    checked_stages: list[str]
+    missing: dict[str, list[str]]
+    found: dict[str, list[str]]
+    reasons: list[str]
+
+
+def today_slug() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+
+def normalize_path(path: str) -> str:
+    normalized = path.strip().replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
+def slugify_feature(text: str, *, max_length: int = 48) -> str:
+    """Create a branch-safe feature slug from an issue title or user text."""
+    text = text.strip().lower()
+    text = re.sub(r"^\[[^\]]+\]\s*", "", text)
+    text = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", text)
+    text = text.strip("-") or "agent-feature"
+    # Keep Chinese titles usable but cap length to avoid awkward branch names.
+    return text[:max_length].strip("-") or "agent-feature"
+
+
+def is_restricted_path(path: str) -> bool:
+    p = normalize_path(path)
+    lower = p.lower()
+    if any(lower.startswith(prefix.lower()) for prefix in RESTRICTED_PATH_PREFIXES):
+        return True
+    return any(token in lower for token in RESTRICTED_PATH_CONTAINS)
+
+
+def is_safe_auto_path(path: str) -> bool:
+    p = normalize_path(path)
+    lower = p.lower()
+    return any(lower.startswith(prefix.lower()) for prefix in SAFE_AUTO_MAIN_PREFIXES)
+
+
+def classify_changed_files(changed_files: Iterable[str]) -> AutoMergeDecision:
+    """Classify changed files for Level 3 auto main merge.
+
+    The function is deliberately conservative: every changed file must be in a
+    safe prefix and no changed file may match a restricted trading path.
+    """
+    files = [normalize_path(f) for f in changed_files if normalize_path(f)]
+    restricted = [f for f in files if is_restricted_path(f)]
+    safe = [f for f in files if is_safe_auto_path(f)]
+    unsafe = [f for f in files if f not in safe and f not in restricted]
+
+    reasons: list[str] = []
+    if not files:
+        reasons.append("no_changed_files_detected")
+    if restricted:
+        reasons.append("restricted_trading_or_secret_paths_touched")
+    if unsafe:
+        reasons.append("changed_files_outside_auto_merge_allowlist")
+
+    eligible = bool(files) and not restricted and not unsafe
+    requires_manual = not eligible
+    risk_level = "safe-auto-main" if eligible else "manual-main-approval"
+
+    return AutoMergeDecision(
+        eligible_for_auto_main_merge=eligible,
+        requires_manual_approval=requires_manual,
+        risk_level=risk_level,
+        changed_files=files,
+        restricted_files=restricted,
+        unsafe_files=unsafe,
+        safe_files=safe,
+        reasons=reasons or ["all_changed_files_match_auto_merge_allowlist"],
+    )
+
+
+def build_feature_state(
+    *,
+    title: str,
+    feature_id: str | None = None,
+    risk_level: str = "unknown",
+    issue_number: int | None = None,
+    issue_url: str | None = None,
+) -> dict[str, Any]:
+    feature = PipelineFeature(
+        feature_id=feature_id or slugify_feature(title),
+        title=title,
+        risk_level=risk_level,
+        issue_number=issue_number,
+        issue_url=issue_url,
+    ).with_default_branch()
+    state = asdict(feature)
+    state["required_docs"] = {
+        "requirements": f"docs/requirements/{today_slug()}-{feature.feature_id}-requirements.md",
+        "architecture": f"docs/design/{today_slug()}-{feature.feature_id}-architecture.md",
+        "team_plan": f"docs/dev_plans/{today_slug()}-{feature.feature_id}-team-plan.md",
+        "phase_dev_report_pattern": (
+            f"docs/dev_reports/{today_slug()}-{feature.feature_id}-phase-<n>-dev-report.md"
+        ),
+        "phase_test_report_pattern": (
+            f"docs/test_reports/{today_slug()}-{feature.feature_id}-phase-<n>-test-report.md"
+        ),
+        "claude_lead_review": f"docs/review/{today_slug()}-{feature.feature_id}-claude-lead-review.md",
+        "codex_review": f"docs/review/{today_slug()}-{feature.feature_id}-codex-review-r1.md",
+        "acceptance": f"docs/acceptance/{today_slug()}-{feature.feature_id}-acceptance.md",
+        "user_guide": f"docs/user_guides/{today_slug()}-{feature.feature_id}-user-guide.md",
+        "postmortem": f"docs/postmortems/{today_slug()}-{feature.feature_id}-r3-failure.md",
+    }
+    state["team_pipeline"] = {
+        "mode": "claude_first_review",
+        "default_team_id": "claude-team-a",
+        "max_parallel_teams": 3,
+        "max_codex_review_attempts": 3,
+        "current_phase": 1,
+        "all_phases_tested": False,
+        "codex_review_attempts": 0,
+    }
+    state["agent_roles"] = {
+        "codex_a": ["pm", "acceptance"],
+        "codex_b": ["architecture", "codex_review"],
+        "claude_a": ["team_plan", "claude_lead_review", "team_performance"],
+        "claude_b": ["phase_dev"],
+        "claude_c": ["phase_test"],
+    }
+    state["manual_approval_required_for"] = [
+        "restricted-module",
+        "live-trading",
+        "risk-policy-change",
+        "execution-policy-change",
+        "main-merge-when-auto-merge-gate-fails",
+        "codex-review-fails-three-times",
+    ]
+    state["stage_status"] = {stage: "pending" for stage in STAGE_ORDER}
+    state["stage_status"]["pm"] = "pending"
+    return state
+
+
+def write_feature_state(root: Path, state: dict[str, Any]) -> None:
+    agent_dir = root / PIPELINE_ROOT
+    (agent_dir / "gates").mkdir(parents=True, exist_ok=True)
+    (agent_dir / "handoff").mkdir(parents=True, exist_ok=True)
+    write_json(root / STATE_PATH, state)
+    (root / CURRENT_TASK_PATH).write_text(yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def read_state(root: Path) -> dict[str, Any]:
+    state_file = root / STATE_PATH
+    if state_file.exists():
+        return json.loads(state_file.read_text(encoding="utf-8"))
+    task_file = root / CURRENT_TASK_PATH
+    if task_file.exists():
+        return yaml.safe_load(task_file.read_text(encoding="utf-8")) or {}
+    return {}
+
+
+def check_required_reports(
+    root: Path,
+    *,
+    feature_id: str,
+    through_stage: str = "acceptance",
+) -> GateCheckResult:
+    through_stage = LEGACY_STAGE_ALIASES.get(through_stage, through_stage)
+    if through_stage not in STAGE_ORDER:
+        raise ValueError(f"unknown stage: {through_stage}")
+    target_index = STAGE_ORDER.index(through_stage)
+    stages = list(STAGE_ORDER[: target_index + 1])
+    missing: dict[str, list[str]] = {}
+    found: dict[str, list[str]] = {}
+
+    for stage in stages:
+        patterns = REPORT_GLOBS_BY_STAGE[stage]
+        stage_found: list[str] = []
+        for pattern in patterns:
+            resolved_pattern = pattern.format(feature_id=feature_id)
+            matches = sorted(str(path.relative_to(root)) for path in root.glob(resolved_pattern))
+            stage_found.extend(matches)
+        if stage_found:
+            found[stage] = stage_found
+        else:
+            missing[stage] = [pattern.format(feature_id=feature_id) for pattern in patterns]
+
+    passed = not missing
+    reasons = ["all_required_reports_found"] if passed else ["missing_required_stage_reports"]
+    return GateCheckResult(
+        passed=passed,
+        feature_id=feature_id,
+        checked_stages=stages,
+        missing=missing,
+        found=found,
+        reasons=reasons,
+    )
+
+
+def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
+    legacy_stage_map = {
+        "pm_architect": "codex_pm",
+        "developer": "claude_developer",
+        "tester": "claude_tester",
+        "reviewer": "codex_reviewer",
+        "acceptance": "codex_acceptance",
+    }
+    stage = legacy_stage_map.get(stage, stage)
+    feature_id = state.get("feature_id", "unknown-feature")
+    title = state.get("title", feature_id)
+    docs = state.get("required_docs", {})
+    branch = state.get("epic_branch", "epic/<date-feature>")
+    team = state.get("team_pipeline", {})
+    max_attempts = team.get("max_codex_review_attempts", 3)
+
+    common = f"""# Agent Handoff: {stage}\n\nFeature: {feature_id}\nTitle: {title}\nEpic branch: {branch}\nRisk level: {state.get('risk_level', 'unknown')}\n\nRequired read order:\n1. AGENTS.md\n2. docs/process/AGENT_DEVELOPMENT_PIPELINE.md\n3. docs/process/BRANCH_WORKFLOW.md\n4. docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md\n5. docs/pipeline/AUTO_MERGE_POLICY.md\n"""
+
+    if stage == "codex_pm":
+        return common + f"""\nTask:\n- Act as Codex A, the PM Agent.\n- Produce the PM requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Include goals, non-goals, feature list, acceptance criteria, safety constraints, and user-facing success criteria.\n- Do not write architecture or product code in this stage.\n"""
+    if stage == "codex_architect":
+        return common + f"""\nTask:\n- Read the requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Produce the architecture design at `{docs.get('architecture', '<architecture-doc>')}`.\n- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for Claude Team A/B/C.\n- Do not write product code in this stage.\n"""
+    if stage == "claude_lead_plan":
+        return common + f"""\nTask:\n- Act as Claude Code A, the small-team lead.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to Claude Code B for the next phase until all phases are complete.\n"""
+    if stage == "claude_developer":
+        return common + f"""\nTask:\n- Act as Claude Code B, the phase developer.\n- Implement only the current phase from `{docs.get('team_plan', '<team-plan>')}`.\n- Start from `{branch}` and create `feat/{feature_id}/phase-<n>-<module>`.\n- Write focused tests first where practical.\n- Produce `{docs.get('phase_dev_report_pattern', '<phase-dev-report>')}` with exact self-test commands.\n- After Claude Code C verifies the phase, continue with the next planned phase until all phases are tested.\n- Do not touch restricted trading modules unless the architecture document explicitly permits it.\n"""
+    if stage == "claude_tester":
+        return common + f"""\nTask:\n- Act as Claude Code C, the phase tester.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, and diff.\n- Produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}`.\n- If the phase passes, route back to Claude Code B for the next phase unless all phases are complete.\n- Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
+    if stage == "claude_lead_review":
+        return common + f"""\nTask:\n- Act as Claude Code A, the small-team lead reviewer.\n- Review all phase development reports and test reports.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<claude-lead-review>')}`.\n- If any phase is incomplete, route back to Claude Code B/C instead of escalating to Codex B.\n"""
+    if stage == "codex_reviewer":
+        return common + f"""\nTask:\n- Act as Codex B, the final Architect Reviewer.\n- Review code only after `{docs.get('claude_lead_review', '<claude-lead-review>')}` confirms all phases passed.\n- Produce `{docs.get('codex_review', '<codex-review>')}`.\n- Conclusion must be APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED.\n- If review fails, return structured feedback to Claude Code A. After {max_attempts} failed Codex reviews, trigger the team incompetence alert and postmortem gate.\n"""
+    if stage == "codex_acceptance":
+        return common + f"""\nTask:\n- Perform PM acceptance from the user perspective.\n- Produce `{docs.get('acceptance', '<acceptance-report>')}`.\n- Conclusion must be ACCEPTED, ACCEPTED_WITH_FOLLOWUPS, or REJECTED.\n"""
+    if stage == "bugfix":
+        return common + """\nTask:\n- Read the test/review/acceptance failure report and feedback bugs.\n- Work in an isolated `bugfix/<bug-id>-<timestamp>` branch/worktree.\n- Add regression tests before fixing.\n- Do not merge to main without the merge gate.\n"""
+    if stage == "postmortem":
+        return common + f"""\nTask:\n- Codex B has rejected this feature `{max_attempts}` times.\n- Stop normal development and produce `{docs.get('postmortem', '<postmortem>')}`.\n- Include root causes, missed gates, responsible stage, corrective actions, and workflow improvement proposals.\n- The user must approve resuming the pipeline.\n"""
+    raise ValueError(f"unknown handoff stage: {stage}")
+
+
+def write_handoff(root: Path, stage: str, state: dict[str, Any] | None = None) -> Path:
+    payload = state if state is not None else read_state(root)
+    if not payload:
+        raise RuntimeError("pipeline state is missing; run init-feature first")
+    text = render_handoff_prompt(stage, payload)
+    path = root / PIPELINE_ROOT / "handoff" / f"{stage}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
