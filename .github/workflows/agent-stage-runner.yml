@@ -150,7 +150,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
-          foreach ($path in @(".agent", "docs", "feedback", "tests", "src")) {
+          foreach ($path in @(".agent", "docs", "tests", "src")) {
             if (Test-Path $path) {
               git add $path
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
