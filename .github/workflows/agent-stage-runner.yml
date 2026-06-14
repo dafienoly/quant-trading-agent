@@ -1,0 +1,188 @@
+name: Agent Stage Runner
+
+on:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to run
+        required: true
+        type: choice
+        options:
+          - claude_lead_plan
+          - claude_developer
+          - claude_tester
+          - claude_lead_review
+          - bugfix
+          - codex_reviewer
+          - codex_acceptance
+          - postmortem
+      dry_run:
+        description: Generate handoff only
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run-stage:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(fromJson('["stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install lightweight pipeline dependencies
+        run: python -m pip install --upgrade pyyaml
+
+      - name: Determine stage
+        id: stage
+        run: |
+          set -euo pipefail
+          stage="${{ inputs.stage }}"
+          label="${{ github.event.label.name || '' }}"
+          if [[ -z "$stage" ]]; then
+            case "$label" in
+              stage:team-plan-pending) stage="claude_lead_plan" ;;
+              stage:team-dev-pending) stage="claude_developer" ;;
+              stage:team-test-pending) stage="claude_tester" ;;
+              stage:claude-lead-review-pending) stage="claude_lead_review" ;;
+              stage:fix-pending) stage="bugfix" ;;
+              stage:codex-review-pending) stage="codex_reviewer" ;;
+              stage:pm-acceptance-pending) stage="codex_acceptance" ;;
+              stage:postmortem-pending) stage="postmortem" ;;
+              *) echo "::error::Cannot infer stage from label '$label'"; exit 2 ;;
+            esac
+          fi
+          python scripts/agent_pipeline.py write-handoff --stage "$stage"
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+      - name: Run configured Agent command
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+          CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
+          CLAUDE_DEVELOPER_AGENT_COMMAND: ${{ secrets.CLAUDE_DEVELOPER_AGENT_COMMAND || vars.CLAUDE_DEVELOPER_AGENT_COMMAND }}
+          CLAUDE_TESTER_AGENT_COMMAND: ${{ secrets.CLAUDE_TESTER_AGENT_COMMAND || vars.CLAUDE_TESTER_AGENT_COMMAND }}
+          BUGFIX_AGENT_COMMAND: ${{ secrets.BUGFIX_AGENT_COMMAND || vars.BUGFIX_AGENT_COMMAND }}
+          CODEX_B_REVIEW_AGENT_COMMAND: ${{ secrets.CODEX_B_REVIEW_AGENT_COMMAND || vars.CODEX_B_REVIEW_AGENT_COMMAND }}
+          CODEX_A_ACCEPTANCE_AGENT_COMMAND: ${{ secrets.CODEX_A_ACCEPTANCE_AGENT_COMMAND || vars.CODEX_A_ACCEPTANCE_AGENT_COMMAND }}
+          DEVELOPER_AGENT_COMMAND: ${{ secrets.DEVELOPER_AGENT_COMMAND || vars.DEVELOPER_AGENT_COMMAND }}
+          TEST_AGENT_COMMAND: ${{ secrets.TEST_AGENT_COMMAND || vars.TEST_AGENT_COMMAND }}
+          REVIEW_AGENT_COMMAND: ${{ secrets.REVIEW_AGENT_COMMAND || vars.REVIEW_AGENT_COMMAND }}
+          ACCEPTANCE_AGENT_COMMAND: ${{ secrets.ACCEPTANCE_AGENT_COMMAND || vars.ACCEPTANCE_AGENT_COMMAND }}
+          DRY_RUN: ${{ inputs.dry_run || contains(github.event.pull_request.labels.*.name, 'agent:dry-run') }}
+        run: |
+          set -euo pipefail
+          if [[ "${DRY_RUN}" == "true" || "${DRY_RUN}" == "1" ]]; then
+            echo "Dry run: generated .agent/handoff/${STAGE}.md"
+            exit 0
+          fi
+          case "$STAGE" in
+            claude_lead_plan) cmd="${CLAUDE_LEAD_AGENT_COMMAND:-}" ;;
+            claude_developer) cmd="${CLAUDE_DEVELOPER_AGENT_COMMAND:-${DEVELOPER_AGENT_COMMAND:-}}" ;;
+            claude_tester) cmd="${CLAUDE_TESTER_AGENT_COMMAND:-${TEST_AGENT_COMMAND:-}}" ;;
+            claude_lead_review) cmd="${CLAUDE_LEAD_AGENT_COMMAND:-}" ;;
+            bugfix) cmd="${BUGFIX_AGENT_COMMAND:-}" ;;
+            codex_reviewer) cmd="${CODEX_B_REVIEW_AGENT_COMMAND:-${REVIEW_AGENT_COMMAND:-}}" ;;
+            codex_acceptance) cmd="${CODEX_A_ACCEPTANCE_AGENT_COMMAND:-${ACCEPTANCE_AGENT_COMMAND:-}}" ;;
+            postmortem) cmd="${CLAUDE_LEAD_AGENT_COMMAND:-}" ;;
+            *) echo "::error::Unknown stage $STAGE"; exit 2 ;;
+          esac
+          if [[ -z "$cmd" ]]; then
+            echo "::error::Agent command for stage '$STAGE' is not configured."
+            exit 2
+          fi
+          bash -lc "$cmd"
+
+      - name: Run stage gate
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+        run: |
+          set -euo pipefail
+          case "$STAGE" in
+            claude_lead_plan) gate="team_plan" ;;
+            claude_developer) gate="phase_dev" ;;
+            claude_tester) gate="phase_test" ;;
+            claude_lead_review) gate="claude_lead_review" ;;
+            codex_reviewer) gate="codex_review" ;;
+            codex_acceptance) gate="acceptance" ;;
+            bugfix) gate="phase_test" ;;
+            postmortem) echo "Postmortem stage has no standard report gate."; exit 0 ;;
+            *) gate="team_plan" ;;
+          esac
+          python scripts/agent_pipeline.py check-gates --through-stage "$gate"
+
+      - name: Commit stage artifacts
+        run: |
+          set -euo pipefail
+          git config user.name "agent-pipeline-bot"
+          git config user.email "agent-pipeline-bot@users.noreply.github.com"
+          git add .agent docs feedback tests src || true
+          if git diff --cached --quiet; then
+            echo "No stage artifacts to commit."
+          else
+            git commit -m "chore(agent): run ${{ steps.stage.outputs.stage }} stage"
+            git push
+          fi
+
+      - name: Advance PR label for next automated stage
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGE: ${{ steps.stage.outputs.stage }}
+        run: |
+          set -euo pipefail
+          pr="${{ github.event.pull_request.number }}"
+          remove_current() {
+            gh pr edit "$pr" --remove-label "$1" || true
+          }
+          add_next() {
+            gh pr edit "$pr" --add-label "$1"
+          }
+          case "$STAGE" in
+            claude_lead_plan)
+              remove_current "stage:team-plan-pending"
+              add_next "stage:team-dev-pending"
+              ;;
+            claude_developer)
+              remove_current "stage:team-dev-pending"
+              add_next "stage:team-test-pending"
+              ;;
+            claude_tester)
+              remove_current "stage:team-test-pending"
+              all_done="$(python scripts/agent_pipeline.py print-state --key team_pipeline.all_phases_tested || echo false)"
+              if [[ "$all_done" == "true" || "$all_done" == "True" ]]; then
+                add_next "stage:claude-lead-review-pending"
+              else
+                add_next "stage:team-dev-pending"
+              fi
+              ;;
+            claude_lead_review)
+              remove_current "stage:claude-lead-review-pending"
+              add_next "stage:codex-review-pending"
+              ;;
+            codex_reviewer)
+              remove_current "stage:codex-review-pending"
+              add_next "stage:pm-acceptance-pending"
+              ;;
+            codex_acceptance)
+              remove_current "stage:pm-acceptance-pending"
+              add_next "stage:merge-ready"
+              ;;
+          esac

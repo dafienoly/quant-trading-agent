@@ -1,0 +1,50 @@
+name: Agent Feature Request
+description: Start the Issue-driven Agent development pipeline.
+title: "[Feature] "
+labels:
+  - agent:pipeline
+  - stage:pm-pending
+body:
+  - type: textarea
+    id: user_goal
+    attributes:
+      label: User Goal
+      description: Describe the feature, workflow, or bugfix you want the Agent pipeline to deliver.
+      placeholder: "Example: 接入腾讯实时行情 Provider，并用实时快照聚合当天 1 分钟 K。"
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and Non-Goals
+      description: Safety, scope, data-source, trading, or deployment constraints.
+      placeholder: "Example: 不允许真实自动下单；东财只做 fallback；必须保留人工确认。"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk_level
+    attributes:
+      label: Risk Level
+      options:
+        - docs-only
+        - test-only
+        - data-provider
+        - dashboard
+        - ordinary-api
+        - trading-sensitive
+        - live-trading
+    validations:
+      required: true
+  - type: checkboxes
+    id: automation_mode
+    attributes:
+      label: Automation Mode
+      options:
+        - label: Run Codex A PM -> Codex B Architect -> Claude Team -> Codex B Review -> Codex A Acceptance automatically when agent commands are configured.
+          required: true
+        - label: Route every passed Claude C phase back to Claude B until all planned phases are tested, then run Claude A lead review.
+          required: true
+        - label: Allow automatic main merge only when the deterministic auto-merge gate classifies the change as safe.
+          required: true
+        - label: Require manual approval for trading-sensitive modules even if full automation is requested.
+          required: true
