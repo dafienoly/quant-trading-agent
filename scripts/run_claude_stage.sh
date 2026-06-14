@@ -546,8 +546,12 @@ print(s.get("required_docs", {}).get("phase_dev_report_pattern", ""))
         head -c 1200 "$handoff" || true
         printf '\n```\n'
       } > "$out_path"
+      echo "Generated $out_path"
+    fi
 
-      python3 - <<'PY'
+    # === Deterministic state update: always mark all_phases_tested=true ===
+    # This must run for both real and mock mode to prevent dev/test infinite loop.
+    python3 - <<'PY'
 import json
 from pathlib import Path
 
@@ -559,7 +563,7 @@ team["all_phases_tested"] = True
 path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
-      python3 - <<'PY'
+    python3 - <<'PY'
 from pathlib import Path
 import yaml
 
@@ -571,9 +575,7 @@ if state_path.exists() and task_path.exists():
     task_path.write_text(yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8")
 PY
 
-      echo "Generated $out_path"
-      echo "Updated .agent/state.json team_pipeline.all_phases_tested=true"
-    fi
+    echo "Updated .agent/state.json team_pipeline.all_phases_tested=true"
     ;;
   claude_lead_review)
     out_dir="docs/review"

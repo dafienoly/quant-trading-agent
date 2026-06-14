@@ -226,6 +226,18 @@ jobs:
                 Add-NextLabel "stage:claude-lead-review-pending"
                 $nextStage = "claude_lead_review"
               } else {
+                # Anti-infinite-loop guard: if gate passed but all_phases_tested is
+                # still false, something went wrong with the state update. Do NOT
+                # dispatch developer again — that would cause dev/test loop.
+                $gateFile = ".agent/gates/phase_test_gate.json"
+                if (Test-Path $gateFile) {
+                  $gate = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
+                  if ($gate.passed -eq $true) {
+                    Write-Host "ERROR: phase_test gate passed but team_pipeline.all_phases_tested is false. State update bug — not dispatching to prevent infinite loop."
+                    Add-NextLabel "stage:manual-approval-required"
+                    exit 2
+                  }
+                }
                 Add-NextLabel "stage:team-dev-pending"
                 $nextStage = "claude_developer"
               }
