@@ -7,7 +7,7 @@ Agent pipeline.
 
 | Label | Meaning |
 |---|---|
-| `agent:pipeline` | Mark the issue as eligible for the Issue-driven pipeline. Bootstrap starts only when this is paired with `stage:pm-pending`. |
+| `agent:pipeline` | Mark the issue as eligible for the Issue-driven pipeline. Bootstrap starts when a new or reopened issue also has `stage:pm-pending`. |
 | `agent:bootstrapped` | Bootstrap has already created the epic branch and PR; prevents repeated bootstrap runs. |
 | `agent:dry-run` | Generate state and handoff prompts only; do not require external agent commands |
 | `agent:auto-main` | Request automatic main merge when the merge gate allows it |
@@ -66,9 +66,10 @@ Agent pipeline.
    override `agent:auto-main`.
 3. Stage labels should be updated by workflows, not by individual agents, unless
    the workflow is unavailable.
-4. Bootstrap must be triggered by `stage:pm-pending`, not by `agent:pipeline`
-   alone. After Bootstrap succeeds, the workflow must add `agent:bootstrapped`
-   and remove `stage:pm-pending`.
+4. Bootstrap must be triggered by an opened or reopened issue that has both
+   `agent:pipeline` and `stage:pm-pending`; adding either label alone must not
+   start a bootstrap run. After Bootstrap succeeds, the workflow must add
+   `agent:bootstrapped` and remove `stage:pm-pending`.
 5. PR stage workflows should only run from explicit stage labels. Opening or
    synchronizing a PR must not start developer, tester, review, or merge stages
    by itself.

@@ -2,7 +2,7 @@ name: Agent Issue Bootstrap
 
 on:
   issues:
-    types: [labeled]
+    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       title:
@@ -39,9 +39,9 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         github.event_name == 'issues' &&
-        github.event.action == 'labeled' &&
-        github.event.label.name == 'stage:pm-pending' &&
+        (github.event.action == 'opened' || github.event.action == 'reopened') &&
         contains(github.event.issue.labels.*.name, 'agent:pipeline') &&
+        contains(github.event.issue.labels.*.name, 'stage:pm-pending') &&
         !contains(github.event.issue.labels.*.name, 'agent:bootstrapped')
       )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
