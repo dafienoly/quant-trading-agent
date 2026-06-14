@@ -21,6 +21,7 @@ on:
         default: "false"
 
 permissions:
+  actions: write
   contents: write
   issues: write
   pull-requests: write
@@ -214,9 +215,20 @@ jobs:
           gh issue edit $issue --remove-label "stage:pm-pending"
           if ($LASTEXITCODE -ne 0) { Write-Host "stage:pm-pending was not removed; continuing." }
 
+          $branch = "${{ steps.init.outputs.epic_branch }}"
+          $pr = gh pr view $branch --json number --jq ".number"
+          if ($LASTEXITCODE -ne 0 -or -not $pr) {
+            Write-Error "Could not find pipeline PR for branch '$branch'."
+            exit 2
+          }
+
           if ("${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}" -eq "true") {
-            gh issue edit $issue --add-label "stage:team-plan-pending"
+            gh pr edit $pr --add-label "stage:team-plan-pending"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh workflow run agent-stage-runner.yml --ref $branch -f stage=claude_lead_plan -f pr_number=$pr
           } else {
-            gh issue edit $issue --add-label "stage:team-dev-pending"
+            gh pr edit $pr --add-label "stage:team-dev-pending"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            gh workflow run agent-stage-runner.yml --ref $branch -f stage=claude_developer -f pr_number=$pr
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
