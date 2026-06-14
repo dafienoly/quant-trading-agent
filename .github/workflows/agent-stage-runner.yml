@@ -37,7 +37,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       contains(fromJson('["stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
       - uses: actions/checkout@v4
         with:
