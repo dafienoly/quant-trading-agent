@@ -25,6 +25,10 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: agent-bootstrap-issue-${{ github.event.issue.number || inputs.feature_id || github.run_id }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: powershell
@@ -33,7 +37,13 @@ jobs:
   bootstrap:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.label.name == 'agent:pipeline')
+      (
+        github.event_name == 'issues' &&
+        github.event.action == 'labeled' &&
+        github.event.label.name == 'stage:pm-pending' &&
+        contains(github.event.issue.labels.*.name, 'agent:pipeline') &&
+        !contains(github.event.issue.labels.*.name, 'agent:bootstrapped')
+      )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
       - uses: actions/checkout@v4
@@ -193,9 +203,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = "Stop"
+          $issue = "${{ github.event.issue.number }}"
+          gh label create "agent:bootstrapped" --color "0E8A16" --description "Pipeline bootstrap has already created the epic branch and PR."
+          if ($LASTEXITCODE -ne 0) { Write-Host "Label agent:bootstrapped already exists or could not be created; continuing." }
+
+          gh issue edit $issue --add-label "agent:bootstrapped"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          gh issue edit $issue --remove-label "stage:pm-pending"
+          if ($LASTEXITCODE -ne 0) { Write-Host "stage:pm-pending was not removed; continuing." }
+
           if ("${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}" -eq "true") {
-            gh issue edit "${{ github.event.issue.number }}" --remove-label "stage:pm-pending" --add-label "stage:team-plan-pending"
+            gh issue edit $issue --add-label "stage:team-plan-pending"
           } else {
-            gh issue edit "${{ github.event.issue.number }}" --remove-label "stage:pm-pending" --add-label "stage:team-dev-pending"
+            gh issue edit $issue --add-label "stage:team-dev-pending"
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

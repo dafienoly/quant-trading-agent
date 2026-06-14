@@ -2,7 +2,7 @@ name: Agent Main Merge Gate
 
 on:
   pull_request:
-    types: [labeled, synchronize, opened, reopened]
+    types: [labeled]
   workflow_dispatch:
     inputs:
       feature_id:
@@ -19,6 +19,10 @@ permissions:
   issues: write
   checks: read
 
+concurrency:
+  group: agent-main-merge-gate-pr-${{ github.event.pull_request.number || inputs.feature_id || github.run_id }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: powershell
@@ -27,8 +31,16 @@ jobs:
   merge-gate:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.label.name == 'stage:merge-ready' ||
-      contains(github.event.pull_request.labels.*.name, 'stage:merge-ready')
+      (
+        github.event_name == 'pull_request' &&
+        github.event.action == 'labeled' &&
+        github.event.pull_request.base.ref == 'main' &&
+        startsWith(github.event.pull_request.head.ref, 'epic/') &&
+        (
+          github.event.label.name == 'stage:merge-ready' ||
+          github.event.label.name == 'agent:merge-gate'
+        )
+      )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
       - uses: actions/checkout@v4

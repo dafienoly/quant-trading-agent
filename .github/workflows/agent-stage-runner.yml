@@ -2,7 +2,7 @@ name: Agent Stage Runner
 
 on:
   pull_request:
-    types: [labeled, synchronize, opened, reopened]
+    types: [labeled]
   workflow_dispatch:
     inputs:
       stage:
@@ -28,6 +28,10 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: agent-stage-pr-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.label.name || inputs.stage }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: powershell
@@ -36,7 +40,12 @@ jobs:
   run-stage:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      contains(fromJson('["stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
+      (
+        github.event_name == 'pull_request' &&
+        github.event.action == 'labeled' &&
+        startsWith(github.event.pull_request.head.ref, 'epic/') &&
+        contains(fromJson('["stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
+      )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
       - uses: actions/checkout@v4
