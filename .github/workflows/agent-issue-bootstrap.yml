@@ -27,7 +27,7 @@ permissions:
 
 defaults:
   run:
-    shell: '"C:\Program Files\Git\bin\bash.exe" --noprofile --norc -eo pipefail {0}'
+    shell: powershell
 
 jobs:
   bootstrap:
@@ -56,22 +56,41 @@ jobs:
           FEATURE_ID: ${{ inputs.feature_id }}
           RISK_LEVEL: ${{ inputs.risk_level || 'unknown' }}
         run: |
-          set -euo pipefail
-          args=(--title "$ISSUE_TITLE" --risk-level "$RISK_LEVEL")
-          if [[ -n "${FEATURE_ID:-}" ]]; then args+=(--feature-id "$FEATURE_ID"); fi
-          if [[ -n "${ISSUE_NUMBER:-}" ]]; then args+=(--issue-number "$ISSUE_NUMBER"); fi
-          if [[ -n "${ISSUE_URL:-}" ]]; then args+=(--issue-url "$ISSUE_URL"); fi
-          python scripts/agent_pipeline.py init-feature "${args[@]}"
-          echo "epic_branch=$(python scripts/agent_pipeline.py print-state --key epic_branch)" >> "$GITHUB_OUTPUT"
-          echo "feature_id=$(python scripts/agent_pipeline.py print-state --key feature_id)" >> "$GITHUB_OUTPUT"
+          $ErrorActionPreference = "Stop"
+
+          $argsList = @("--title", $env:ISSUE_TITLE, "--risk-level", $env:RISK_LEVEL)
+          if ($env:FEATURE_ID) {
+            $argsList += @("--feature-id", $env:FEATURE_ID)
+          }
+          if ($env:ISSUE_NUMBER) {
+            $argsList += @("--issue-number", $env:ISSUE_NUMBER)
+          }
+          if ($env:ISSUE_URL) {
+            $argsList += @("--issue-url", $env:ISSUE_URL)
+          }
+
+          python scripts/agent_pipeline.py init-feature @argsList
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $epicBranch = python scripts/agent_pipeline.py print-state --key epic_branch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $featureId = python scripts/agent_pipeline.py print-state --key feature_id
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          "epic_branch=$epicBranch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "feature_id=$featureId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Create or switch epic branch
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = "Stop"
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
-          branch="${{ steps.init.outputs.epic_branch }}"
-          git switch -c "$branch" || git switch "$branch"
+          $branch = "${{ steps.init.outputs.epic_branch }}"
+          git switch -c $branch
+          if ($LASTEXITCODE -ne 0) {
+            git switch $branch
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Run Codex A PM command or generate handoff-only dry run
         env:
@@ -79,67 +98,83 @@ jobs:
           PM_ARCHITECT_AGENT_COMMAND: ${{ secrets.PM_ARCHITECT_AGENT_COMMAND || vars.PM_ARCHITECT_AGENT_COMMAND }}
           DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
         run: |
-          set -euo pipefail
-          if [[ "${DRY_RUN}" == "true" || "${DRY_RUN}" == "1" ]]; then
-            echo "Dry run: handoff generated at .agent/handoff/codex_pm.md"
-          elif [[ -n "${CODEX_A_PM_AGENT_COMMAND:-}" ]]; then
-            bash -lc "$CODEX_A_PM_AGENT_COMMAND"
-          elif [[ -n "${PM_ARCHITECT_AGENT_COMMAND:-}" ]]; then
-            bash -lc "$PM_ARCHITECT_AGENT_COMMAND"
-          else
-            echo "::error::CODEX_A_PM_AGENT_COMMAND is not configured. Add agent:dry-run for handoff-only mode."
+          $ErrorActionPreference = "Stop"
+          if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") {
+            Write-Host "Dry run: handoff generated at .agent/handoff/codex_pm.md"
+          } elseif ($env:CODEX_A_PM_AGENT_COMMAND) {
+            Invoke-Expression $env:CODEX_A_PM_AGENT_COMMAND
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } elseif ($env:PM_ARCHITECT_AGENT_COMMAND) {
+            Invoke-Expression $env:PM_ARCHITECT_AGENT_COMMAND
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Error "CODEX_A_PM_AGENT_COMMAND is not configured. Add agent:dry-run for handoff-only mode."
             exit 2
-          fi
+          }
 
       - name: Prepare Codex B architect handoff
-        run: python scripts/agent_pipeline.py write-handoff --stage codex_architect
+        run: |
+          python scripts/agent_pipeline.py write-handoff --stage codex_architect
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run Codex B Architect command or generate handoff-only dry run
         env:
           CODEX_B_ARCHITECT_AGENT_COMMAND: ${{ secrets.CODEX_B_ARCHITECT_AGENT_COMMAND || vars.CODEX_B_ARCHITECT_AGENT_COMMAND }}
           DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
         run: |
-          set -euo pipefail
-          if [[ "${DRY_RUN}" == "true" || "${DRY_RUN}" == "1" ]]; then
-            echo "Dry run: handoff generated at .agent/handoff/codex_architect.md"
-          elif [[ -n "${CODEX_B_ARCHITECT_AGENT_COMMAND:-}" ]]; then
-            bash -lc "$CODEX_B_ARCHITECT_AGENT_COMMAND"
-          else
-            echo "::error::CODEX_B_ARCHITECT_AGENT_COMMAND is not configured. Add agent:dry-run for handoff-only mode."
+          $ErrorActionPreference = "Stop"
+          if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") {
+            Write-Host "Dry run: handoff generated at .agent/handoff/codex_architect.md"
+          } elseif ($env:CODEX_B_ARCHITECT_AGENT_COMMAND) {
+            Invoke-Expression $env:CODEX_B_ARCHITECT_AGENT_COMMAND
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Error "CODEX_B_ARCHITECT_AGENT_COMMAND is not configured. Add agent:dry-run for handoff-only mode."
             exit 2
-          fi
+          }
 
       - name: Prepare Claude Code A team-plan handoff
-        run: python scripts/agent_pipeline.py write-handoff --stage claude_lead_plan
+        run: |
+          python scripts/agent_pipeline.py write-handoff --stage claude_lead_plan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Commit pipeline bootstrap artifacts
         run: |
-          set -euo pipefail
-          git add .agent docs/requirements docs/design docs/dev_plans || true
-          if git diff --cached --quiet; then
-            echo "No bootstrap artifacts to commit."
-          else
+          $ErrorActionPreference = "Stop"
+          foreach ($path in @(".agent", "docs/requirements", "docs/design", "docs/dev_plans")) {
+            if (Test-Path $path) {
+              git add $path
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No bootstrap artifacts to commit."
+          } else {
             git commit -m "chore(agent): bootstrap ${{ steps.init.outputs.feature_id }} pipeline"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             git push -u origin "${{ steps.init.outputs.epic_branch }}"
-          fi
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Create or update pull request
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          branch="${{ steps.init.outputs.epic_branch }}"
-          title="agent: ${{ steps.init.outputs.feature_id }}"
-          body="Issue-driven Agent pipeline branch. See .agent/current_task.yaml and .agent/handoff/."
-          gh pr view "$branch" --json number >/dev/null 2>&1 || \
-            gh pr create --base main --head "$branch" --title "$title" --body "$body"
+          $ErrorActionPreference = "Stop"
+          $branch = "${{ steps.init.outputs.epic_branch }}"
+          $title = "agent: ${{ steps.init.outputs.feature_id }}"
+          $body = "Issue-driven Agent pipeline branch. See .agent/current_task.yaml and .agent/handoff/."
+          gh pr view $branch --json number
+          if ($LASTEXITCODE -ne 0) {
+            gh pr create --base main --head $branch --title $title --body $body
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Move issue to development stage
         if: github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          gh issue edit "${{ github.event.issue.number }}" \
-            --remove-label "stage:pm-pending" \
-            --add-label "stage:team-plan-pending"
+          gh issue edit "${{ github.event.issue.number }}" --remove-label "stage:pm-pending" --add-label "stage:team-plan-pending"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
