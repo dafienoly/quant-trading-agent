@@ -1,5 +1,7 @@
-﻿.agent/current_task.yaml
+﻿.agent/changed_files.txt
+.agent/current_task.yaml
 .agent/gates/acceptance_gate.json
+.agent/gates/auto_merge_gate.json
 .agent/gates/claude_lead_review_gate.json
 .agent/gates/codex_review_gate.json
 .agent/gates/phase_dev_gate.json
