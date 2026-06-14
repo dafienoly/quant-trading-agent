@@ -1,0 +1,55 @@
+﻿param(
+  [Parameter(Mandatory=$true)]
+  [string]$Stage
+)
+
+$ErrorActionPreference = "Stop"
+
+$repoCandidates = @(
+  $env:GITHUB_WORKSPACE,
+  (Get-Location).Path,
+  "D:\actions-runner\_work\quant-trading-agent\quant-trading-agent",
+  "D:\Repo\quant-trading-agent"
+) | Where-Object { $_ -and (Test-Path $_) }
+
+if (-not $repoCandidates -or $repoCandidates.Count -eq 0) {
+  Write-Error "Cannot locate repository workspace. GITHUB_WORKSPACE='$env:GITHUB_WORKSPACE'"
+  exit 2
+}
+
+$repo = $repoCandidates[0]
+Write-Host "Using Windows repository workspace: $repo"
+
+$stageScript = Join-Path $repo "scripts\run_claude_stage.sh"
+if (!(Test-Path $stageScript)) {
+  Write-Error "Missing Claude stage script: $stageScript"
+  exit 2
+}
+
+# Windows checkout may convert .sh files to CRLF. Normalize before WSL bash reads it.
+$scriptText = Get-Content -Raw -Encoding UTF8 $stageScript
+$scriptText = $scriptText -replace "`r`n", "`n"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($stageScript, $scriptText, $utf8NoBom)
+
+if ($repo -notmatch '^([A-Za-z]):\\(.*)$') {
+  Write-Error "Unsupported repository path for WSL conversion: $repo"
+  exit 2
+}
+
+$drive = $Matches[1].ToLowerInvariant()
+$rest = $Matches[2] -replace '\\', '/'
+$wslRepo = "/mnt/$drive/$rest"
+
+Write-Host "Using WSL repository workspace: $wslRepo"
+
+# Inject pipeline environment variables into the WSL bash environment.
+# wsl.exe does not forward arbitrary Windows env vars by default.
+$realLeadPlan = $env:AGENT_REAL_CLAUDE_LEAD_PLAN
+$realLeadPlanStrict = $env:AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT
+
+$command = "cd '$wslRepo' && AGENT_REAL_CLAUDE_LEAD_PLAN='$realLeadPlan' AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT='$realLeadPlanStrict' bash scripts/run_claude_stage.sh '$Stage'"
+wsl.exe -- bash -lc $command
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
+}
