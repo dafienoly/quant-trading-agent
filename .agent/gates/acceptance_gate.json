@@ -1,0 +1,44 @@
+{
+  "passed": true,
+  "feature_id": "smoke-test-real-claude-lead-review-v9",
+  "checked_stages": [
+    "pm",
+    "architecture",
+    "team_plan",
+    "phase_dev",
+    "phase_test",
+    "claude_lead_review",
+    "codex_review",
+    "acceptance"
+  ],
+  "missing": {},
+  "found": {
+    "pm": [
+      "docs\\requirements\\2026-06-15-smoke-test-real-claude-lead-review-v9-requirements.md"
+    ],
+    "architecture": [
+      "docs\\design\\2026-06-15-smoke-test-real-claude-lead-review-v9-architecture.md"
+    ],
+    "team_plan": [
+      "docs\\dev_plans\\2026-06-15-smoke-test-real-claude-lead-review-v9-team-plan.md"
+    ],
+    "phase_dev": [
+      "docs\\dev_reports\\20260615-smoke-test-real-claude-lead-review-v9-phase-1-dev-report.md"
+    ],
+    "phase_test": [
+      "docs\\test_reports\\20260615-smoke-test-real-claude-lead-review-v9-phase-1-test-report.md"
+    ],
+    "claude_lead_review": [
+      "docs\\review\\2026-06-15-smoke-test-real-claude-lead-review-v9-claude-lead-review.md"
+    ],
+    "codex_review": [
+      "docs\\review\\2026-06-15-smoke-test-real-claude-lead-review-v9-codex-review-r1.md"
+    ],
+    "acceptance": [
+      "docs\\acceptance\\2026-06-15-smoke-test-real-claude-lead-review-v9-acceptance.md"
+    ]
+  },
+  "reasons": [
+    "all_required_reports_found"
+  ]
+}
