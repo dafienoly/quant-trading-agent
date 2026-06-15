@@ -287,10 +287,18 @@ switch ($Stage) {
 
       Write-Host "Invoking real Codex via WSL..."
 
+            # Derive WSL workspace path for --cd flag
+      $wslWorkspace = "/mnt/" + $repo.Substring(0,1).ToLower() + $repo.Substring(2) -replace '\\', '/'
+
+      Write-Host "Invoking real Codex via WSL..."
+
       # Write a small bash runner script to a temp file, then execute it via
       # wsl.exe -- bash /path. This avoids all quoting issues with bash -lc.
       $runnerFile = [System.IO.Path]::GetTempFileName()
+      $wslOutputFile = "/tmp/codex_review_output_$([System.IO.Path]::GetRandomFileName()).md"
       $runnerScript = @"
+set -e
+
 export PATH="`$HOME/.nvm/versions/node/v22.16.0/bin:`$HOME/.local/bin:`$HOME/.opencode/bin:`$PATH"
 if [ -n "${CODEX_CLI_PATH:-}" ] && [ -x "`$CODEX_CLI_PATH" ]; then
   CODEX_BIN="`$CODEX_CLI_PATH"
@@ -305,8 +313,31 @@ if [ -z "`$CODEX_BIN" ]; then
   exit 127
 fi
 echo "Using Codex: `$CODEX_BIN"
-`$CODEX_BIN --version
-exec "`$CODEX_BIN" exec < "$wslPath"
+"`$CODEX_BIN" --version
+"`$CODEX_BIN" login status 2>&1 | head -3 || true
+
+echo "Running Codex reviewer with 20m timeout..."
+
+timeout 1200 "`$CODEX_BIN" exec \
+  --cd "$wslWorkspace" \
+  --sandbox read-only \
+  --color never \
+  --output-last-message "$wslOutputFile" \
+  - < "$wslPath"
+
+CODEX_EXIT=`$?
+
+if [ "`$CODEX_EXIT" -eq 124 ]; then
+  echo "ERROR: Codex reviewer timed out after 20 minutes"
+  exit 124
+fi
+
+if [ -s "$wslOutputFile" ]; then
+  echo "OUTPUT_FILE: $wslOutputFile"
+fi
+
+exit "`$CODEX_EXIT"
+DEX_BIN" exec < "$wslPath"
 "@
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
       [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
@@ -342,26 +373,48 @@ exec "`$CODEX_BIN" exec < "$wslPath"
       Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
       Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
 
-      if ($rc -eq 0 -and $stdout -and $stdout.Trim().Length -gt 0) {
-        # Strip wrapper log lines (Using Codex, codex-cli, Reading prompt)
-        # from the markdown output before writing the review report.
-        $cleanOutput = $stdout -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
-        $cleanOutput = $cleanOutput -replace 'Reading prompt from stdin\.\.\.[\r\n]*', ''
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($outPath, $cleanOutput.Trim(), $utf8NoBom)
-        Write-Host "Generated $outPath using real Codex"
-      } else {
-        $errorInfo = $stdout
-        if (-not $errorInfo) { $errorInfo = $stderr }
+            # Try to read OUTPUT_FILE from WSL temp path
+      $wslOutputWinPath = $wslOutputFile -replace '^/mnt/([a-z])/', '$1:\' -replace '/', '\'
+      $gotRealOutput = $false
+      if ((Test-Path $wslOutputWinPath) -and ((Get-Item $wslOutputWinPath).Length -gt 0)) {
+        $reviewContent = Get-Content $wslOutputWinPath -Raw -Encoding UTF8
+        if ($reviewContent -and $reviewContent.Trim().Length -gt 0) {
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText($outPath, $reviewContent.Trim(), $utf8NoBom)
+          Write-Host "Generated $outPath using real Codex (via --output-last-message)"
+          $gotRealOutput = $true
+        }
+        Remove-Item $wslOutputWinPath -Force -ErrorAction SilentlyContinue
+      }
+
+      if (-not $gotRealOutput) {
+        if ($rc -eq 0 -and $stdout -and $stdout.Trim().Length -gt 0) {
+          # Strip wrapper log lines from stdout before writing
+          $cleanOutput = $stdout -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
+          $cleanOutput = $cleanOutput -replace '(?s)Logged in.*?[\r\n]+', ''
+          $cleanOutput = $cleanOutput -replace 'Reading prompt from stdin\.\.\.[\r\n]*', ''
+          $cleanOutput = $cleanOutput -replace 'Running Codex reviewer.*?[\r\n]*', ''
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText($outPath, $cleanOutput.Trim(), $utf8NoBom)
+          Write-Host "Generated $outPath using real Codex (stdout fallback)"
+          $gotRealOutput = $true
+        }
+      }
+
+      Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
+      Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
+
+      if (-not $gotRealOutput) {
+        $errorInfo = if ($rc -eq 124) { "Codex reviewer timed out after 20 minutes" } else { "$(if ($stdout) { $stdout } else { $stderr })" }
         if (-not $errorInfo) { $errorInfo = "(no output)" }
-        Write-Host "WARNING: Real Codex mode failed (exit=$rc). Output: $errorInfo" -ForegroundColor Yellow
+        Write-Host "WARNING: Real Codex mode failed (exit=$rc). $errorInfo" -ForegroundColor Yellow
         if ($useStrict) {
           Write-Error "AGENT_REAL_CODEX_REVIEWER_STRICT=true — real mode failed, aborting."
           exit 2
         }
         Write-Host "Falling back to mock mode." -ForegroundColor Yellow
       }
-    }
+}
 
     # Mock/smoke fallback
     if (!(Test-Path $outPath) -or ((Get-Item $outPath).Length -eq 0)) {
