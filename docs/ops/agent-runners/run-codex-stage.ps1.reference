@@ -286,17 +286,53 @@ switch ($Stage) {
       $wslPath = "/mnt/" + $promptFile.Substring(0,1).ToLower() + $promptFile.Substring(2) -replace '\\', '/'
 
       Write-Host "Invoking real Codex via WSL..."
-      $output = & wsl.exe -- bash -lc "codex exec < '$wslPath'" 2>&1
+
+      # Write a small bash runner script to a temp file, then execute it via
+      # wsl.exe -- bash /path. This avoids all quoting issues with bash -lc.
+      $runnerFile = [System.IO.Path]::GetTempFileName()
+      $runnerScript = @"
+export PATH="`$HOME/.nvm/versions/node/v22.16.0/bin:`$HOME/.local/bin:`$HOME/.opencode/bin:`$PATH"
+if [ -n "${CODEX_CLI_PATH:-}" ] && [ -x "`$CODEX_CLI_PATH" ]; then
+  CODEX_BIN="`$CODEX_CLI_PATH"
+elif [ -x "/home/ly/.nvm/versions/node/v22.16.0/bin/codex" ]; then
+  CODEX_BIN="/home/ly/.nvm/versions/node/v22.16.0/bin/codex"
+else
+  CODEX_BIN="`$(command -v codex || true)"
+fi
+if [ -z "`$CODEX_BIN" ]; then
+  echo "ERROR: codex CLI not found in WSL PATH"
+  echo "PATH=`$PATH"
+  exit 127
+fi
+echo "Using Codex: `$CODEX_BIN"
+`$CODEX_BIN --version
+exec "`$CODEX_BIN" exec < "$wslPath"
+"@
+      $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+      [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
+
+      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
+
+      $output = & wsl.exe -- bash $wslRunnerPath 2>&1
       $rc = $LASTEXITCODE
 
-      Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
+      Write-Host "Codex WSL exit code: $rc"
 
-      if ($output -and $output.Trim().Length -gt 0) {
+      Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
+      Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
+
+      if ($rc -eq 0 -and $output -and $output.Trim().Length -gt 0) {
+        # Strip the "Using Codex: ..." and "codex-cli ..." lines from output,
+        # keeping only the actual exec response.
+        $cleanOutput = $output -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($outPath, $output.Trim(), $utf8NoBom)
+        [System.IO.File]::WriteAllText($outPath, $cleanOutput.Trim(), $utf8NoBom)
         Write-Host "Generated $outPath using real Codex"
       } else {
-        Write-Host "WARNING: Real Codex mode produced no output (exit=$rc)." -ForegroundColor Yellow
+        Write-Host "WARNING: Real Codex mode failed (exit=$rc)." -ForegroundColor Yellow
+        if ($output) {
+          $output | ForEach-Object { Write-Host "  $_" }
+        }
         if ($useStrict) {
           Write-Error "AGENT_REAL_CODEX_REVIEWER_STRICT=true — real mode failed, aborting."
           exit 2
