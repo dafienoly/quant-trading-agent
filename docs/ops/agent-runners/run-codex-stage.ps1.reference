@@ -313,26 +313,48 @@ exec "`$CODEX_BIN" exec < "$wslPath"
 
       $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
-      $output = & wsl.exe -- bash $wslRunnerPath 2>&1
-      $rc = $LASTEXITCODE
+      # Use ProcessStartInfo to capture stdout/stderr separately.
+      # Avoids $ErrorActionPreference=Stop treating stderr prompts
+      # (like "Reading prompt from stdin...") as NativeCommandError.
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = "wsl.exe"
+      $psi.Arguments = "-- bash $wslRunnerPath"
+      $psi.RedirectStandardOutput = $true
+      $psi.RedirectStandardError = $true
+      $psi.UseShellExecute = $false
+      $psi.CreateNoWindow = $true
+
+      $proc = New-Object System.Diagnostics.Process
+      $proc.StartInfo = $psi
+      [void]$proc.Start()
+      $stdout = $proc.StandardOutput.ReadToEnd()
+      $stderr = $proc.StandardError.ReadToEnd()
+      $proc.WaitForExit()
+
+      $rc = $proc.ExitCode
 
       Write-Host "Codex WSL exit code: $rc"
+
+      # Print all output for CI log debugging
+      if ($stdout) { Write-Host "STDOUT: $stdout" }
+      if ($stderr) { Write-Host "STDERR: $stderr" }
 
       Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
       Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
 
-      if ($rc -eq 0 -and $output -and $output.Trim().Length -gt 0) {
-        # Strip the "Using Codex: ..." and "codex-cli ..." lines from output,
-        # keeping only the actual exec response.
-        $cleanOutput = $output -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
+      if ($rc -eq 0 -and $stdout -and $stdout.Trim().Length -gt 0) {
+        # Strip wrapper log lines (Using Codex, codex-cli, Reading prompt)
+        # from the markdown output before writing the review report.
+        $cleanOutput = $stdout -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
+        $cleanOutput = $cleanOutput -replace 'Reading prompt from stdin\.\.\.[\r\n]*', ''
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($outPath, $cleanOutput.Trim(), $utf8NoBom)
         Write-Host "Generated $outPath using real Codex"
       } else {
-        Write-Host "WARNING: Real Codex mode failed (exit=$rc)." -ForegroundColor Yellow
-        if ($output) {
-          $output | ForEach-Object { Write-Host "  $_" }
-        }
+        $errorInfo = $stdout
+        if (-not $errorInfo) { $errorInfo = $stderr }
+        if (-not $errorInfo) { $errorInfo = "(no output)" }
+        Write-Host "WARNING: Real Codex mode failed (exit=$rc). Output: $errorInfo" -ForegroundColor Yellow
         if ($useStrict) {
           Write-Error "AGENT_REAL_CODEX_REVIEWER_STRICT=true — real mode failed, aborting."
           exit 2
