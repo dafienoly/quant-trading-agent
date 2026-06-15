@@ -25,7 +25,7 @@
     "max_parallel_teams": 3,
     "max_codex_review_attempts": 3,
     "current_phase": 1,
-    "all_phases_tested": false,
+    "all_phases_tested": true,
     "codex_review_attempts": 0
   },
   "agent_roles": {
