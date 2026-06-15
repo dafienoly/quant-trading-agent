@@ -1,5 +1,9 @@
 name: Agent Stage Runner
 
+run-name: >-
+  ${{ inputs.stage || github.event.label.name || 'unknown-stage' }}
+  / PR #${{ inputs.pr_number || github.event.pull_request.number || '' }}
+
 on:
   pull_request:
     types: [labeled]
@@ -102,6 +106,8 @@ jobs:
           AGENT_REAL_CLAUDE_TESTER_STRICT: ${{ vars.AGENT_REAL_CLAUDE_TESTER_STRICT || '' }}
           AGENT_REAL_CLAUDE_LEAD_REVIEW: ${{ vars.AGENT_REAL_CLAUDE_LEAD_REVIEW || '' }}
           AGENT_REAL_CLAUDE_LEAD_REVIEW_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_REVIEW_STRICT || '' }}
+          AGENT_REAL_CODEX_REVIEWER: ${{ vars.AGENT_REAL_CODEX_REVIEWER || '' }}
+          AGENT_REAL_CODEX_REVIEWER_STRICT: ${{ vars.AGENT_REAL_CODEX_REVIEWER_STRICT || '' }}
           CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
           CLAUDE_DEVELOPER_AGENT_COMMAND: ${{ secrets.CLAUDE_DEVELOPER_AGENT_COMMAND || vars.CLAUDE_DEVELOPER_AGENT_COMMAND }}
           CLAUDE_TESTER_AGENT_COMMAND: ${{ secrets.CLAUDE_TESTER_AGENT_COMMAND || vars.CLAUDE_TESTER_AGENT_COMMAND }}
