@@ -62,11 +62,47 @@ jobs:
       - name: Collect changed files
         run: |
           $ErrorActionPreference = "Stop"
-          git fetch origin main --depth=1
+
+          # Fetch full main ref (checkout is fetch-depth:0 but --depth=1 below was
+          # destroying the merge-base. Fetch the full ref instead.)
+          git fetch origin +refs/heads/main:refs/remotes/origin/main --prune
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $mergeBase = git merge-base origin/main HEAD
+
+          if (-not $mergeBase) {
+            Write-Warning "No merge base found after normal fetch. Attempting to unshallow/deepen repository..."
+
+            git fetch --unshallow 2>$null
+            git fetch origin +refs/heads/main:refs/remotes/origin/main --prune
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            $mergeBase = git merge-base origin/main HEAD
+          }
+
+          if (-not $mergeBase) {
+            Write-Error "Cannot find merge base between origin/main and HEAD."
+
+            Write-Host "origin/main latest commits:"
+            git log --oneline origin/main -10
+
+            Write-Host "HEAD latest commits:"
+            git log --oneline HEAD -10
+
+            Write-Host "Available branches:"
+            git branch -a
+
+            exit 2
+          }
+
+          Write-Host "Merge base: $mergeBase"
+
           New-Item -ItemType Directory -Force -Path .agent | Out-Null
-          git diff --name-only origin/main...HEAD | Out-File -FilePath .agent/changed_files.txt -Encoding utf8
+
+          git diff --name-only "$mergeBase..HEAD" | Out-File -FilePath .agent/changed_files.txt -Encoding utf8
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Write-Host "Changed files since merge base:"
           Get-Content .agent/changed_files.txt
 
       - name: Check required reports through acceptance
