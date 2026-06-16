@@ -219,6 +219,18 @@ jobs:
           }
 
           $nextStage = ""
+
+          # Sync state from gates before auto-advance decisions so
+          # downstream labels are based on current gate truth.
+          python scripts/agent_pipeline.py sync-state-from-gates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py check-state-gate-consistency
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: state/gate consistency check failed before auto-advance. Failing safely."
+            Add-NextLabel "stage:manual-approval-required"
+            exit 2
+          }
+
           switch ($env:STAGE) {
             "claude_lead_plan" {
               Remove-CurrentLabel "stage:team-plan-pending"
@@ -238,9 +250,16 @@ jobs:
                 Add-NextLabel "stage:claude-lead-review-pending"
                 $nextStage = "claude_lead_review"
               } else {
-                # Anti-infinite-loop guard: if gate passed but all_phases_tested is
-                # still false, something went wrong with the state update. Do NOT
-                # dispatch developer again — that would cause dev/test loop.
+                # Anti-infinite-loop guard: only relevant during phase iteration
+                # (claude_tester / claude_developer).  After claude_lead_review,
+                # codex_reviewer, or codex_acceptance the pipeline must not
+                # dispatch back into the dev/test loop — even if the state
+                # metadata is still stale.
+                if ($env:STAGE -ne "claude_tester" -and $env:STAGE -ne "claude_developer") {
+                  Write-Host "WARNING: phase-loop guard triggered outside phase-iteration stage ($env:STAGE). Failing safely."
+                  Add-NextLabel "stage:manual-approval-required"
+                  exit 2
+                }
                 $gateFile = ".agent/gates/phase_test_gate.json"
                 if (Test-Path $gateFile) {
                   $gate = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
