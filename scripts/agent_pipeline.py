@@ -16,8 +16,10 @@ from src.product_app.agent_pipeline_automation import (  # noqa: E402
     AUTO_MERGE_GATE_PATH,
     build_feature_state,
     check_required_reports,
+    check_state_gate_consistency,
     classify_changed_files,
     read_state,
+    sync_state_from_gates,
     write_feature_state,
     write_handoff,
     write_json,
@@ -102,6 +104,20 @@ def cmd_print_state(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_check_state_gate_consistency(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = check_state_gate_consistency(root)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result["consistent"] else 2
+
+
+def cmd_sync_state_from_gates(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = sync_state_from_gates(root, dry_run=args.dry_run)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if not result.get("updated") or result["diagnostics"]["consistent"] else 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent pipeline automation CLI")
     parser.set_defaults(func=None)
@@ -180,6 +196,16 @@ def build_parser() -> argparse.ArgumentParser:
     p = init.add_parser("print-state", parents=[common_root])
     p.add_argument("--key")
     p.set_defaults(func=cmd_print_state)
+
+    p = init.add_parser("check-state-gate-consistency", parents=[common_root],
+                        help="Check if .agent/state.json metadata is consistent with gate evidence")
+    p.set_defaults(func=cmd_check_state_gate_consistency)
+
+    p = init.add_parser("sync-state-from-gates", parents=[common_root],
+                        help="Update .agent/state.json and .agent/current_task.yaml from gate truth")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Report changes without writing")
+    p.set_defaults(func=cmd_sync_state_from_gates)
 
     return parser
 

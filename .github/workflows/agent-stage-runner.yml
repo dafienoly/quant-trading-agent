@@ -171,6 +171,8 @@ jobs:
           }
           python scripts/agent_pipeline.py check-gates --through-stage $gate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py sync-state-from-gates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Commit stage artifacts
         run: |
