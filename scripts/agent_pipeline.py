@@ -115,6 +115,11 @@ def cmd_sync_state_from_gates(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     result = sync_state_from_gates(root, dry_run=args.dry_run)
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result.get("updated") and not args.dry_run:
+        # Re-check consistency AFTER the sync to get accurate diagnostics
+        from src.product_app.agent_pipeline_automation import check_state_gate_consistency
+        after = check_state_gate_consistency(root)
+        return 0 if after["consistent"] else 2
     return 0 if not result.get("updated") or result["diagnostics"]["consistent"] else 2
 
 
