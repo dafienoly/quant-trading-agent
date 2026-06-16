@@ -5,7 +5,7 @@
   "issue_number": 41,
   "issue_url": "https://github.com/dafienoly/quant-trading-agent/pull/41",
   "epic_branch": "epic/20260616-post-merge-v11-real-codex-acceptance-smoke-r2",
-  "current_stage": "claude_lead_review_pending",
+  "current_stage": "codex_review_pending",
   "created_at": "2026-06-16T07:03:11.513713+00:00",
   "required_docs": {
     "requirements": "docs/requirements/20260616-post-merge-v11-real-codex-acceptance-smoke-r2-requirements.md",
@@ -63,7 +63,7 @@
     "team_plan": "pending",
     "phase_dev": "passed",
     "phase_test": "passed",
-    "claude_lead_review": "pending",
+    "claude_lead_review": "passed",
     "codex_review": "pending",
     "acceptance": "pending"
   }
