@@ -928,8 +928,8 @@ exit "`$CODEX_EXIT"
       # Async reads to avoid pipe-buffer deadlock
       $stdoutBuilder = New-Object System.Text.StringBuilder
       $stderrBuilder = New-Object System.Text.StringBuilder
-      $stdoutEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action { $stdoutBuilder.Append("`$(`$EventArgs.Data)`n") }
-      $stderrEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action { $stderrBuilder.Append("`$(`$EventArgs.Data)`n") }
+      $stdoutEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action { $stdoutBuilder.Append("$($EventArgs.Data)`n") }
+      $stderrEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action { $stderrBuilder.Append("$($EventArgs.Data)`n") }
 
       [void]$proc.Start()
       $proc.BeginOutputReadLine()
@@ -1039,7 +1039,7 @@ exit "`$CODEX_EXIT"
       $gatePath = ".agent\gates\acceptance_gate.json"
       $gateOutputDir = Split-Path -Parent $gatePath
       if ($gateOutputDir) {
-        New-Object -ItemType Directory -Force -Path $gateOutputDir | Out-Null
+        New-Item -ItemType Directory -Force -Path $gateOutputDir | Out-Null
       }
       $gateJson = $gatePayload | ConvertTo-Json -Depth 5
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
