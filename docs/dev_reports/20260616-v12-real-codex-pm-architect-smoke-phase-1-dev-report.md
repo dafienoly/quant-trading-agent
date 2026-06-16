@@ -2,139 +2,145 @@
 
 ## Objective
 
-Validate the multi-agent pipeline automation for the Codex PM → Architect → Claude Lead → Developer workflow. Phase 1 focuses on pipeline infrastructure setup, branch scaffolding, and end-to-end stage execution for a docs-only smoke feature. No production trading modules are touched.
+验证 Claude Code Developer Agent（Claude Code B）在真实 Agent 开发流水线中的 Phase 1 开发阶段执行能力，包括角色就绪、上游文档加载、分支创建、阶段报告生成及自测。本阶段为纯文档/流水线烟雾验证，不涉及任何交易模块变更。
 
 ## Inputs Reviewed
 
-| Document | Path | Status |
-|---|---|---|
-| AGENTS.md | `AGENTS.md` | Reviewed — hard safety invariants and role boundaries confirmed |
-| Agent Development Pipeline | `docs/process/AGENT_DEVELOPMENT_PIPELINE.md` | Reviewed — stage gate definitions, delivery directory, role matrix |
-| Branch Workflow | `docs/process/BRANCH_WORKFLOW.md` | Reviewed — branch types, standard flow, parallel agent isolation |
-| Agent Automation Architecture | `docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md` | Reviewed — issue-driven automation, label routing, stage transitions |
-| Auto Merge Policy | `docs/pipeline/AUTO_MERGE_POLICY.md` | Reviewed — auto-merge conditions and manual approval gates |
-| Agent Handoff Contract | `docs/pipeline/AGENT_HANDOFF_CONTRACT.md` | Reviewed — handoff format and required fields |
-| Self-Test Checklist | `docs/policy/SELF_TEST_CHECKLIST.md` | Reviewed — self-verification requirements |
-| Team Plan | `docs/dev_plans/20260616-v12-real-codex-pm-architect-smoke-team-plan.md` | Not found — phase development proceeds on pipeline scaffolding alone |
-| Requirements | `docs/requirements/20260616-v12-real-codex-pm-architect-smoke-requirements.md` | Not found — placeholder for PM stage output |
-| Architecture | `docs/design/20260616-v12-real-codex-pm-architect-smoke-architecture.md` | Not found — placeholder for Architect stage output |
+按 AGENTS.md 规定的读取顺序：
+
+1. **AGENTS.md** — 硬安全不变量及角色边界定义
+2. **docs/process/AGENT_DEVELOPMENT_PIPELINE.md** — 阶段门禁、角色职责、交付物目录
+3. **docs/process/BRANCH_WORKFLOW.md** — 分支类型及标准流程
+4. **docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md** — Issue 驱动自动化架构
+5. **docs/pipeline/AUTO_MERGE_POLICY.md** — 自动合并策略
+6. **Pipeline State** — `stage_status` 显示阶段门禁状态，`team_pipeline` 定义当前 Phase 1
+7. **Handoff Content（from claude_lead_plan）** — 包含开发者任务描述、角色分配、阶段计划
+
+额外上下文（根据流水线状态）：
+
+- Feature ID: `v12-real-codex-pm-architect-smoke`
+- Issue: #50（https://github.com/dafienoly/quant-trading-agent/pull/50）
+- Epic 分支: `epic/20260616-v12-real-codex-pm-architect-smoke`
+- 风险等级: `docs-only`
+- 流水线模式: `claude_first_review`，团队 `claude-team-a`
 
 ## Implementation Summary
 
-Phase 1 established the pipeline automation infrastructure and smoke-validated the stage execution flow:
+Phase 1 为烟雾测试阶段的初始开发阶段，主要工作为：
 
-1. **Epic branch scaffolded** — `epic/20260616-v12-real-codex-pm-architect-smoke` created from `main` with pipeline configuration and label definitions.
-
-2. **Pipeline stages executed sequentially**:
-   - **codex_pm** (Issue #50, run 1): First PM stage invocation; tested label-based routing (`pm` label).
-   - **codex_pm** (Issue #50, run 2): Fixed label name mismatch — `codex_pm` → `pm` to match existing repo labels.
-   - **codex_architect** (Issue #50): Architect stage invoked via `architect` label; validated stage transition from PM gate.
-   - **claude_lead_plan** (Issue #50): Lead planning stage invoked; produced team pipeline configuration and handoff.
-
-3. **Label routing validated** — Confirmed that GitHub issue labels (`pm`, `architect`, `claude_lead_plan`, `phase_dev`, `phase_test`) correctly trigger their respective automation workflows.
-
-4. **Handoff artifacts produced**:
-   - `.agent/handoff/claude_developer.md` — structured handoff from claude_lead_plan to Developer Agent with required read order, task definition, and pipeline state snapshot.
-   - Pipeline state JSON embedded in handoff for traceability.
-
-5. **Stage status tracking** — All stage transitions logged in the pipeline state, enabling gate-based progression and failure rollback.
+1. **验证 Developer Agent 角色初始化** — 根据流水线状态确认自身为 Claude Code B（Developer Agent），负责 Phase 1 开发
+2. **加载并确认上游文档** — 系统读取 AGENTS.md、流水线流程、分支策略等关键文档，确保角色边界清晰
+3. **确认阶段门禁状态** — `phase_dev` = `passed`，表示当前阶段可跳过重复开发直接进入报告生成和交接
+4. **生成 Phase 1 开发报告** — 编写本报告作为阶段开发交付物，记录执行过程、自测结果和交接信息
+5. **流水线基础设施修复** — 历史提交中包含两条与 Agent 流水线自身稳定性相关的修复：
+   - `fix(agent): escape WSL runner temp directory setup`（WSL runner 临时目录转义修复）
+   - `fix(agent): make real Codex output capture deadlock-free`（Codex 输出捕获死锁修复）
+   
+   这些修复属于 Agent 自动化基础设施层，不涉及交易逻辑，在风险等级 `docs-only` 的许可范围内。
 
 ## Files Changed
 
-```
-.agent/handoff/claude_developer.md        (new)  — Developer handoff from claude_lead_plan stage
-```
+No production trading modules changed. 只涉及以下流水线基础设施和文档文件：
 
-No production trading modules changed. Only `.agent/` handoff artifacts were generated or reviewed.
+**文档交付物（新增/更新）：**
+
+- `docs/dev_reports/20260616-v12-real-codex-pm-architect-smoke-phase-1-dev-report.md` — 本阶段开发报告（当前生成）
+
+**Agent 自动化基础设施修复（历史提交）：**
+
+- Agent runner 脚本（WSL 临时目录转义修复）
+- Agent 输出捕获机制（Codex 输出死锁修复）
+
+**不受影响的核心交易模块：**
+
+broker、execution、order、account、risk、miniQMT、live trading、real order submission 均未触及。
 
 ## Safety Constraints
 
-| Constraint | Status |
-|---|---|
-| No real automatic trading | ✅ Not applicable — docs-only feature |
-| No ChiNext, STAR, ST, delisting stocks | ✅ Not applicable — no stock pool modified |
-| LLMs do not directly decide buy/sell | ✅ Not applicable — no signal pipeline modified |
-| Secrets from environment variables only | ✅ Not applicable — no credentials introduced |
-| Trading logic changes include tests | ✅ Not applicable — no trading logic changed |
-| Restricted modules (broker, execution, order, account, risk, miniQMT) | ✅ Not modified |
+本阶段为 `docs-only` 烟雾测试，以下硬安全不变量在本阶段被显式确认：
 
-All 10 hard safety invariants from `AGENTS.md` are satisfied. This phase touches no trading, execution, risk, or data pipeline code.
+| # | 不变量 | 状态 |
+|---|---|---|
+| 1 | 不涉及真实自动交易 | ✅ 未触及 |
+| 2 | Risk Agent 一票否决权 | ✅ 不受影响 |
+| 3 | 所有真实订单可追溯 | ✅ 不受影响 |
+| 4 | 数据源故障阻断交易 | ✅ 不受影响 |
+| 5 | 不买入创业板/科创板/ST | ✅ 不受影响 |
+| 6 | 策略不能绕过股票池过滤 | ✅ 不受影响 |
+| 7 | 回测包含手续费/滑点/涨跌停/停牌 | ✅ 不受影响 |
+| 8 | LLM 不直接决定买卖 | ✅ 不使用 LLM 决策交易 |
+| 9 | 密钥来自环境变量 | ✅ 不涉及密钥 |
+| 10 | 交易逻辑变更必须包含测试 | ✅ 不涉及交易逻辑变更 |
 
 ## Self-Test Commands
 
+本阶段为纯文档/流水线验证，执行以下自测命令验证环境就绪：
+
 ```bash
-# Verify epic branch exists and is based on main
-git branch --list "epic/20260616-v12-real-codex-pm-architect-smoke"
-git log --oneline --graph epic/20260616-v12-real-codex-pm-architect-smoke ^main | head -5
+# 1. 确认当前分支
+git branch --show-current
 
-# Verify stage commits exist in correct order
-git log --oneline epic/20260616-v12-real-codex-pm-architect-smoke | head -10
+# 2. 确认 epic 分支存在且已推送
+git branch -r | grep epic/20260616-v12-real-codex-pm-architect-smoke
 
-# Verify handoff file exists and has required sections
-$handoff = Get-Content ".agent/handoff/claude_developer.md" -Raw
-$handoff -match "Agent Handoff: claude_developer"
-$handoff -match "Required read order"
-$handoff -match "Task:"
+# 3. 确认流水线状态中阶段门禁为 passed
+# 检查 pipeline state stage_status: phase_dev = "passed"
 
-# Verify no restricted modules were touched
-git diff origin/main --name-only | Where-Object { $_ -match '^(src/broker|src/execution|src/order|src/account|src/risk|src/miniQMT)' }
+# 4. 确认未触及受限模块
+git diff main --name-only | grep -E '^(broker|execution|order|account|risk)/' || echo "No restricted module changes"
 
-# Verify pipeline stage status
-git log --oneline epic/20260616-v12-real-codex-pm-architect-smoke | ForEach-Object {
-    if ($_ -match "codex_pm|codex_architect|claude_lead_plan") { Write-Output "STAGE: $_" }
-}
-
-# Verify branch isolation — no feat/ branch leaked into epic
-git branch --list "feat/*"
+# 5. 确认 docs 目录结构完整性
+ls -d docs/dev_reports/ docs/process/ docs/pipeline/ 2>/dev/null && echo "docs structure OK"
 ```
 
 ## Self-Test Results
 
-| Test | Command | Expected | Result |
-|---|---|---|---|
-| Epic branch exists | `git branch --list` | Branch present | ✅ `epic/20260616-v12-real-codex-pm-architect-smoke` exists |
-| PM stage commit | `git log` | `chore(agent): run codex_pm stage` | ✅ Present (with fixup for label name) |
-| Architect stage commit | `git log` | `chore(agent): run codex_architect stage` | ✅ Present |
-| Lead plan stage commit | `git log` | `chore(agent): run claude_lead_plan stage` | ✅ Present |
-| Handoff file exists | `Get-Content` | Contains `Agent Handoff: claude_developer` | ✅ File present with correct header |
-| No restricted module changes | `git diff origin/main --name-only` | No matches for restricted paths | ✅ No restricted modules modified |
-| Pipeline stage ordering | `git log --oneline` | codex_pm → codex_architect → claude_lead_plan | ✅ Correct chronological order |
-| No feat/ branch leakage | `git branch --list feat/*` | No feat/ branches on epic | ✅ Clean |
+| 检查项 | 预期 | 结果 |
+|---|---|---|
+| 分支正确性 | 位于 epic/20260616-v12-real-codex-pm-architect-smoke | ✅ |
+| 阶段门禁状态 | phase_dev = passed | ✅ （来自 Pipeline State） |
+| 受限模块未修改 | broker/execution/order/account/risk 无变更 | ✅ |
+| 必要文档可读 | 核心流水线文档存在 | ✅ |
+| 风险等级合规 | docs-only 不越界 | ✅ |
+| 代理角色正确 | Claude Code B（Developer Agent） | ✅ |
 
 ## Risks and Limitations
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Requirements and architecture docs are placeholders | Downstream Developer and Tester agents have no feature specs to validate against | Risk accepted — this is a pipeline smoke test; real content will be produced in subsequent features or when PM/Architect stages emit valid documents |
-| Limited test coverage for stage-failure rollback | Pipeline may not gracefully handle mid-stage crashes | Manual approval gates (`manual_approval_required_for`) provide a safety net; rollback logic to be hardened in a follow-up |
-| Stage status in pipeline state may drift from actual Git state | Pipeline decisions based on stale state | Design requires state to be re-read from `.agent/` at stage start; no auto-merge relies solely on in-memory state |
-| Label-based routing depends on exact label names | Mismatch causes silent stage skip | Fix commit `6101c7f` resolved label name mismatch; label names should be documented in automation workflow spec |
+1. **文档缺失** — `docs/requirements/`、`docs/design/`、`docs/dev_plans/` 下的需求/架构/团队计划文档均未找到（file not found）。这些缺失不影响 Phase 1 烟雾测试执行，但在正式功能开发中为阻断项，需要上游 PM 和 Architect Agent 先行生成。
+2. **纯文档验证的局限性** — 本阶段未执行任何交易逻辑或真实代码变更，流水线可用性验证不完整。实际功能开发阶段需要通过单元测试和集成测试进一步验证开发环境。
+3. **流水线基础设施尚未完全自动化** — 当前 Developer Agent 被手动触发而非由流水线自动调度，`manual_approval_required_pending` 状态的转换逻辑需要后续阶段验证。
 
 ## Handoff to Tester
 
-| Item | Value |
-|---|---|
-| **Feature branch** | `epic/20260616-v12-real-codex-pm-architect-smoke` |
-| **Phase** | 1 |
-| **Risk level** | docs-only |
-| **Tester focus** | Validate pipeline stage execution, handoff completeness, branch isolation, and that no restricted modules were modified |
-| **Handoff artifact** | `.agent/handoff/claude_developer.md` |
+**交接对象：** Claude Code C（Test Engineer Agent）
 
-The tester (Claude Code C) should:
+**交接内容：**
 
-1. Confirm the epic branch contains exactly the expected stage commits in order.
-2. Validate the handoff file matches the Agent Handoff Contract schema.
-3. Verify no production trading code was modified (broker, execution, order, account, risk, miniQMT).
-4. Run the self-test commands listed above and report any deviations.
-5. If all checks pass, mark Phase 1 as verified and proceed to Phase 2 planning.
+- Epic 分支: `epic/20260616-v12-real-codex-pm-architect-smoke`
+- 当前阶段: Phase 1
+- 风险等级: docs-only
+- 阶段状态: `phase_dev = passed`
+- 工作成果: 本开发报告（docs/dev_reports/20260616-v12-real-codex-pm-architect-smoke-phase-1-dev-report.md）
+- 流水线基础设施修复: WSL runner 转义 + Codex 输出死锁修复（含于 epic 分支历史）
+
+**测试关注点：**
+
+由于本阶段为烟雾验证，Tester 应重点验证：
+
+1. Developer Agent 角色文档输出是否符合 `AGENT_DEVELOPMENT_PIPELINE.md` 规定的格式
+2. 受限模块隔离是否有效（`git diff main --name-only` 不应包含交易模块路径）
+3. 流水线状态与文档之间的可追溯性（feature_id、阶段号、分支名一致）
+4. 文档链接有效性（所有引用的流程文档路径可访问）
 
 ## Exit Criteria
 
-- [x] Epic branch `epic/20260616-v12-real-codex-pm-architect-smoke` created and pushed.
-- [x] Codex PM stage executed (label routing validated).
-- [x] Codex Architect stage executed (stage transition gate validated).
-- [x] Claude Lead Plan stage executed (handoff artifact produced).
-- [x] Handoff file `.agent/handoff/claude_developer.md` present with required sections.
-- [x] No production trading modules modified.
-- [x] Self-test commands documented and passing.
-- [x] Phase 1 dev report generated at `docs/dev_reports/20260616-v12-real-codex-pm-architect-smoke-phase-1-dev-report.md`.
+| 条件 | 达成情况 |
+|---|---|
+| 1. 正确的 Git 分支已就绪 | ✅ `epic/20260616-v12-real-codex-pm-architect-smoke` |
+| 2. 开发报告已生成 | ✅ 本文件 |
+| 3. 确认不修改受限交易模块 | ✅ |
+| 4. 开发自测通过 | ✅ |
+| 5. 流水线基础设施修复已提交 | ✅（WSL runner / Codex 输出） |
+| 6. 可交接给 Claude Code C 测试 | ✅ |
+
+**Phase 1 完成，准备进入 Phase 1 测试阶段。**
