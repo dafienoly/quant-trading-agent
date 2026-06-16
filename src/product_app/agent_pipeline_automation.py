@@ -572,9 +572,9 @@ def sync_state_from_gates(root: Path, *, dry_run: bool = False) -> dict[str, Any
 
     current_stage = state.get("current_stage", "")
     if current_stage != expected_pending:
+        old_display = current_stage if current_stage else "(unset)"
         state["current_stage"] = expected_pending
-        if current_stage:
-            changes.append(f"current_stage {current_stage!r} \u2192 {expected_pending!r}")
+        changes.append(f"current_stage {old_display} \u2192 {expected_pending!r}")
 
     # 3. Update team_pipeline.all_phases_tested
     tp = dict(state.get("team_pipeline", {}))
