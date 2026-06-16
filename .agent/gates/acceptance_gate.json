@@ -41,6 +41,7 @@
   "reasons": [
     "all_required_reports_found"
   ],
-  "decision": "ACCEPTED_WITH_NOTES",
+  "invalid": {},
+  "decision": "ACCEPTED",
   "acceptance_artifact": "docs\\acceptance\\2026-06-16-v12-real-codex-pm-architect-smoke-acceptance.md"
 }
