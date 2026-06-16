@@ -77,7 +77,20 @@ def cmd_check_gates(args: argparse.Namespace) -> int:
         return 2
     result = check_required_reports(root, feature_id=feature_id, through_stage=args.through_stage)
     payload = result.__dict__
-    write_json(root / ".agent" / "gates" / f"{args.through_stage}_gate.json", payload)
+    # Preserve decision / acceptance_artifact from an existing gate file
+    # (written by the real Codex acceptance wrapper) so the gate metadata
+    # is not overwritten by the glob-based check.
+    gate_path = root / ".agent" / "gates" / f"{args.through_stage}_gate.json"
+    if gate_path.exists():
+        try:
+            existing = json.loads(gate_path.read_text(encoding="utf-8"))
+            if existing.get("decision"):
+                payload["decision"] = existing["decision"]
+            if existing.get("acceptance_artifact"):
+                payload["acceptance_artifact"] = existing["acceptance_artifact"]
+        except (json.JSONDecodeError, OSError):
+            pass
+    write_json(gate_path, payload)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if result.passed else 2
 

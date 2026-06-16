@@ -663,7 +663,7 @@ def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
     if stage == "codex_reviewer":
         return common + f"""\nTask:\n- Act as Codex B, the final Architect Reviewer.\n- Review code only after `{docs.get('claude_lead_review', '<claude-lead-review>')}` confirms all phases passed.\n- Produce `{docs.get('codex_review', '<codex-review>')}`.\n- Conclusion must be APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED.\n- If review fails, return structured feedback to Claude Code A. After {max_attempts} failed Codex reviews, trigger the team incompetence alert and postmortem gate.\n"""
     if stage == "codex_acceptance":
-        return common + f"""\nTask:\n- Perform PM acceptance from the user perspective.\n- Produce `{docs.get('acceptance', '<acceptance-report>')}`.\n- Conclusion must be ACCEPTED, ACCEPTED_WITH_FOLLOWUPS, or REJECTED.\n"""
+        return common + f"""\nTask:\n- Perform PM acceptance from the user perspective.\n- Produce `{docs.get('acceptance', '<acceptance-report>')}`.\n- Conclusion must be one of: ACCEPTED, ACCEPTED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED.\n- ACCEPTED_WITH_NOTES is acceptable only for non-blocking notes.\n- CHANGES_REQUESTED or BLOCKED must fail the acceptance gate.\n"""
     if stage == "bugfix":
         return common + """\nTask:\n- Read the test/review/acceptance failure report and feedback bugs.\n- Work in an isolated `bugfix/<bug-id>-<timestamp>` branch/worktree.\n- Add regression tests before fixing.\n- Do not merge to main without the merge gate.\n"""
     if stage == "postmortem":
