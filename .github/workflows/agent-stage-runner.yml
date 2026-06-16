@@ -54,7 +54,7 @@ jobs:
         github.event_name == 'pull_request' &&
         github.event.action == 'labeled' &&
         startsWith(github.event.pull_request.head.ref, 'epic/') &&
-        contains(fromJson('["stage:codex-pm-pending","stage:codex-architect-pending","stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
+        contains(fromJson('["stage:pm-pending","stage:arch-pending","stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
       )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
@@ -78,8 +78,8 @@ jobs:
           $label = "${{ github.event.label.name || '' }}"
           if (-not $stage) {
             switch ($label) {
-              "stage:codex-pm-pending" { $stage = "codex_pm" }
-              "stage:codex-architect-pending" { $stage = "codex_architect" }
+              "stage:pm-pending" { $stage = "codex_pm" }
+              "stage:arch-pending" { $stage = "codex_architect" }
               "stage:team-plan-pending" { $stage = "claude_lead_plan" }
               "stage:team-dev-pending" { $stage = "claude_developer" }
               "stage:team-test-pending" { $stage = "claude_tester" }
@@ -247,12 +247,12 @@ jobs:
 
           switch ($env:STAGE) {
             "codex_pm" {
-              Remove-CurrentLabel "stage:codex-pm-pending"
-              Add-NextLabel "stage:codex-architect-pending"
+              Remove-CurrentLabel "stage:pm-pending"
+              Add-NextLabel "stage:arch-pending"
               $nextStage = "codex_architect"
             }
             "codex_architect" {
-              Remove-CurrentLabel "stage:codex-architect-pending"
+              Remove-CurrentLabel "stage:arch-pending"
               Add-NextLabel "stage:team-plan-pending"
               $nextStage = "claude_lead_plan"
             }
