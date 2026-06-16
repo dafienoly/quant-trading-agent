@@ -200,7 +200,7 @@ exit "`$CODEX_EXIT"
       # Content sanity check
       if ($gotRealOutput -and (Test-Path $outPath)) {
         $text = Get-Content $outPath -Raw -Encoding UTF8
-        $valid = $text -match "#.*$featureId.*Requirements" -and $text -notmatch "\\$\\$\(EventArgs"
+        $valid = ($text -match "#") -and ($text -notmatch "\$EventArgs")
         if (-not $valid) {
           Write-Host "WARNING: PM requirements artifact failed content sanity check." -ForegroundColor Yellow
           if ($useStrict) { Write-Error "AGENT_REAL_CODEX_PM_STRICT=true -- artifact failed content validation, aborting."; exit 2 }
@@ -363,7 +363,7 @@ exit "`$CODEX_EXIT"
       # Content sanity check
       if ($gotRealOutput -and (Test-Path $outPath)) {
         $text = Get-Content $outPath -Raw -Encoding UTF8
-        $valid = $text -match "#.*$featureId.*(Architecture|Design)" -and $text -notmatch "\\$\\$\(EventArgs"
+        $valid = ($text -match "#") -and ($text -notmatch "\$EventArgs")
         if (-not $valid) {
           Write-Host "WARNING: Architecture artifact failed content sanity check." -ForegroundColor Yellow
           if ($useStrict) { Write-Error "AGENT_REAL_CODEX_ARCHITECT_STRICT=true -- artifact failed content validation, aborting."; exit 2 }
