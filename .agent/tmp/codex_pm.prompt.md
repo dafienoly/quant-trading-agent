@@ -1,3 +1,38 @@
+Generate a requirements document in Markdown format. Output ONLY the raw Markdown content to stdout \u2014 do NOT write any file, do NOT use any tools, do NOT include conversational text, greetings, or meta-commentary.
+
+## Context
+
+### Current Stage
+codex_pm \u2014 You are Codex A (PM Agent). You must produce the project requirements document.
+
+### Feature ID
+v12-real-codex-pm-architect-smoke
+
+### Handoff Content
+
+# Agent Handoff: codex_pm
+
+Feature: v12-real-codex-pm-architect-smoke
+Title: V12 real Codex PM and Architect smoke
+Epic branch: epic/20260616-v12-real-codex-pm-architect-smoke
+Risk level: docs-only
+
+Required read order:
+1. AGENTS.md
+2. docs/process/AGENT_DEVELOPMENT_PIPELINE.md
+3. docs/process/BRANCH_WORKFLOW.md
+4. docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md
+5. docs/pipeline/AUTO_MERGE_POLICY.md
+
+Task:
+- Act as Codex A, the PM Agent.
+- Produce the PM requirements document at `docs/requirements/20260616-v12-real-codex-pm-architect-smoke-requirements.md`.
+- Include goals, non-goals, feature list, acceptance criteria, safety constraints, and user-facing success criteria.
+- Do not write architecture or product code in this stage.
+
+
+### Pipeline State
+
 {
   "feature_id": "v12-real-codex-pm-architect-smoke",
   "title": "V12 real Codex PM and Architect smoke",
@@ -5,7 +40,7 @@
   "issue_number": 50,
   "issue_url": "https://github.com/dafienoly/quant-trading-agent/pull/50",
   "epic_branch": "epic/20260616-v12-real-codex-pm-architect-smoke",
-  "current_stage": "manual_approval_required_pending",
+  "current_stage": "merge_gate_pending",
   "created_at": "2026-06-16T12:26:50.013190+00:00",
   "required_docs": {
     "requirements": "docs/requirements/20260616-v12-real-codex-pm-architect-smoke-requirements.md",
@@ -68,3 +103,23 @@
     "acceptance": "passed"
   }
 }
+
+
+### Output Format
+
+The requirements document MUST contain these sections (in order):
+
+# v12-real-codex-pm-architect-smoke Requirements
+## User Goal
+## Functional Requirements
+## Non-functional Requirements
+## Acceptance Criteria
+## Safety Constraints
+
+### Important Notes
+
+- You are Codex A (PM Agent) \u2014 NOT a developer, architect, or reviewer.
+- Do NOT modify production code or trading-sensitive modules.
+- The target output path is: docs\requirements\2026-06-16-v12-real-codex-pm-architect-smoke-requirements.md
+
+REMINDER: Output ONLY the raw markdown. No conversation. No tool use. No file writing.

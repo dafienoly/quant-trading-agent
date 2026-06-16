@@ -12,5 +12,6 @@
   },
   "reasons": [
     "all_required_reports_found"
-  ]
+  ],
+  "invalid": {}
 }
