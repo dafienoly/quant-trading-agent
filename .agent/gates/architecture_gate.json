@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "feature_id": "v12-real-codex-pm-architect-smoke",
+  "checked_stages": [
+    "pm",
+    "architecture"
+  ],
+  "missing": {},
+  "found": {
+    "pm": [
+      "docs\\requirements\\2026-06-16-v12-real-codex-pm-architect-smoke-requirements.md"
+    ],
+    "architecture": [
+      "docs\\design\\2026-06-16-v12-real-codex-pm-architect-smoke-architecture.md"
+    ]
+  },
+  "reasons": [
+    "all_required_reports_found"
+  ]
+}
