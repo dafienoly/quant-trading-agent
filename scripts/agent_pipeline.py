@@ -18,6 +18,7 @@ from src.product_app.agent_pipeline_automation import (  # noqa: E402
     check_required_reports,
     check_state_gate_consistency,
     classify_changed_files,
+    normalize_gate_decision,
     read_state,
     sync_state_from_gates,
     write_feature_state,
@@ -84,8 +85,10 @@ def cmd_check_gates(args: argparse.Namespace) -> int:
     if gate_path.exists():
         try:
             existing = json.loads(gate_path.read_text(encoding="utf-8"))
-            if existing.get("decision"):
-                payload["decision"] = existing["decision"]
+            raw_decision = existing.get("decision")
+            if raw_decision:
+                normalized = normalize_gate_decision(raw_decision)
+                payload["decision"] = normalized if normalized else raw_decision
             if existing.get("acceptance_artifact"):
                 payload["acceptance_artifact"] = existing["acceptance_artifact"]
         except (json.JSONDecodeError, OSError):

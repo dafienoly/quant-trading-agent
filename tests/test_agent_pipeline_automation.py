@@ -366,3 +366,51 @@ def test_pre_gate_stages_passed_when_downstream_gate_evidence(tmp_path: Path):
     assert passed.get("pm") is True
     assert passed.get("architecture") is True
     assert passed.get("team_plan") is True
+
+
+# ---------------------------------------------------------------------------
+# Gate decision normalization
+# ---------------------------------------------------------------------------
+
+from src.product_app.agent_pipeline_automation import normalize_gate_decision
+
+
+def test_normalize_accepted():
+    assert normalize_gate_decision("accepted") == "ACCEPTED"
+    assert normalize_gate_decision("ACCEPTED") == "ACCEPTED"
+    assert normalize_gate_decision("Accepted") == "ACCEPTED"
+
+
+def test_normalize_accepted_with_notes():
+    assert normalize_gate_decision("accepted_with_notes") == "ACCEPTED_WITH_NOTES"
+    assert normalize_gate_decision("accepted-with-notes") == "ACCEPTED_WITH_NOTES"
+    assert normalize_gate_decision("ACCEPTED_WITH_NOTES") == "ACCEPTED_WITH_NOTES"
+
+
+def test_normalize_changes_requested():
+    assert normalize_gate_decision("changes_requested") == "CHANGES_REQUESTED"
+    assert normalize_gate_decision("changes-requested") == "CHANGES_REQUESTED"
+    assert normalize_gate_decision("CHANGES_REQUESTED") == "CHANGES_REQUESTED"
+
+
+def test_normalize_blocked():
+    assert normalize_gate_decision("blocked") == "BLOCKED"
+    assert normalize_gate_decision("BLOCKED") == "BLOCKED"
+
+
+def test_normalize_approved():
+    assert normalize_gate_decision("approved") == "APPROVED"
+    assert normalize_gate_decision("APPROVED") == "APPROVED"
+
+
+def test_normalize_approved_with_notes():
+    assert normalize_gate_decision("approved_with_notes") == "APPROVED_WITH_NOTES"
+    assert normalize_gate_decision("approved-with-notes") == "APPROVED_WITH_NOTES"
+    assert normalize_gate_decision("APPROVED_WITH_NOTES") == "APPROVED_WITH_NOTES"
+
+
+def test_normalize_unknown_returns_none():
+    assert normalize_gate_decision(None) is None
+    assert normalize_gate_decision("") is None
+    assert normalize_gate_decision("foobar") is None
+    assert normalize_gate_decision("rejected") is None
