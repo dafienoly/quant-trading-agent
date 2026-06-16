@@ -170,6 +170,34 @@ def normalize_path(path: str) -> str:
     return normalized
 
 
+# Canonical gate decision vocabulary.
+# Codex review gate : APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED
+# Acceptance gate    : ACCEPTED, ACCEPTED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED
+_GATE_DECISION_MAP: dict[str, str] = {
+    "accepted": "ACCEPTED",
+    "accepted_with_notes": "ACCEPTED_WITH_NOTES",
+    "accepted-with-notes": "ACCEPTED_WITH_NOTES",
+    "changes_requested": "CHANGES_REQUESTED",
+    "changes-requested": "CHANGES_REQUESTED",
+    "blocked": "BLOCKED",
+    "approved": "APPROVED",
+    "approved_with_notes": "APPROVED_WITH_NOTES",
+    "approved-with-notes": "APPROVED_WITH_NOTES",
+}
+
+
+def normalize_gate_decision(value: str | None) -> str | None:
+    """Normalize a raw decision string to uppercase canonical form.
+
+    Returns ``None`` for unknown or empty values so callers can distinguish
+    ``not-yet-set`` from ``explicitly-accepted``.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    key = value.strip().replace(" ", "_").lower()
+    return _GATE_DECISION_MAP.get(key, None)
+
+
 def slugify_feature(text: str, *, max_length: int = 48) -> str:
     """Create a branch-safe feature slug from an issue title or user text."""
     text = text.strip().lower()
