@@ -140,23 +140,13 @@ jobs:
 
           $cmd = ""
           switch ($env:STAGE) {
-            "codex_pm" {
-              Remove-CurrentLabel "stage:codex-pm-pending"
-              Add-NextLabel "stage:codex-architect-pending"
-              $nextStage = "codex_architect"
-            }
-            "codex_architect" {
-              Remove-CurrentLabel "stage:codex-architect-pending"
-              Add-NextLabel "stage:team-plan-pending"
-              $nextStage = "claude_lead_plan"
-            }
+            "codex_pm" { $cmd = if ($env:CODEX_A_PM_AGENT_COMMAND) { $env:CODEX_A_PM_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
+            "codex_architect" { $cmd = if ($env:CODEX_B_ARCHITECT_AGENT_COMMAND) { $env:CODEX_B_ARCHITECT_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
             "claude_lead_plan" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
             "claude_developer" { $cmd = if ($env:CLAUDE_DEVELOPER_AGENT_COMMAND) { $env:CLAUDE_DEVELOPER_AGENT_COMMAND } else { $env:DEVELOPER_AGENT_COMMAND } }
             "claude_tester" { $cmd = if ($env:CLAUDE_TESTER_AGENT_COMMAND) { $env:CLAUDE_TESTER_AGENT_COMMAND } else { $env:TEST_AGENT_COMMAND } }
             "claude_lead_review" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
             "bugfix" { $cmd = $env:BUGFIX_AGENT_COMMAND }
-            "codex_pm" { $cmd = if ($env:CODEX_A_PM_AGENT_COMMAND) { $env:CODEX_A_PM_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
-            "codex_architect" { $cmd = if ($env:CODEX_B_ARCHITECT_AGENT_COMMAND) { $env:CODEX_B_ARCHITECT_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
             "codex_reviewer" { $cmd = if ($env:CODEX_B_REVIEW_AGENT_COMMAND) { $env:CODEX_B_REVIEW_AGENT_COMMAND } else { $env:REVIEW_AGENT_COMMAND } }
             "codex_acceptance" { $cmd = if ($env:CODEX_A_ACCEPTANCE_AGENT_COMMAND) { $env:CODEX_A_ACCEPTANCE_AGENT_COMMAND } else { $env:ACCEPTANCE_AGENT_COMMAND } }
             "postmortem" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
@@ -180,22 +170,12 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           switch ($env:STAGE) {
-            "codex_pm" {
-              Remove-CurrentLabel "stage:codex-pm-pending"
-              Add-NextLabel "stage:codex-architect-pending"
-              $nextStage = "codex_architect"
-            }
-            "codex_architect" {
-              Remove-CurrentLabel "stage:codex-architect-pending"
-              Add-NextLabel "stage:team-plan-pending"
-              $nextStage = "claude_lead_plan"
-            }
+            "codex_pm" { $gate = "pm" }
+            "codex_architect" { $gate = "architecture" }
             "claude_lead_plan" { $gate = "team_plan" }
             "claude_developer" { $gate = "phase_dev" }
             "claude_tester" { $gate = "phase_test" }
             "claude_lead_review" { $gate = "claude_lead_review" }
-            "codex_pm" { $gate = "pm" }
-            "codex_architect" { $gate = "architecture" }
             "codex_reviewer" { $gate = "codex_review" }
             "codex_acceptance" { $gate = "acceptance" }
             "bugfix" { $gate = "phase_test" }
