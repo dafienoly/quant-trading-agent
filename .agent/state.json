@@ -5,7 +5,7 @@
   "issue_number": 50,
   "issue_url": "https://github.com/dafienoly/quant-trading-agent/pull/50",
   "epic_branch": "epic/20260616-v12-real-codex-pm-architect-smoke",
-  "current_stage": "acceptance_pending",
+  "current_stage": "merge_gate_pending",
   "created_at": "2026-06-16T12:26:50.013190+00:00",
   "required_docs": {
     "requirements": "docs/requirements/20260616-v12-real-codex-pm-architect-smoke-requirements.md",
@@ -65,6 +65,6 @@
     "phase_test": "passed",
     "claude_lead_review": "passed",
     "codex_review": "passed",
-    "acceptance": "pending"
+    "acceptance": "passed"
   }
 }
