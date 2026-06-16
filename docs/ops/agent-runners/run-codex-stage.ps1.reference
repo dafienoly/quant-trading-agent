@@ -359,7 +359,7 @@ switch ($Stage) {
         } elseif ($gateName -eq "team_plan_gate.json") {
           # team_plan_gate is not present as standalone; team_plan is verified via other gates
           $teamPlanSource = if ($manifest.artifacts["team_plan"]) { $manifest.artifacts["team_plan"].source } else { "unknown" }
-          $promptLines += "$gateName: not present as standalone gate file"
+          $promptLines += "$($gateName): not present as standalone gate file"
           $promptLines += "team_plan artifact: verified via $teamPlanSource"
         } else {
           $promptLines += "($gateName not found)"
