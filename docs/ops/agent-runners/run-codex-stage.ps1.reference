@@ -197,7 +197,7 @@ function Invoke-CodexWslFileRunner {
   $runnerScript = @"
 #!/usr/bin/env bash
 set -u
-mkdir -p "$(dirname "$wslStdoutPath")"
+mkdir -p "$wslWorkspace/.agent/tmp"
 : > "$wslStdoutPath"
 : > "$wslStderrPath"
 rm -f "$wslOutputPath" "$wslExitcodePath"
