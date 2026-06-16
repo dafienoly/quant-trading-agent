@@ -116,6 +116,8 @@ jobs:
           }
           python scripts/agent_pipeline.py check-gates @argsList
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py sync-state-from-gates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Classify auto-main eligibility
         id: classify
