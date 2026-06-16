@@ -351,6 +351,189 @@ def check_required_reports(
     )
 
 
+
+# ---------------------------------------------------------------------------
+# Pipeline state / gate consistency
+# ---------------------------------------------------------------------------
+
+GATE_FILES_BY_STAGE: dict[str, list[str]] = {
+    "phase_dev": ["phase_dev_gate.json"],
+    "phase_test": ["phase_test_gate.json"],
+    "claude_lead_review": ["claude_lead_review_gate.json"],
+    "codex_review": ["codex_review_gate.json"],
+    "acceptance": ["acceptance_gate.json"],
+}
+
+GATES_DIR = PIPELINE_ROOT / "gates"
+
+
+def _read_gate(root: Path, gate_name: str) -> dict[str, Any] | None:
+    """Read a single gate JSON, return None if missing or unparseable."""
+    path = root / GATES_DIR / gate_name
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _infer_passed_stages_from_gates(root: Path) -> dict[str, bool]:
+    """Infer which stages have passed based on gate found/passed evidence.
+
+    A stage is considered passed when its gate file exists, passed==true,
+    and found contains at least one path.
+    """
+    passed: dict[str, bool] = {}
+    for stage_key, gate_names in GATE_FILES_BY_STAGE.items():
+        for gname in gate_names:
+            gate = _read_gate(root, gname)
+            if gate is not None and gate.get("passed") is True and gate.get("found"):
+                passed[stage_key] = True
+                break
+        else:
+            passed[stage_key] = False
+    return passed
+
+
+def _find_latest_active_stage(passed_stages: dict[str, bool]) -> str:
+    """Return the first stage that has NOT passed, or the last stage if all passed."""
+    for stage in STAGE_ORDER:
+        if stage not in passed_stages or not passed_stages.get(stage):
+            return stage
+    return STAGE_ORDER[-1]
+
+
+def check_state_gate_consistency(root: Path) -> dict[str, Any]:
+    """Compare .agent/state.json/.agent/current_task.yaml with gate evidence.
+
+    Returns a diagnostics dict with:
+    - consistent (bool)
+    - issues (list of strings)
+    - passed_stages (dict)
+    - stale_fields (dict of current values vs expected)
+    """
+    state = read_state(root)
+    passed_stages = _infer_passed_stages_from_gates(root)
+    issues: list[str] = []
+    stale: dict[str, Any] = {}
+
+    # 1. Compare stage_status entries
+    stage_status = state.get("stage_status", {})
+    for stage_key, is_passed in passed_stages.items():
+        current = stage_status.get(stage_key, "unknown")
+        if is_passed and current != "passed":
+            issues.append(f"stage_status.{stage_key}: gate=passed but state={current!r}")
+            stale[f"stage_status.{stage_key}"] = {"current": current, "expected": "passed"}
+
+    # 2. Compare current_stage
+    current_stage = state.get("current_stage", "")
+    cs_base = current_stage.replace("_pending", "").replace("_in_progress", "")
+    expected_stage = _find_latest_active_stage(passed_stages)
+    if passed_stages.get(expected_stage):
+        try:
+            idx = STAGE_ORDER.index(expected_stage)
+            next_stages = STAGE_ORDER[idx + 1:] if idx + 1 < len(STAGE_ORDER) else [STAGE_ORDER[-1]]
+        except ValueError:
+            next_stages = [expected_stage]
+        expected_label = next_stages[0] if next_stages else expected_stage
+    else:
+        expected_label = expected_stage
+    expected_pending = f"{expected_label}_pending"
+
+    if cs_base != expected_label and any(passed_stages.values()):
+        issues.append(f"current_stage: state={current_stage!r} but gates imply latest={expected_pending!r}")
+        stale["current_stage"] = {"current": current_stage, "expected": expected_pending}
+
+    # 3. team_pipeline.all_phases_tested
+    tp = state.get("team_pipeline", {})
+    phases_tested = tp.get("all_phases_tested", False)
+    pt_passed = passed_stages.get("phase_test", False)
+    if pt_passed and not phases_tested:
+        issues.append("team_pipeline.all_phases_tested: gate phase_test passed but state is false")
+        stale["team_pipeline.all_phases_tested"] = {"current": phases_tested, "expected": True}
+    if not pt_passed and phases_tested:
+        issues.append("team_pipeline.all_phases_tested: gate phase_test not passed but state is true")
+
+    return {
+        "consistent": len(issues) == 0,
+        "issues": issues,
+        "passed_stages": passed_stages,
+        "stale_fields": stale,
+    }
+
+
+def sync_state_from_gates(root: Path, *, dry_run: bool = False) -> dict[str, Any]:
+    """Update .agent/state.json and .agent/current_task.yaml from gate truth.
+
+    Returns a report dict with:
+    - updated (bool)
+    - changes_made (list of strings)
+    - diagnostics (from check_state_gate_consistency)
+    """
+    diagnostics = check_state_gate_consistency(root)
+    state = read_state(root)
+
+    if diagnostics["consistent"]:
+        return {"updated": False, "changes_made": [], "diagnostics": diagnostics}
+
+    changes: list[str] = []
+    state = dict(state)  # mutable copy
+
+    passed_stages = diagnostics["passed_stages"]
+
+    # 1. Update stage_status
+    stage_status = dict(state.get("stage_status", {}))
+    for stage_key, is_passed in passed_stages.items():
+        if is_passed and stage_status.get(stage_key, "") != "passed":
+            stage_status[stage_key] = "passed"
+            changes.append(f"stage_status.{stage_key} \u2192 passed")
+    state["stage_status"] = stage_status
+
+    # 2. Update current_stage
+    expected_stage = _find_latest_active_stage(passed_stages)
+    if passed_stages.get(expected_stage):
+        try:
+            idx = STAGE_ORDER.index(expected_stage)
+            next_stages = STAGE_ORDER[idx + 1:] if idx + 1 < len(STAGE_ORDER) else [STAGE_ORDER[-1]]
+        except ValueError:
+            next_stages = [expected_stage]
+        expected_label = next_stages[0] if next_stages else expected_stage
+    else:
+        expected_label = expected_stage
+    expected_pending = f"{expected_label}_pending"
+
+    current_stage = state.get("current_stage", "")
+    cs_base = current_stage.replace("_pending", "").replace("_in_progress", "")
+    if cs_base != expected_label and any(passed_stages.values()):
+        state["current_stage"] = expected_pending
+        if current_stage != expected_pending:
+            changes.append(f"current_stage {current_stage!r} \u2192 {expected_pending!r}")
+
+    # 3. Update team_pipeline.all_phases_tested
+    tp = dict(state.get("team_pipeline", {}))
+    pt_passed = passed_stages.get("phase_test", False)
+    if pt_passed and not tp.get("all_phases_tested", False):
+        tp["all_phases_tested"] = True
+        changes.append("team_pipeline.all_phases_tested \u2192 true")
+    state["team_pipeline"] = tp
+
+    if not changes:
+        return {"updated": False, "changes_made": [], "diagnostics": diagnostics}
+
+    if not dry_run:
+        write_json(root / STATE_PATH, state)
+        (root / CURRENT_TASK_PATH).write_text(
+            yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8"
+        )
+
+    return {
+        "updated": True,
+        "changes_made": changes,
+        "diagnostics": diagnostics,
+    }
+
+
 def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
     legacy_stage_map = {
         "pm_architect": "codex_pm",
