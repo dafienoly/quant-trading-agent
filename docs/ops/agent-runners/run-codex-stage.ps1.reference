@@ -150,7 +150,7 @@ exit "`$CODEX_EXIT"
 "@
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
       [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
-      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\', '/'
+      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
       # Ensure .agent/tmp directory exists for Codex output file
       New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
@@ -315,7 +315,7 @@ exit "`$CODEX_EXIT"
 "@
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
       [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
-      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\', '/'
+      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
       # Ensure .agent/tmp directory exists for Codex output file
       New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
@@ -708,7 +708,7 @@ exit "`$CODEX_EXIT"
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
       [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
 
-      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\', '/'
+      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
       # Ensure .agent/tmp directory exists for Codex output file
       New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
@@ -1157,7 +1157,7 @@ exit "`$CODEX_EXIT"
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
       [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
 
-      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\', '/'
+      $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
       # Ensure .agent/tmp directory exists for Codex output file
       New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
