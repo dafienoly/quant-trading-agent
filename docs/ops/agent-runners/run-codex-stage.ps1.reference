@@ -401,7 +401,7 @@ switch ($Stage) {
       $promptLines += "- Do NOT claim an artifact is missing if it is listed as exists=true in the manifest."
       $promptLines += "- If there is a conflict between guessed paths and gate found paths, trust gate found paths."
       $promptLines += "- For 'Safety Review', state: 'No production trading modules were modified. No broker / execution / order / account / risk / miniQMT / live trading code was changed. No real order submission behavior was introduced. Merge Gate and manual approval remain enforced.'"
-      $promptLines += "- For 'Handoff to Acceptance', state: 'Codex acceptance remains mock in V10. Acceptance should verify required artifacts and gates only. No auto-merge should occur. Manual approval remains required.'"
+      $promptLines += "- For 'Handoff to Acceptance', state: 'If AGENT_REAL_CODEX_ACCEPTANCE=true, Codex acceptance is real in V11 and must verify upstream artifacts, gates, state/gate consistency, and acceptance criteria using the Resolved Acceptance Manifest. If AGENT_REAL_CODEX_ACCEPTANCE_STRICT=true, real Codex failure must fail the acceptance stage without mock fallback. If acceptance is not enabled and strict is false, mock fallback is allowed only as explicit smoke fallback logged clearly. No auto-merge should occur. Manual approval remains required.'"
       $promptLines += "- The target output path is: $outPath"
       $promptLines += ""
       $promptLines += "REMINDER: Output ONLY the raw markdown. No conversation. No tool use. No file writing."
@@ -625,6 +625,16 @@ exit "`$CODEX_EXIT"
     $useReal = $env:AGENT_REAL_CODEX_ACCEPTANCE -eq "true"
     $useStrict = $env:AGENT_REAL_CODEX_ACCEPTANCE_STRICT -eq "true"
     if ($useReal -or $useStrict) {
+      # Sync state metadata from gates before acceptance, so the prompt
+      # does not see stale stage_status / current_stage values.
+      Write-Host "Syncing pipeline state from gates before acceptance..."
+      python scripts/agent_pipeline.py sync-state-from-gates
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "State sync OK."
+      } else {
+        Write-Host "WARNING: sync-state-from-gates reported issues (non-fatal)."
+      }
+      python scripts/agent_pipeline.py check-state-gate-consistency
       # ----------------------------------------------------------------
       # Acceptance Artifact Manifest Resolver
       # Priority: gate JSON found fields > state.json required_docs > glob
