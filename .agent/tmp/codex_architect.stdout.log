@@ -1,3 +1,6 @@
+Using Codex: /home/ly/.nvm/versions/node/v22.16.0/bin/codex
+codex-cli 0.137.0
+Running Codex codex_architect with 20m timeout...
 # v12-real-codex-pm-architect-smoke Architecture
 
 ## Architecture Summary
@@ -302,3 +305,4 @@ Completion criteria for this architecture stage:
 - The document includes module boundaries, phase slices, technical decisions, pseudocode, test strategy, and handoff guidance for Claude Team A/B/C.
 - The document explicitly records the path-format inconsistency handling rule.
 - The document does not define or imply any production trading behavior.
+OUTPUT_FILE: /mnt/d/actions-runner/_work/quant-trading-agent/quant-trading-agent/.agent/tmp/codex_architect.output.md
