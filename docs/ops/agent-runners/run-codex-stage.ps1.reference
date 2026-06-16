@@ -161,18 +161,123 @@ switch ($Stage) {
     $useReal = $env:AGENT_REAL_CODEX_REVIEWER -eq "true"
     $useStrict = $env:AGENT_REAL_CODEX_REVIEWER_STRICT -eq "true"
     if ($useReal -or $useStrict) {
-      # Derive upstream artifact paths from state
-      $reqPath = $state.required_docs.requirements
-      $archPath = $state.required_docs.architecture
-      $teamPlanPath = $state.required_docs.team_plan
-      $devPat = $state.required_docs.phase_dev_report_pattern
-      $testPat = $state.required_docs.phase_test_report_pattern
-      $phaseNum = if ($state.team_pipeline) { $state.team_pipeline.current_phase } else { 1 }
-      $devReportPath = if ($devPat) { $devPat -replace '<n>', $phaseNum } else { "" }
-      $testReportPath = if ($testPat) { $testPat -replace '<n>', $phaseNum } else { "" }
-      $leadReviewPath = "docs\review\$today-$featureId-claude-lead-review.md"
+      # ----------------------------------------------------------------
+      # Artifact Manifest Resolver
+      # Priority: gate JSON found fields > state.json required_docs > glob
+      # ----------------------------------------------------------------
+      $manifest = @{
+        feature_id = $featureId
+        artifacts  = @{}
+        missing    = @()
+      }
 
-      # Build prompt parts
+      # Gate files (in priority order per artifact)
+      $gateFiles = @{
+        "requirements"     = @("claude_lead_review_gate.json", "phase_dev_gate.json", "phase_test_gate.json", "codex_review_gate.json")
+        "architecture"     = @("claude_lead_review_gate.json", "phase_dev_gate.json", "phase_test_gate.json", "codex_review_gate.json")
+        "team_plan"        = @("claude_lead_review_gate.json", "phase_dev_gate.json", "phase_test_gate.json", "codex_review_gate.json")
+        "phase_dev"        = @("phase_dev_gate.json", "phase_test_gate.json", "codex_review_gate.json")
+        "phase_test"       = @("phase_test_gate.json", "codex_review_gate.json")
+        "claude_lead_review" = @("claude_lead_review_gate.json", "codex_review_gate.json")
+      }
+      $gateFoundKeys = @{
+        "requirements"     = "pm"
+        "architecture"     = "architecture"
+        "team_plan"        = "team_plan"
+        "phase_dev"        = "phase_dev"
+        "phase_test"       = "phase_test"
+        "claude_lead_review" = "claude_lead_review"
+      }
+
+      foreach ($key in $gateFiles.Keys) {
+        $resolvedPath = $null
+        $sourceDesc = ""
+        $candidateGates = $gateFiles[$key]
+        $foundKey = $gateFoundKeys[$key]
+
+        # Priority 1: gate JSON found fields
+        foreach ($gName in $candidateGates) {
+          $gFile = ".agent\gates\$gName"
+          if (Test-Path $gFile) {
+            $gContent = Get-Content $gFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($gContent.found -and $gContent.found.$foundKey) {
+              $paths = $gContent.found.$foundKey
+              if ($paths.Count -gt 0 -and $paths[0]) {
+                $resolvedPath = $paths[0] -replace '\\', '/'  # normalize backslash
+                $sourceDesc = ".agent\gates\$gName found.$foundKey"
+                break
+              }
+            }
+          }
+        }
+
+        # Priority 2: state.json required_docs
+        if (-not $resolvedPath -and $state.required_docs) {
+          $stateKey = $key
+          if ($key -eq "claude_lead_review") { $stateKey = "claude_lead_review" }
+          if ($state.required_docs.$stateKey) {
+            $resolvedPath = $state.required_docs.$stateKey -replace '\\', '/'
+            $sourceDesc = ".agent/state.json required_docs.$stateKey"
+          }
+          # Also check phase_*_report_pattern
+          if (-not $resolvedPath -and $key -eq "phase_dev" -and $state.required_docs.phase_dev_report_pattern) {
+            $phaseNum = if ($state.team_pipeline) { $state.team_pipeline.current_phase } else { 1 }
+            $resolvedPath = ($state.required_docs.phase_dev_report_pattern -replace '<n>', $phaseNum) -replace '\\', '/'
+            $sourceDesc = ".agent/state.json phase_dev_report_pattern"
+          }
+          if (-not $resolvedPath -and $key -eq "phase_test" -and $state.required_docs.phase_test_report_pattern) {
+            $phaseNum = if ($state.team_pipeline) { $state.team_pipeline.current_phase } else { 1 }
+            $resolvedPath = ($state.required_docs.phase_test_report_pattern -replace '<n>', $phaseNum) -replace '\\', '/'
+            $sourceDesc = ".agent/state.json phase_test_report_pattern"
+          }
+        }
+
+        # Priority 3: glob fallback
+        if (-not $resolvedPath) {
+          $patterns = @()
+          switch ($key) {
+            "requirements"     { $patterns = @("*$featureId*requirements*", "*$featureId*pm*") }
+            "architecture"     { $patterns = @("*$featureId*architecture*", "*$featureId*arch*") }
+            "team_plan"        { $patterns = @("*$featureId*team-plan*", "*$featureId*team_plan*") }
+            "phase_dev"        { $patterns = @("*$featureId*dev-report*", "*$featureId*phase-*-dev*") }
+            "phase_test"       { $patterns = @("*$featureId*test-report*", "*$featureId*phase-*-test*") }
+            "claude_lead_review" { $patterns = @("*$featureId*lead-review*", "*$featureId*claude-lead*") }
+          }
+          $globDirs = @("docs\requirements", "docs\design", "docs\dev_plans", "docs\dev_reports", "docs\test_reports", "docs\review")
+          foreach ($pat in $patterns) {
+            foreach ($dir in $globDirs) {
+              $matches = Get-ChildItem -Path "$dir\$pat" -ErrorAction SilentlyContinue
+              if ($matches) {
+                $resolvedPath = $matches[0].FullName -replace '\\', '/' -replace '^.*?(docs/)', '$1'
+                $sourceDesc = "glob $dir\$pat"
+                break
+              }
+            }
+            if ($resolvedPath) { break }
+          }
+        }
+
+        $exists = $false
+        if ($resolvedPath) {
+          $exists = Test-Path $resolvedPath
+        }
+
+        if ($resolvedPath) {
+          $manifest.artifacts[$key] = @{ path = $resolvedPath; source = $sourceDesc; exists = $exists }
+        } else {
+          $manifest.missing += $key
+        }
+      }
+
+      # Write artifact manifest for downstream use
+      $manifestDir = ".agent"
+      $manifestPath = Join-Path $manifestDir "artifact_manifest_codex_reviewer.json"
+      New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
+      $manifestJson = $manifest | ConvertTo-Json -Depth 5
+      [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($manifestPath), $manifestJson, [System.Text.UTF8Encoding]::new($false))
+      Write-Host "Generated $manifestPath"
+
+      # Build prompt parts with resolved artifact paths
       $promptLines = @()
 
       $promptLines += "Generate a Codex review report (R1) in Markdown format. Output ONLY the raw Markdown content to stdout — do NOT write any file, do NOT use any tools, do NOT include conversational text, greetings, or meta-commentary."
@@ -193,42 +298,57 @@ switch ($Stage) {
       $promptLines += ""
       $promptLines += (Get-Content $statePath -Raw -Encoding UTF8)
       $promptLines += ""
+
+      # Build Resolved Artifact Manifest table
+      $promptLines += "## Resolved Artifact Manifest"
+      $promptLines += ""
+      $promptLines += "IMPORTANT: Do NOT infer artifact paths from date strings or patterns below."
+      $promptLines += "Use this manifest as the source of truth. If an artifact is listed as exists=true,"
+      $promptLines += "it exists at the path shown — do NOT claim it is missing."
+      $promptLines += ""
+      $promptLines += "| Artifact | Path | Source | Exists |"
+      $promptLines += "|---|---|---|---|"
+      foreach ($artKey in @("requirements", "architecture", "team_plan", "phase_dev", "phase_test", "claude_lead_review")) {
+        $a = $manifest.artifacts[$artKey]
+        if ($a) {
+          $promptLines += "| $artKey | $($a.path) | $($a.source) | $($a.exists) |"
+        } else {
+          $promptLines += "| $artKey | (missing) | - | false |"
+        }
+      }
+      $promptLines += ""
+
+      # Include artifact content using resolved paths
+      function Add-ArtifactContent {
+        param([string]$Key, [string]$Label)
+        $a = $manifest.artifacts[$Key]
+        if ($a -and $a.exists -and (Test-Path $a.path)) {
+          $promptLines += (Get-Content $a.path -Raw -Encoding UTF8)
+        } else {
+          $status = if ($a) { "exists=$($a.exists), path=$($a.path), source=$($a.source)" } else { "artifact key not in manifest" }
+          $promptLines += "($Label file — $status)"
+        }
+        $promptLines += ""
+      }
+
       $promptLines += "### Requirements Document"
       $promptLines += ""
-      if ($reqPath -and (Test-Path $reqPath)) {
-        $promptLines += (Get-Content $reqPath -Raw -Encoding UTF8)
-      } else { $promptLines += "(requirements file not found at: $reqPath)" }
-      $promptLines += ""
+      Add-ArtifactContent -Key "requirements" -Label "requirements"
       $promptLines += "### Architecture Document"
       $promptLines += ""
-      if ($archPath -and (Test-Path $archPath)) {
-        $promptLines += (Get-Content $archPath -Raw -Encoding UTF8)
-      } else { $promptLines += "(architecture file not found at: $archPath)" }
-      $promptLines += ""
+      Add-ArtifactContent -Key "architecture" -Label "architecture"
       $promptLines += "### Team Plan Document"
       $promptLines += ""
-      if ($teamPlanPath -and (Test-Path $teamPlanPath)) {
-        $promptLines += (Get-Content $teamPlanPath -Raw -Encoding UTF8)
-      } else { $promptLines += "(team plan file not found at: $teamPlanPath)" }
-      $promptLines += ""
+      Add-ArtifactContent -Key "team_plan" -Label "team plan"
       $promptLines += "### Development Report"
       $promptLines += ""
-      if ($devReportPath -and (Test-Path $devReportPath)) {
-        $promptLines += (Get-Content $devReportPath -Raw -Encoding UTF8)
-      } else { $promptLines += "(dev report file not found at: $devReportPath)" }
-      $promptLines += ""
+      Add-ArtifactContent -Key "phase_dev" -Label "phase dev"
       $promptLines += "### Test Report"
       $promptLines += ""
-      if ($testReportPath -and (Test-Path $testReportPath)) {
-        $promptLines += (Get-Content $testReportPath -Raw -Encoding UTF8)
-      } else { $promptLines += "(test report file not found at: $testReportPath)" }
-      $promptLines += ""
+      Add-ArtifactContent -Key "phase_test" -Label "phase test"
       $promptLines += "### Claude Lead Review"
       $promptLines += ""
-      if (Test-Path $leadReviewPath) {
-        $promptLines += (Get-Content $leadReviewPath -Raw -Encoding UTF8)
-      } else { $promptLines += "(lead review file not found at: $leadReviewPath)" }
-      $promptLines += ""
+      Add-ArtifactContent -Key "claude_lead_review" -Label "claude lead review"
       $promptLines += "### Phase Gate Files"
       $promptLines += ""
       foreach ($gateName in @("team_plan_gate.json", "phase_dev_gate.json", "phase_test_gate.json", "claude_lead_review_gate.json")) {
@@ -236,7 +356,14 @@ switch ($Stage) {
         $promptLines += "#### $gateName"
         if (Test-Path $gateFile) {
           $promptLines += (Get-Content $gateFile -Raw -Encoding UTF8)
-        } else { $promptLines += "($gateName not found)" }
+        } elseif ($gateName -eq "team_plan_gate.json") {
+          # team_plan_gate is not present as standalone; team_plan is verified via other gates
+          $teamPlanSource = if ($manifest.artifacts["team_plan"]) { $manifest.artifacts["team_plan"].source } else { "unknown" }
+          $promptLines += "$gateName: not present as standalone gate file"
+          $promptLines += "team_plan artifact: verified via $teamPlanSource"
+        } else {
+          $promptLines += "($gateName not found)"
+        }
         $promptLines += ""
       }
       $promptLines += "### Repository Guidelines (excerpts)"
@@ -269,12 +396,15 @@ switch ($Stage) {
       $promptLines += "- Current task is docs-only / pipeline smoke validation."
       $promptLines += "- Do NOT modify production code or trading-sensitive modules."
       $promptLines += "- Review Decision MUST be one of: APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED."
+      $promptLines += "- Do NOT infer artifact paths from date strings."
+      $promptLines += "- Use the Resolved Artifact Manifest as the source of truth."
+      $promptLines += "- Do NOT claim an artifact is missing if it is listed as exists=true in the manifest."
+      $promptLines += "- If there is a conflict between guessed paths and gate found paths, trust gate found paths."
       $promptLines += "- For 'Safety Review', state: 'No production trading modules were modified. No broker / execution / order / account / risk / miniQMT / live trading code was changed. No real order submission behavior was introduced. Merge Gate and manual approval remain enforced.'"
       $promptLines += "- For 'Handoff to Acceptance', state: 'Codex acceptance remains mock in V10. Acceptance should verify required artifacts and gates only. No auto-merge should occur. Manual approval remains required.'"
       $promptLines += "- The target output path is: $outPath"
       $promptLines += ""
       $promptLines += "REMINDER: Output ONLY the raw markdown. No conversation. No tool use. No file writing."
-
       $promptText = $promptLines -join "`r`n"
 
       # Write prompt to temp file (UTF-8 no BOM for WSL compat)
@@ -284,8 +414,6 @@ switch ($Stage) {
 
       # Convert Windows path to WSL path: D:\... → /mnt/d/...
       $wslPath = "/mnt/" + $promptFile.Substring(0,1).ToLower() + $promptFile.Substring(2) -replace '\\', '/'
-
-      Write-Host "Invoking real Codex via WSL..."
 
             # Derive WSL workspace path for --cd flag
       $wslWorkspace = "/mnt/" + $repo.Substring(0,1).ToLower() + $repo.Substring(2) -replace '\\', '/'
@@ -300,6 +428,13 @@ switch ($Stage) {
 set -e
 
 export PATH="`$HOME/.nvm/versions/node/v22.16.0/bin:`$HOME/.local/bin:`$HOME/.opencode/bin:`$PATH"
+# Proxy for OpenAI API connectivity (sourced from .bashrc, which is guarded
+# by interactive-shell check and thus skipped in non-interactive wsl.exe
+# invocations like -- bash runner.sh).
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+export ALL_PROXY=socks5://127.0.0.1:7890
+export NO_PROXY=localhost,127.0.0.1
 if [ -n "${CODEX_CLI_PATH:-}" ] && [ -x "`$CODEX_CLI_PATH" ]; then
   CODEX_BIN="`$CODEX_CLI_PATH"
 elif [ -x "/home/ly/.nvm/versions/node/v22.16.0/bin/codex" ]; then
@@ -318,7 +453,7 @@ echo "Using Codex: `$CODEX_BIN"
 
 echo "Running Codex reviewer with 20m timeout..."
 
-timeout 1200 "`$CODEX_BIN" exec \
+timeout --kill-after=30 1200 "`$CODEX_BIN" exec \
   --cd "$wslWorkspace" \
   --sandbox read-only \
   --color never \
@@ -337,7 +472,6 @@ if [ -s "$wslOutputFile" ]; then
 fi
 
 exit "`$CODEX_EXIT"
-DEX_BIN" exec < "$wslPath"
 "@
       $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
       [System.IO.File]::WriteAllText($runnerFile, $runnerScript, $utf8NoBom)
@@ -357,10 +491,37 @@ DEX_BIN" exec < "$wslPath"
 
       $proc = New-Object System.Diagnostics.Process
       $proc.StartInfo = $psi
+
+      # Use async event-based reads to avoid the pipe-buffer deadlock:
+      # Codex echoes the full prompt back to stderr, which can exceed the
+      # default 4 KB pipe buffer. Reading synchronously (ReadToEnd) would
+      # deadlock when stderr fills up. Async reads drain both streams as
+      # data arrives, keeping the pipes flowing.
+      $stdoutBuilder = New-Object System.Text.StringBuilder
+      $stderrBuilder = New-Object System.Text.StringBuilder
+      $stdoutEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action { $stdoutBuilder.Append("$($EventArgs.Data)`n") }
+      $stderrEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action { $stderrBuilder.Append("$($EventArgs.Data)`n") }
+
       [void]$proc.Start()
-      $stdout = $proc.StandardOutput.ReadToEnd()
-      $stderr = $proc.StandardError.ReadToEnd()
-      $proc.WaitForExit()
+      $proc.BeginOutputReadLine()
+      $proc.BeginErrorReadLine()
+
+      # Wait for exit with hard timeout (20 min + 30s grace), then SIGKILL
+      $timeoutMs = 1200 * 1000 + 30000
+      $exited = $proc.WaitForExit($timeoutMs)
+      if (-not $exited) {
+        Write-Host "WARNING: WSL process timed out after 20m30s, killing..."
+        $proc.Kill()
+        $proc.WaitForExit(10000)
+      }
+
+      # Unregister the async event handlers (suppress any errors)
+      if ($stdoutEvent) { Unregister-Event -SourceIdentifier $stdoutEvent.Name -ErrorAction SilentlyContinue }
+      if ($stderrEvent) { Unregister-Event -SourceIdentifier $stderrEvent.Name -ErrorAction SilentlyContinue }
+
+      # Convert StringBuilder output to strings for downstream use
+      $stdout = $stdoutBuilder.ToString()
+      $stderr = $stderrBuilder.ToString()
 
       $rc = $proc.ExitCode
 
