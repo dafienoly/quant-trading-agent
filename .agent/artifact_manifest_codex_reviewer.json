@@ -1,0 +1,38 @@
+{
+    "feature_id":  "smoke-test-real-codex-reviewer-v10",
+    "missing":  [
+
+                ],
+    "artifacts":  {
+                      "architecture":  {
+                                           "path":  "docs/design/2026-06-15-smoke-test-real-codex-reviewer-v10-architecture.md",
+                                           "source":  ".agent\\gates\\claude_lead_review_gate.json found.architecture",
+                                           "exists":  true
+                                       },
+                      "team_plan":  {
+                                        "path":  "docs/dev_plans/2026-06-15-smoke-test-real-codex-reviewer-v10-team-plan.md",
+                                        "source":  ".agent\\gates\\claude_lead_review_gate.json found.team_plan",
+                                        "exists":  true
+                                    },
+                      "phase_test":  {
+                                         "path":  "docs/test_reports/20260615-smoke-test-real-codex-reviewer-v10-phase-1-test-report.md",
+                                         "source":  ".agent\\gates\\phase_test_gate.json found.phase_test",
+                                         "exists":  true
+                                     },
+                      "phase_dev":  {
+                                        "path":  "docs/dev_reports/20260615-smoke-test-real-codex-reviewer-v10-phase-1-dev-report.md",
+                                        "source":  ".agent\\gates\\phase_dev_gate.json found.phase_dev",
+                                        "exists":  true
+                                    },
+                      "requirements":  {
+                                           "path":  "docs/requirements/2026-06-15-smoke-test-real-codex-reviewer-v10-requirements.md",
+                                           "source":  ".agent\\gates\\claude_lead_review_gate.json found.pm",
+                                           "exists":  true
+                                       },
+                      "claude_lead_review":  {
+                                                 "path":  "docs/review/2026-06-15-smoke-test-real-codex-reviewer-v10-claude-lead-review.md",
+                                                 "source":  ".agent\\gates\\claude_lead_review_gate.json found.claude_lead_review",
+                                                 "exists":  true
+                                             }
+                  }
+}
