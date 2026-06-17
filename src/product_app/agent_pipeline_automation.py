@@ -157,6 +157,7 @@ class GateCheckResult:
     missing: dict[str, list[str]]
     found: dict[str, list[str]]
     reasons: list[str]
+    invalid: dict[str, list[str]] = field(default_factory=dict)
 
 
 def today_slug() -> str:
@@ -354,6 +355,7 @@ def check_required_reports(
     stages = list(STAGE_ORDER[: target_index + 1])
     missing: dict[str, list[str]] = {}
     found: dict[str, list[str]] = {}
+    invalid: dict[str, list[str]] = {}
 
     for stage in stages:
         patterns = REPORT_GLOBS_BY_STAGE[stage]
@@ -364,19 +366,103 @@ def check_required_reports(
             stage_found.extend(matches)
         if stage_found:
             found[stage] = stage_found
+            stage_invalid = _validate_stage_reports(root, stage=stage, paths=stage_found, feature_id=feature_id)
+            if stage_invalid:
+                invalid[stage] = stage_invalid
         else:
             missing[stage] = [pattern.format(feature_id=feature_id) for pattern in patterns]
 
-    passed = not missing
-    reasons = ["all_required_reports_found"] if passed else ["missing_required_stage_reports"]
+    passed = not missing and not invalid
+    reasons: list[str] = []
+    if missing:
+        reasons.append("missing_required_stage_reports")
+    if invalid:
+        reasons.append("invalid_required_stage_reports")
+    if passed:
+        reasons.append("all_required_reports_found")
     return GateCheckResult(
         passed=passed,
         feature_id=feature_id,
         checked_stages=stages,
         missing=missing,
         found=found,
+        invalid=invalid,
         reasons=reasons,
     )
+
+
+def _validate_stage_reports(
+    root: Path,
+    *,
+    stage: str,
+    paths: list[str],
+    feature_id: str,
+) -> list[str]:
+    """Validate content-sensitive gate artifacts for early Codex stages."""
+    if stage not in {"pm", "architecture"}:
+        return []
+
+    invalid: list[str] = []
+    for rel_path in paths:
+        path = root / rel_path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            invalid.append(f"{rel_path}:unreadable:{exc.__class__.__name__}")
+            continue
+        errors = _validate_pm_report(text, feature_id) if stage == "pm" else _validate_architecture_report(text, feature_id)
+        invalid.extend(f"{rel_path}:{error}" for error in errors)
+    return invalid
+
+
+def _validate_pm_report(text: str, feature_id: str) -> list[str]:
+    errors = _validate_common_markdown_artifact(text)
+    required_patterns = [
+        rf"(?m)^#\s+{re.escape(feature_id)}\s+Requirements\s*$",
+        r"(?m)^##\s+User Goal\s*$",
+        r"(?m)^##\s+Functional Requirements\s*$",
+        r"(?m)^##\s+Acceptance Criteria\s*$",
+        r"(?m)^##\s+Safety Constraints\s*$",
+    ]
+    for pattern in required_patterns:
+        if not re.search(pattern, text):
+            errors.append(f"missing_required_heading:{pattern}")
+    return errors
+
+
+def _validate_architecture_report(text: str, feature_id: str) -> list[str]:
+    errors = _validate_common_markdown_artifact(text)
+    if not re.search(rf"(?m)^#\s+{re.escape(feature_id)}\s+(Architecture|Design)\s*$", text):
+        errors.append("missing_architecture_title")
+    required_patterns = [
+        r"(?m)^##\s+Architecture Summary\s*$",
+        r"(?m)^##\s+Module Plan\s*$",
+        r"(?m)^##\s+Technical Decisions\s*$",
+        r"(?m)^##\s+Safety Impact\s*$",
+        r"(?m)^##\s+Development Guidance\s*$",
+    ]
+    for pattern in required_patterns:
+        if not re.search(pattern, text):
+            errors.append(f"missing_required_heading:{pattern}")
+    section_count = len(re.findall(r"(?m)^##\s+\S", text))
+    if section_count < 3:
+        errors.append("architecture_has_too_few_sections")
+    log_only_markers = re.findall(
+        r"(?mi)^(Using Codex|Running Codex|Codex WSL exit|STDOUT:|STDERR:|OUTPUT_FILE:|Process completed|ERROR:)",
+        text,
+    )
+    if log_only_markers and section_count < 3:
+        errors.append("architecture_looks_log_only")
+    return errors
+
+
+def _validate_common_markdown_artifact(text: str) -> list[str]:
+    errors: list[str] = []
+    if not text.strip():
+        errors.append("artifact_empty")
+    if "$($EventArgs.Data)" in text:
+        errors.append("artifact_contains_literal_eventargs_data")
+    return errors
 
 
 

@@ -60,99 +60,405 @@ function Write-Utf8Markdown {
   Write-Host "Generated $Path"
 }
 
+function ConvertTo-WslPath {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$Path
+  )
+  $fullPath = [System.IO.Path]::GetFullPath($Path)
+  if ($fullPath -notmatch '^([A-Za-z]):\\(.*)$') {
+    throw "Cannot convert non-drive path to WSL path: $Path"
+  }
+  $drive = $Matches[1].ToLower()
+  $rest = $Matches[2] -replace '\\', '/'
+  return "/mnt/$drive/$rest"
+}
+
+function Write-Utf8NoBomFile {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$Path,
+    [Parameter(Mandatory=$true)]
+    [string]$Content
+  )
+  $parent = Split-Path -Parent $Path
+  if ($parent) {
+    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+  }
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($Path), $Content, $utf8NoBom)
+}
+
+function Test-CodexMarkdownArtifact {
+  param(
+    [Parameter(Mandatory=$true)]
+    [ValidateSet("pm", "architecture")]
+    [string]$Kind,
+    [Parameter(Mandatory=$true)]
+    [string]$Text,
+    [Parameter(Mandatory=$true)]
+    [string]$FeatureId
+  )
+  $errors = New-Object System.Collections.Generic.List[string]
+  $trimmed = $Text.Trim()
+  if (-not $trimmed) {
+    $errors.Add("artifact_empty")
+  }
+  $eventArgsMarker = '$(' + '$EventArgs.Data)'
+  if ($Text.Contains($eventArgsMarker)) {
+    $errors.Add("artifact_contains_literal_eventargs_data")
+  }
+
+  $escapedFeature = [regex]::Escape($FeatureId)
+  if ($Kind -eq "pm") {
+    $requiredPatterns = @(
+      "(?m)^#\s+$escapedFeature\s+Requirements\s*$",
+      "(?m)^##\s+User Goal\s*$",
+      "(?m)^##\s+Functional Requirements\s*$",
+      "(?m)^##\s+Acceptance Criteria\s*$",
+      "(?m)^##\s+Safety Constraints\s*$"
+    )
+    foreach ($pattern in $requiredPatterns) {
+      if ($Text -notmatch $pattern) {
+        $errors.Add("missing_required_pm_heading:$pattern")
+      }
+    }
+  } else {
+    if ($Text -notmatch "(?m)^#\s+$escapedFeature\s+(Architecture|Design)\s*$") {
+      $errors.Add("missing_architecture_title")
+    }
+    $requiredPatterns = @(
+      "(?m)^##\s+Architecture Summary\s*$",
+      "(?m)^##\s+Module Plan\s*$",
+      "(?m)^##\s+Technical Decisions\s*$",
+      "(?m)^##\s+Safety Impact\s*$",
+      "(?m)^##\s+Development Guidance\s*$"
+    )
+    foreach ($pattern in $requiredPatterns) {
+      if ($Text -notmatch $pattern) {
+        $errors.Add("missing_required_architecture_heading:$pattern")
+      }
+    }
+    $sectionCount = ([regex]::Matches($Text, "(?m)^##\s+\S")).Count
+    if ($sectionCount -lt 3) {
+      $errors.Add("architecture_has_too_few_sections")
+    }
+    $logLineCount = ([regex]::Matches($Text, "(?mi)^(Using Codex|Running Codex|Codex WSL exit|STDOUT:|STDERR:|OUTPUT_FILE:|Process completed|ERROR:)")).Count
+    if ($logLineCount -gt 0 -and $sectionCount -lt 3) {
+      $errors.Add("architecture_looks_log_only")
+    }
+  }
+
+  return [PSCustomObject]@{
+    Valid = ($errors.Count -eq 0)
+    Errors = @($errors)
+  }
+}
+
+function Invoke-CodexWslFileRunner {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$StageName,
+    [Parameter(Mandatory=$true)]
+    [string]$PromptText,
+    [Parameter(Mandatory=$true)]
+    [ValidateSet("pm", "architecture")]
+    [string]$Kind,
+    [Parameter(Mandatory=$true)]
+    [string]$OutPath,
+    [Parameter(Mandatory=$true)]
+    [string]$FeatureId,
+    [Parameter(Mandatory=$true)]
+    [bool]$UseStrict
+  )
+
+  New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
+
+  $promptPath = Join-Path ".agent\tmp" "$StageName.prompt.md"
+  $runnerPath = Join-Path ".agent\tmp" "$StageName.runner.sh"
+  $stdoutPath = Join-Path ".agent\tmp" "$StageName.stdout.log"
+  $stderrPath = Join-Path ".agent\tmp" "$StageName.stderr.log"
+  $outputPath = Join-Path ".agent\tmp" "$StageName.output.md"
+  $exitcodePath = Join-Path ".agent\tmp" "$StageName.exitcode"
+
+  Write-Utf8NoBomFile -Path $promptPath -Content $PromptText
+  foreach ($path in @($stdoutPath, $stderrPath, $outputPath, $exitcodePath)) {
+    Remove-Item $path -Force -ErrorAction SilentlyContinue
+  }
+
+  $wslWorkspace = ConvertTo-WslPath -Path $repo
+  $wslPromptPath = ConvertTo-WslPath -Path $promptPath
+  $wslRunnerPath = ConvertTo-WslPath -Path $runnerPath
+  $wslStdoutPath = ConvertTo-WslPath -Path $stdoutPath
+  $wslStderrPath = ConvertTo-WslPath -Path $stderrPath
+  $wslOutputPath = ConvertTo-WslPath -Path $outputPath
+  $wslExitcodePath = ConvertTo-WslPath -Path $exitcodePath
+
+  $runnerScript = @"
+#!/usr/bin/env bash
+set -u
+mkdir -p "$wslWorkspace/.agent/tmp"
+: > "$wslStdoutPath"
+: > "$wslStderrPath"
+rm -f "$wslOutputPath" "$wslExitcodePath"
+export PATH="`$HOME/.nvm/versions/node/v22.16.0/bin:`$HOME/.local/bin:`$HOME/.opencode/bin:`$PATH"
+export HTTP_PROXY=http://127.0.0.1:7890
+export HTTPS_PROXY=http://127.0.0.1:7890
+export ALL_PROXY=socks5://127.0.0.1:7890
+export NO_PROXY=localhost,127.0.0.1
+if [ -n "${CODEX_CLI_PATH:-}" ] && [ -x "`$CODEX_CLI_PATH" ]; then
+  CODEX_BIN="`$CODEX_CLI_PATH"
+elif [ -x "/home/ly/.nvm/versions/node/v22.16.0/bin/codex" ]; then
+  CODEX_BIN="/home/ly/.nvm/versions/node/v22.16.0/bin/codex"
+else
+  CODEX_BIN="`$(command -v codex || true)"
+fi
+if [ -z "`$CODEX_BIN" ]; then
+  echo "ERROR: codex CLI not found" >> "$wslStderrPath"
+  echo "PATH=`$PATH" >> "$wslStderrPath"
+  echo 127 > "$wslExitcodePath"
+  exit 127
+fi
+echo "Using Codex: `$CODEX_BIN" >> "$wslStdoutPath"
+"`$CODEX_BIN" --version >> "$wslStdoutPath" 2>> "$wslStderrPath" || true
+"`$CODEX_BIN" login status >> "$wslStdoutPath" 2>> "$wslStderrPath" || true
+echo "Running Codex $StageName with 20m timeout..." >> "$wslStdoutPath"
+timeout --kill-after=30 1200 "`$CODEX_BIN" exec \
+  --cd "$wslWorkspace" \
+  --sandbox read-only \
+  --color never \
+  --output-last-message "$wslOutputPath" \
+  - < "$wslPromptPath" >> "$wslStdoutPath" 2>> "$wslStderrPath"
+CODEX_EXIT=`$?
+echo "`$CODEX_EXIT" > "$wslExitcodePath"
+if [ "`$CODEX_EXIT" -eq 124 ]; then
+  echo "ERROR: Codex $StageName timed out after 20 minutes" >> "$wslStderrPath"
+fi
+if [ -s "$wslOutputPath" ]; then
+  echo "OUTPUT_FILE: $wslOutputPath" >> "$wslStdoutPath"
+fi
+exit "`$CODEX_EXIT"
+"@
+  Write-Utf8NoBomFile -Path $runnerPath -Content $runnerScript
+
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = "wsl.exe"
+  $psi.Arguments = "-- bash $wslRunnerPath"
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $proc = New-Object System.Diagnostics.Process
+  $proc.StartInfo = $psi
+
+  [void]$proc.Start()
+  $timeoutMs = 1200 * 1000 + 30000
+  $exited = $proc.WaitForExit($timeoutMs)
+  if (-not $exited) {
+    Write-Host "WARNING: WSL process timed out after 20m30s, killing..."
+    $proc.Kill()
+    $proc.WaitForExit(10000) | Out-Null
+    Write-Utf8NoBomFile -Path $exitcodePath -Content "124`n"
+  }
+
+  $rc = 1
+  if (Test-Path $exitcodePath) {
+    $exitText = (Get-Content $exitcodePath -Raw -Encoding UTF8).Trim()
+    if ($exitText -match '^-?\d+$') {
+      $rc = [int]$exitText
+    }
+  } elseif ($proc.HasExited) {
+    $rc = $proc.ExitCode
+  }
+  Write-Host "Codex WSL exit code: $rc"
+  if (Test-Path $stdoutPath) {
+    Write-Host "Codex stdout log: $stdoutPath"
+    Get-Content $stdoutPath -Tail 80 -Encoding UTF8 | ForEach-Object { Write-Host "STDOUT: $_" }
+  }
+  if (Test-Path $stderrPath) {
+    Write-Host "Codex stderr log: $stderrPath"
+    Get-Content $stderrPath -Tail 80 -Encoding UTF8 | ForEach-Object { Write-Host "STDERR: $_" }
+  }
+
+  if ($rc -ne 0) {
+    if ($UseStrict) {
+      Write-Error "Strict real Codex mode failed for $StageName with exit code $rc"
+      exit 2
+    }
+    return $false
+  }
+
+  if (!(Test-Path $outputPath) -or ((Get-Item $outputPath).Length -eq 0)) {
+    if ($UseStrict) {
+      Write-Error "Strict real Codex mode produced no output for $StageName"
+      exit 2
+    }
+    return $false
+  }
+
+  $content = Get-Content $outputPath -Raw -Encoding UTF8
+  $validation = Test-CodexMarkdownArtifact -Kind $Kind -Text $content -FeatureId $FeatureId
+  if (-not $validation.Valid) {
+    Write-Host "WARNING: Codex $StageName output failed validation: $($validation.Errors -join ', ')" -ForegroundColor Yellow
+    if ($UseStrict) {
+      Write-Error "Strict real Codex mode validation failed for $StageName"
+      exit 2
+    }
+    return $false
+  }
+
+  Write-Utf8NoBomFile -Path $OutPath -Content $content.Trim()
+  Write-Host "Generated $OutPath using real Codex"
+  return $true
+}
+
 switch ($Stage) {
   "codex_pm" {
     $outPath = "docs\requirements\$today-$featureId-requirements.md"
-    $lines = @(
-      "# $featureId Requirements",
-      "",
-      "> Smoke-test document generated by local Codex wrapper.",
-      "> This file proves GitHub Actions can call the local Windows Codex PM stage command.",
-      "",
-      "## Stage",
-      "",
-      "codex_pm",
-      "",
-      "## Source Handoff",
-      "",
-      $handoff,
-      "",
-      "## User Goal",
-      "",
-      "This is a temporary smoke-test requirements document. Replace this wrapper with the real Codex command after the command chain is verified.",
-      "",
-      "## Functional Requirements",
-      "",
-      "| ID | Requirement | Acceptance Criteria | Priority |",
-      "|---|---|---|---|",
-      "| F-001 | Verify local Codex PM command execution | Workflow calls the local wrapper and writes this requirements file | MUST |",
-      "",
-      "## Acceptance Criteria",
-      "",
-      "- The workflow can call ``C:\agent-runners\run-codex-stage.ps1``.",
-      "- The script can read ``.agent/state.json``.",
-      "- The script can read ``.agent/handoff/codex_pm.md``.",
-      "- The script can write a requirements document under ``docs/requirements/``.",
-      "",
-      "## Handoff Preview",
-      "",
-      "````text",
-      $handoffPreview,
-      "````"
-    )
-    Write-Utf8Markdown -Path $outPath -Lines $lines
+
+    # Try real Codex mode when AGENT_REAL_CODEX_PM=true or AGENT_REAL_CODEX_PM_STRICT=true
+    $useReal = $env:AGENT_REAL_CODEX_PM -eq "true"
+    $useStrict = $env:AGENT_REAL_CODEX_PM_STRICT -eq "true"
+    if ($useReal -or $useStrict) {
+      Write-Host "Invoking real Codex for PM (requirements generation) via WSL..."
+
+      $promptLines = @()
+      $promptLines += "Generate a requirements document in Markdown format. Output ONLY the raw Markdown content to stdout \u2014 do NOT write any file, do NOT use any tools, do NOT include conversational text, greetings, or meta-commentary."
+      $promptLines += ""
+      $promptLines += "## Context"
+      $promptLines += ""
+      $promptLines += "### Current Stage"
+      $promptLines += "codex_pm \u2014 You are Codex A (PM Agent). You must produce the project requirements document."
+      $promptLines += ""
+      $promptLines += "### Feature ID"
+      $promptLines += $featureId
+      $promptLines += ""
+      $promptLines += "### Handoff Content"
+      $promptLines += ""
+      $promptLines += $handoffText
+      $promptLines += ""
+      $promptLines += "### Pipeline State"
+      $promptLines += ""
+      $promptLines += (Get-Content $statePath -Raw -Encoding UTF8)
+      $promptLines += ""
+      $promptLines += "### Output Format"
+      $promptLines += ""
+      $promptLines += "The requirements document MUST contain these sections (in order):"
+      $promptLines += ""
+      $promptLines += "# $featureId Requirements"
+      $promptLines += "## User Goal"
+      $promptLines += "## Functional Requirements"
+      $promptLines += "## Non-functional Requirements"
+      $promptLines += "## Acceptance Criteria"
+      $promptLines += "## Safety Constraints"
+      $promptLines += ""
+      $promptLines += "### Important Notes"
+      $promptLines += ""
+      $promptLines += "- You are Codex A (PM Agent) \u2014 NOT a developer, architect, or reviewer."
+      $promptLines += "- Do NOT modify production code or trading-sensitive modules."
+      $promptLines += "- The target output path is: $outPath"
+      $promptLines += ""
+      $promptLines += "REMINDER: Output ONLY the raw markdown. No conversation. No tool use. No file writing."
+
+      $promptText = $promptLines -join "`r`n"
+      $gotRealOutput = Invoke-CodexWslFileRunner `
+        -StageName "codex_pm" `
+        -PromptText $promptText `
+        -Kind "pm" `
+        -OutPath $outPath `
+        -FeatureId $featureId `
+        -UseStrict $useStrict
+      if (-not $gotRealOutput) {
+        Write-Host "WARNING: Real Codex PM mode did not produce a valid artifact." -ForegroundColor Yellow
+        Write-Host "Falling back to mock PM mode." -ForegroundColor Yellow
+      }
+    }
+    if (!(Test-Path $outPath) -or ((Get-Item $outPath).Length -eq 0)) {
+      $lines = @(
+        "# $featureId Requirements", "",
+        "> Smoke-test document generated by local Codex wrapper.", "",
+        "## Stage", "", "codex_pm", "",
+        "## Source Handoff", "", $handoff, "",
+        "## Handoff Preview", "", "````text", $handoffPreview, "````"
+      )
+      Write-Utf8Markdown -Path $outPath -Lines $lines
+    }
   }
   "codex_architect" {
     $requirementsPath = "docs\requirements\$today-$featureId-requirements.md"
     $outPath = "docs\design\$today-$featureId-architecture.md"
-    $requirementsStatus = if (Test-Path $requirementsPath) { "found: $requirementsPath" } else { "not found at expected path: $requirementsPath" }
-    $lines = @(
-      "# $featureId Architecture",
-      "",
-      "> Smoke-test architecture document generated by local Codex wrapper.",
-      "> This file proves GitHub Actions can call the local Windows Codex Architect stage command.",
-      "",
-      "## Stage",
-      "",
-      "codex_architect",
-      "",
-      "## Source Handoff",
-      "",
-      $handoff,
-      "",
-      "## Upstream Requirements",
-      "",
-      $requirementsStatus,
-      "",
-      "## Architecture Summary",
-      "",
-      "This smoke-test architecture keeps the implementation intentionally minimal. It does not change trading, risk, execution, broker, account, strategy, data-provider, or live-trading modules.",
-      "",
-      "## Module Plan",
-      "",
-      "| Module | Responsibility |",
-      "|---|---|",
-      "| ``.agent/`` | Pipeline state and handoff files |",
-      "| ``docs/requirements/`` | Codex A PM output |",
-      "| ``docs/design/`` | Codex B architecture output |",
-      "",
-      "## Development Guidance for Claude Team",
-      "",
-      "- Claude Code A may create a team plan from this smoke-test architecture.",
-      "- Claude Code B/C should not modify production trading code for this smoke test.",
-      "- Any later real feature must replace this smoke-test document with real architecture content.",
-      "",
-      "## Safety Impact",
-      "",
-      "No real trading capability is affected. No risk, execution, broker, account, or order logic is touched.",
-      "",
-      "## Handoff Preview",
-      "",
-      "````text",
-      $handoffPreview,
-      "````"
-    )
-    Write-Utf8Markdown -Path $outPath -Lines $lines
+
+    # Try real Codex mode when AGENT_REAL_CODEX_ARCHITECT=true or AGENT_REAL_CODEX_ARCHITECT_STRICT=true
+    $useReal = $env:AGENT_REAL_CODEX_ARCHITECT -eq "true"
+    $useStrict = $env:AGENT_REAL_CODEX_ARCHITECT_STRICT -eq "true"
+    if ($useReal -or $useStrict) {
+      Write-Host "Invoking real Codex for Architect (design generation) via WSL..."
+
+      $promptLines = @()
+      $promptLines += "Generate an architecture/design document in Markdown format. Output ONLY the raw Markdown content to stdout \u2014 do NOT write any file, do NOT use any tools, do NOT include conversational text, greetings, or meta-commentary."
+      $promptLines += ""
+      $promptLines += "## Context"
+      $promptLines += ""
+      $promptLines += "### Current Stage"
+      $promptLines += "codex_architect \u2014 You are Codex B (Architect). You must produce the architecture/design document for this feature."
+      $promptLines += ""
+      $promptLines += "### Feature ID"
+      $promptLines += $featureId
+      $promptLines += ""
+      $promptLines += "### Handoff Content"
+      $promptLines += ""
+      $promptLines += $handoffText
+      $promptLines += ""
+      $promptLines += "### Pipeline State"
+      $promptLines += ""
+      $promptLines += (Get-Content $statePath -Raw -Encoding UTF8)
+      $promptLines += ""
+      $promptLines += "### Requirements Document"
+      $promptLines += ""
+      if (Test-Path $requirementsPath) {
+        $promptLines += (Get-Content $requirementsPath -Raw -Encoding UTF8)
+      } else { $promptLines += "(requirements file not found at: $requirementsPath)" }
+      $promptLines += ""
+      $promptLines += "### Output Format"
+      $promptLines += ""
+      $promptLines += "The architecture document MUST contain these sections (in order):"
+      $promptLines += ""
+      $promptLines += "# $featureId Architecture"
+      $promptLines += "## Architecture Summary"
+      $promptLines += "## Module Plan"
+      $promptLines += "## Technical Decisions"
+      $promptLines += "## Safety Impact"
+      $promptLines += "## Development Guidance"
+      $promptLines += ""
+      $promptLines += "### Important Notes"
+      $promptLines += ""
+      $promptLines += "- You are Codex B (Architect) \u2014 NOT a developer, tester, or PM."
+      $promptLines += "- Do NOT modify production code or trading-sensitive modules."
+      $promptLines += "- The target output path is: $outPath"
+      $promptLines += ""
+      $promptLines += "REMINDER: Output ONLY the raw markdown. No conversation. No tool use. No file writing."
+
+      $promptText = $promptLines -join "`r`n"
+      $gotRealOutput = Invoke-CodexWslFileRunner `
+        -StageName "codex_architect" `
+        -PromptText $promptText `
+        -Kind "architecture" `
+        -OutPath $outPath `
+        -FeatureId $featureId `
+        -UseStrict $useStrict
+      if (-not $gotRealOutput) {
+        Write-Host "WARNING: Real Codex Architect mode did not produce a valid artifact." -ForegroundColor Yellow
+        Write-Host "Falling back to mock Architect mode." -ForegroundColor Yellow
+      }
+    }
+    if (!(Test-Path $outPath) -or ((Get-Item $outPath).Length -eq 0)) {
+      $lines = @(
+        "# $featureId Architecture", "",
+        "> Smoke-test architecture document generated by local Codex wrapper.", "",
+        "## Stage", "", "codex_architect", "",
+        "## Source Handoff", "", $handoff, "",
+        "## Handoff Preview", "", "````text", $handoffPreview, "````"
+      )
+      Write-Utf8Markdown -Path $outPath -Lines $lines
+    }
   }
   "codex_reviewer" {
     $outPath = "docs\review\$today-$featureId-codex-review-r1.md"
@@ -423,7 +729,7 @@ switch ($Stage) {
       # Write a small bash runner script to a temp file, then execute it via
       # wsl.exe -- bash /path. This avoids all quoting issues with bash -lc.
       $runnerFile = [System.IO.Path]::GetTempFileName()
-      $wslOutputFile = "/tmp/codex_review_output_$([System.IO.Path]::GetRandomFileName()).md"
+      $wslOutputFile = "$wslWorkspace/.agent/tmp/codex_reviewer.output.md"
       $runnerScript = @"
 set -e
 
@@ -478,33 +784,19 @@ exit "`$CODEX_EXIT"
 
       $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
-      # Use ProcessStartInfo to capture stdout/stderr separately.
-      # Avoids $ErrorActionPreference=Stop treating stderr prompts
-      # (like "Reading prompt from stdin...") as NativeCommandError.
+      # Ensure .agent/tmp directory exists for Codex output file
+      New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
+
       $psi = New-Object System.Diagnostics.ProcessStartInfo
       $psi.FileName = "wsl.exe"
       $psi.Arguments = "-- bash $wslRunnerPath"
-      $psi.RedirectStandardOutput = $true
-      $psi.RedirectStandardError = $true
       $psi.UseShellExecute = $false
       $psi.CreateNoWindow = $true
 
       $proc = New-Object System.Diagnostics.Process
       $proc.StartInfo = $psi
 
-      # Use async event-based reads to avoid the pipe-buffer deadlock:
-      # Codex echoes the full prompt back to stderr, which can exceed the
-      # default 4 KB pipe buffer. Reading synchronously (ReadToEnd) would
-      # deadlock when stderr fills up. Async reads drain both streams as
-      # data arrives, keeping the pipes flowing.
-      $stdoutBuilder = New-Object System.Text.StringBuilder
-      $stderrBuilder = New-Object System.Text.StringBuilder
-      $stdoutEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action { $stdoutBuilder.Append("$($EventArgs.Data)`n") }
-      $stderrEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action { $stderrBuilder.Append("$($EventArgs.Data)`n") }
-
       [void]$proc.Start()
-      $proc.BeginOutputReadLine()
-      $proc.BeginErrorReadLine()
 
       # Wait for exit with hard timeout (20 min + 30s grace), then SIGKILL
       $timeoutMs = 1200 * 1000 + 30000
@@ -515,21 +807,9 @@ exit "`$CODEX_EXIT"
         $proc.WaitForExit(10000)
       }
 
-      # Unregister the async event handlers (suppress any errors)
-      if ($stdoutEvent) { Unregister-Event -SourceIdentifier $stdoutEvent.Name -ErrorAction SilentlyContinue }
-      if ($stderrEvent) { Unregister-Event -SourceIdentifier $stderrEvent.Name -ErrorAction SilentlyContinue }
-
-      # Convert StringBuilder output to strings for downstream use
-      $stdout = $stdoutBuilder.ToString()
-      $stderr = $stderrBuilder.ToString()
-
       $rc = $proc.ExitCode
 
       Write-Host "Codex WSL exit code: $rc"
-
-      # Print all output for CI log debugging
-      if ($stdout) { Write-Host "STDOUT: $stdout" }
-      if ($stderr) { Write-Host "STDERR: $stderr" }
 
       Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
       Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
@@ -548,26 +828,11 @@ exit "`$CODEX_EXIT"
         Remove-Item $wslOutputWinPath -Force -ErrorAction SilentlyContinue
       }
 
-      if (-not $gotRealOutput) {
-        if ($rc -eq 0 -and $stdout -and $stdout.Trim().Length -gt 0) {
-          # Strip wrapper log lines from stdout before writing
-          $cleanOutput = $stdout -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
-          $cleanOutput = $cleanOutput -replace '(?s)Logged in.*?[\r\n]+', ''
-          $cleanOutput = $cleanOutput -replace 'Reading prompt from stdin\.\.\.[\r\n]*', ''
-          $cleanOutput = $cleanOutput -replace 'Running Codex reviewer.*?[\r\n]*', ''
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText($outPath, $cleanOutput.Trim(), $utf8NoBom)
-          Write-Host "Generated $outPath using real Codex (stdout fallback)"
-          $gotRealOutput = $true
-        }
-      }
-
       Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
       Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
 
       if (-not $gotRealOutput) {
-        $errorInfo = if ($rc -eq 124) { "Codex reviewer timed out after 20 minutes" } else { "$(if ($stdout) { $stdout } else { $stderr })" }
-        if (-not $errorInfo) { $errorInfo = "(no output)" }
+        $errorInfo = if ($rc -eq 124) { "Codex reviewer timed out after 20 minutes" } else { "(no output file)" }
         Write-Host "WARNING: Real Codex mode failed (exit=$rc). $errorInfo" -ForegroundColor Yellow
         if ($useStrict) {
           Write-Error "AGENT_REAL_CODEX_REVIEWER_STRICT=true — real mode failed, aborting."
@@ -617,7 +882,8 @@ exit "`$CODEX_EXIT"
       )
       Write-Utf8Markdown -Path $outPath -Lines $lines
     }
-  }  "codex_acceptance" {
+  }
+  "codex_acceptance" {
     $outPath = "docs\acceptance\$today-$featureId-acceptance.md"
     $guidePath = "docs\user_guides\$today-$featureId-user-guide.md"
 
@@ -876,7 +1142,7 @@ exit "`$CODEX_EXIT"
 
       # Write bash runner script
       $runnerFile = [System.IO.Path]::GetTempFileName()
-      $wslOutputFile = "/tmp/codex_accept_output_$([System.IO.Path]::GetRandomFileName()).md"
+      $wslOutputFile = "$wslWorkspace/.agent/tmp/codex_acceptance.output.md"
       $runnerScript = @"
 set -e
 
@@ -923,27 +1189,19 @@ exit "`$CODEX_EXIT"
 
       $wslRunnerPath = "/mnt/" + $runnerFile.Substring(0,1).ToLower() + $runnerFile.Substring(2) -replace '\\', '/'
 
-      # Use ProcessStartInfo to capture stdout/stderr separately.
+      # Ensure .agent/tmp directory exists for Codex output file
+      New-Item -ItemType Directory -Force -Path ".agent\tmp" | Out-Null
+
       $psi = New-Object System.Diagnostics.ProcessStartInfo
       $psi.FileName = "wsl.exe"
       $psi.Arguments = "-- bash $wslRunnerPath"
-      $psi.RedirectStandardOutput = $true
-      $psi.RedirectStandardError = $true
       $psi.UseShellExecute = $false
       $psi.CreateNoWindow = $true
 
       $proc = New-Object System.Diagnostics.Process
       $proc.StartInfo = $psi
 
-      # Async reads to avoid pipe-buffer deadlock
-      $stdoutBuilder = New-Object System.Text.StringBuilder
-      $stderrBuilder = New-Object System.Text.StringBuilder
-      $stdoutEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action { $stdoutBuilder.Append("$($EventArgs.Data)`n") }
-      $stderrEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action { $stderrBuilder.Append("$($EventArgs.Data)`n") }
-
       [void]$proc.Start()
-      $proc.BeginOutputReadLine()
-      $proc.BeginErrorReadLine()
 
       # Wait for exit with hard timeout (20 min + 30s grace), then SIGKILL
       $timeoutMs = 1200 * 1000 + 30000
@@ -954,17 +1212,9 @@ exit "`$CODEX_EXIT"
         $proc.WaitForExit(10000)
       }
 
-      # Unregister async event handlers
-      if ($stdoutEvent) { Unregister-Event -SourceIdentifier $stdoutEvent.Name -ErrorAction SilentlyContinue }
-      if ($stderrEvent) { Unregister-Event -SourceIdentifier $stderrEvent.Name -ErrorAction SilentlyContinue }
-
-      $stdout = $stdoutBuilder.ToString()
-      $stderr = $stderrBuilder.ToString()
       $rc = $proc.ExitCode
 
       Write-Host "Codex WSL exit code: $rc"
-      if ($stdout) { Write-Host "STDOUT: $stdout" }
-      if ($stderr) { Write-Host "STDERR: $stderr" }
 
       Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
       Remove-Item $runnerFile -Force -ErrorAction SilentlyContinue
@@ -981,19 +1231,6 @@ exit "`$CODEX_EXIT"
           $gotRealOutput = $true
         }
         Remove-Item $wslOutputWinPath -Force -ErrorAction SilentlyContinue
-      }
-
-      if (-not $gotRealOutput) {
-        if ($rc -eq 0 -and $stdout -and $stdout.Trim().Length -gt 0) {
-          $cleanOutput = $stdout -replace '(?s)^.*?Using Codex:.*?codex-cli [\d.]+[\r\n]*', ''
-          $cleanOutput = $cleanOutput -replace '(?s)Logged in.*?[\r\n]+', ''
-          $cleanOutput = $cleanOutput -replace 'Reading prompt from stdin\.\.\.[\r\n]*', ''
-          $cleanOutput = $cleanOutput -replace 'Running Codex acceptance.*?[\r\n]*', ''
-          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-          [System.IO.File]::WriteAllText($outPath, $cleanOutput.Trim(), $utf8NoBom)
-          Write-Host "Generated $outPath using real Codex (stdout fallback)"
-          $gotRealOutput = $true
-        }
       }
 
       Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
@@ -1137,5 +1374,3 @@ exit "`$CODEX_EXIT"
     exit 2
   }
 }
-
-

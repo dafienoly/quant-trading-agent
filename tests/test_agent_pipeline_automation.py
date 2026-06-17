@@ -13,6 +13,59 @@ from src.product_app.agent_pipeline_automation import (
 )
 
 
+RUNNER_REFERENCE = Path("docs/ops/agent-runners/run-codex-stage.ps1.reference")
+
+
+def _valid_requirements(feature_id: str = "agent-pipeline") -> str:
+    return f"""# {feature_id} Requirements
+
+## User Goal
+
+Generate traceable PM requirements.
+
+## Functional Requirements
+
+- Produce a requirements artifact.
+
+## Non-functional Requirements
+
+- Keep output deterministic.
+
+## Acceptance Criteria
+
+- Gate validation passes.
+
+## Safety Constraints
+
+- Do not bypass manual approval.
+"""
+
+
+def _valid_architecture(feature_id: str = "agent-pipeline") -> str:
+    return f"""# {feature_id} Architecture
+
+## Architecture Summary
+
+Use the existing agent pipeline gates.
+
+## Module Plan
+
+- Keep changes in pipeline automation.
+
+## Technical Decisions
+
+- Validate generated artifacts before gate pass.
+
+## Safety Impact
+
+- No trading-sensitive behavior changes.
+
+## Development Guidance
+
+- Add regression tests.
+"""
+
+
 def test_safe_docs_and_tests_are_auto_merge_eligible():
     decision = classify_changed_files([
         "docs/pipeline/AUTO_MERGE_POLICY.md",
@@ -131,21 +184,22 @@ def test_claude_tester_handoff_routes_back_to_developer_until_all_phases_pass(tm
 
 def test_required_report_gate_finds_feature_reports(tmp_path: Path):
     feature_id = "agent-pipeline"
-    paths = [
-        "docs/requirements/2026-06-12-agent-pipeline-requirements.md",
-        "docs/design/2026-06-12-agent-pipeline-architecture.md",
-        "docs/dev_plans/2026-06-12-agent-pipeline-team-plan.md",
-        "docs/dev_reports/2026-06-12-agent-pipeline-phase-1-dev-report.md",
-    ]
-    for path in paths:
+    files = {
+        "docs/requirements/2026-06-12-agent-pipeline-requirements.md": _valid_requirements(feature_id),
+        "docs/design/2026-06-12-agent-pipeline-architecture.md": _valid_architecture(feature_id),
+        "docs/dev_plans/2026-06-12-agent-pipeline-team-plan.md": "ok",
+        "docs/dev_reports/2026-06-12-agent-pipeline-phase-1-dev-report.md": "ok",
+    }
+    for path, content in files.items():
         full_path = tmp_path / path
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text("ok", encoding="utf-8")
+        full_path.write_text(content, encoding="utf-8")
 
     result = check_required_reports(tmp_path, feature_id=feature_id, through_stage="phase_dev")
 
     assert result.passed is True
     assert result.missing == {}
+    assert result.invalid == {}
     assert set(result.found) == {"pm", "architecture", "team_plan", "phase_dev"}
 
 
@@ -162,6 +216,95 @@ def test_required_report_gate_fails_closed_when_missing(tmp_path: Path):
         "claude_lead_review",
         "codex_review",
     }
+
+
+def test_corrupted_pm_artifact_fails_gate(tmp_path: Path):
+    feature_id = "agent-pipeline"
+    path = tmp_path / "docs/requirements/2026-06-12-agent-pipeline-requirements.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("$($EventArgs.Data)\n", encoding="utf-8")
+
+    result = check_required_reports(tmp_path, feature_id=feature_id, through_stage="pm")
+
+    assert result.passed is False
+    assert "pm" in result.invalid
+    assert any("artifact_contains_literal_eventargs_data" in item for item in result.invalid["pm"])
+
+
+def test_corrupted_architecture_artifact_fails_gate(tmp_path: Path):
+    feature_id = "agent-pipeline"
+    path = tmp_path / "docs/design/2026-06-12-agent-pipeline-architecture.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("$($EventArgs.Data)\n", encoding="utf-8")
+    req_path = tmp_path / "docs/requirements/2026-06-12-agent-pipeline-requirements.md"
+    req_path.parent.mkdir(parents=True, exist_ok=True)
+    req_path.write_text(_valid_requirements(feature_id), encoding="utf-8")
+
+    result = check_required_reports(tmp_path, feature_id=feature_id, through_stage="architecture")
+
+    assert result.passed is False
+    assert "architecture" in result.invalid
+    assert any("artifact_contains_literal_eventargs_data" in item for item in result.invalid["architecture"])
+
+
+def test_pm_missing_headings_fails_gate(tmp_path: Path):
+    feature_id = "agent-pipeline"
+    path = tmp_path / "docs/requirements/2026-06-12-agent-pipeline-requirements.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"# {feature_id} Requirements\n\n## User Goal\n\nOnly one section.\n", encoding="utf-8")
+
+    result = check_required_reports(tmp_path, feature_id=feature_id, through_stage="pm")
+
+    assert result.passed is False
+    assert "pm" in result.invalid
+    assert any("Functional Requirements" in item for item in result.invalid["pm"])
+
+
+def test_architecture_missing_headings_fails_gate(tmp_path: Path):
+    feature_id = "agent-pipeline"
+    req_path = tmp_path / "docs/requirements/2026-06-12-agent-pipeline-requirements.md"
+    req_path.parent.mkdir(parents=True, exist_ok=True)
+    req_path.write_text(_valid_requirements(feature_id), encoding="utf-8")
+    arch_path = tmp_path / "docs/design/2026-06-12-agent-pipeline-architecture.md"
+    arch_path.parent.mkdir(parents=True, exist_ok=True)
+    arch_path.write_text(f"# {feature_id} Architecture\n\n## Architecture Summary\n\nToo thin.\n", encoding="utf-8")
+
+    result = check_required_reports(tmp_path, feature_id=feature_id, through_stage="architecture")
+
+    assert result.passed is False
+    assert "architecture" in result.invalid
+    assert any("Module Plan" in item for item in result.invalid["architecture"])
+
+
+def test_runner_reference_contains_no_register_object_event():
+    text = RUNNER_REFERENCE.read_text(encoding="utf-8-sig")
+
+    assert "Register-ObjectEvent" not in text
+    assert "$($EventArgs.Data)" not in text
+
+
+def test_runner_reference_does_not_use_sequential_read_to_end_deadlock_pattern():
+    text = RUNNER_REFERENCE.read_text(encoding="utf-8-sig")
+
+    assert "ReadToEnd()" not in text
+    assert "StandardOutput.ReadToEnd" not in text
+    assert "StandardError.ReadToEnd" not in text
+
+
+def test_runner_reference_uses_agent_tmp_files_for_pm_and_architect():
+    text = RUNNER_REFERENCE.read_text(encoding="utf-8-sig")
+
+    for suffix in ["prompt.md", "runner.sh", "stdout.log", "stderr.log", "output.md", "exitcode"]:
+        assert f"$StageName.{suffix}" in text
+    assert '-StageName "codex_pm"' in text
+    assert '-StageName "codex_architect"' in text
+
+
+def test_runner_reference_avoids_powershell_pipe_capture_for_codex_output():
+    text = RUNNER_REFERENCE.read_text(encoding="utf-8-sig")
+
+    assert "RedirectStandardOutput = $true" not in text
+    assert "RedirectStandardError = $true" not in text
 
 
 # ---------------------------------------------------------------------------

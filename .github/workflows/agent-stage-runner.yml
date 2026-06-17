@@ -20,6 +20,8 @@ on:
           - claude_lead_review
           - bugfix
           - codex_reviewer
+          - codex_pm
+          - codex_architect
           - codex_acceptance
           - postmortem
       pr_number:
@@ -52,7 +54,7 @@ jobs:
         github.event_name == 'pull_request' &&
         github.event.action == 'labeled' &&
         startsWith(github.event.pull_request.head.ref, 'epic/') &&
-        contains(fromJson('["stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
+        contains(fromJson('["stage:pm-pending","stage:arch-pending","stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
       )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
@@ -76,6 +78,8 @@ jobs:
           $label = "${{ github.event.label.name || '' }}"
           if (-not $stage) {
             switch ($label) {
+              "stage:pm-pending" { $stage = "codex_pm" }
+              "stage:arch-pending" { $stage = "codex_architect" }
               "stage:team-plan-pending" { $stage = "claude_lead_plan" }
               "stage:team-dev-pending" { $stage = "claude_developer" }
               "stage:team-test-pending" { $stage = "claude_tester" }
@@ -108,8 +112,14 @@ jobs:
           AGENT_REAL_CLAUDE_LEAD_REVIEW_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_REVIEW_STRICT || '' }}
           AGENT_REAL_CODEX_REVIEWER: ${{ vars.AGENT_REAL_CODEX_REVIEWER || '' }}
           AGENT_REAL_CODEX_REVIEWER_STRICT: ${{ vars.AGENT_REAL_CODEX_REVIEWER_STRICT || '' }}
+          AGENT_REAL_CODEX_PM: ${{ vars.AGENT_REAL_CODEX_PM || '' }}
+          AGENT_REAL_CODEX_PM_STRICT: ${{ vars.AGENT_REAL_CODEX_PM_STRICT || '' }}
+          AGENT_REAL_CODEX_ARCHITECT: ${{ vars.AGENT_REAL_CODEX_ARCHITECT || '' }}
+          AGENT_REAL_CODEX_ARCHITECT_STRICT: ${{ vars.AGENT_REAL_CODEX_ARCHITECT_STRICT || '' }}
           AGENT_REAL_CODEX_ACCEPTANCE: ${{ vars.AGENT_REAL_CODEX_ACCEPTANCE || '' }}
           AGENT_REAL_CODEX_ACCEPTANCE_STRICT: ${{ vars.AGENT_REAL_CODEX_ACCEPTANCE_STRICT || '' }}
+          CODEX_A_PM_AGENT_COMMAND: ${{ secrets.CODEX_A_PM_AGENT_COMMAND || vars.CODEX_A_PM_AGENT_COMMAND }}
+          CODEX_B_ARCHITECT_AGENT_COMMAND: ${{ secrets.CODEX_B_ARCHITECT_AGENT_COMMAND || vars.CODEX_B_ARCHITECT_AGENT_COMMAND }}
           CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
           CLAUDE_DEVELOPER_AGENT_COMMAND: ${{ secrets.CLAUDE_DEVELOPER_AGENT_COMMAND || vars.CLAUDE_DEVELOPER_AGENT_COMMAND }}
           CLAUDE_TESTER_AGENT_COMMAND: ${{ secrets.CLAUDE_TESTER_AGENT_COMMAND || vars.CLAUDE_TESTER_AGENT_COMMAND }}
@@ -130,6 +140,8 @@ jobs:
 
           $cmd = ""
           switch ($env:STAGE) {
+            "codex_pm" { $cmd = if ($env:CODEX_A_PM_AGENT_COMMAND) { $env:CODEX_A_PM_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
+            "codex_architect" { $cmd = if ($env:CODEX_B_ARCHITECT_AGENT_COMMAND) { $env:CODEX_B_ARCHITECT_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
             "claude_lead_plan" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
             "claude_developer" { $cmd = if ($env:CLAUDE_DEVELOPER_AGENT_COMMAND) { $env:CLAUDE_DEVELOPER_AGENT_COMMAND } else { $env:DEVELOPER_AGENT_COMMAND } }
             "claude_tester" { $cmd = if ($env:CLAUDE_TESTER_AGENT_COMMAND) { $env:CLAUDE_TESTER_AGENT_COMMAND } else { $env:TEST_AGENT_COMMAND } }
@@ -158,6 +170,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           switch ($env:STAGE) {
+            "codex_pm" { $gate = "pm" }
+            "codex_architect" { $gate = "architecture" }
             "claude_lead_plan" { $gate = "team_plan" }
             "claude_developer" { $gate = "phase_dev" }
             "claude_tester" { $gate = "phase_test" }
@@ -232,6 +246,16 @@ jobs:
           }
 
           switch ($env:STAGE) {
+            "codex_pm" {
+              Remove-CurrentLabel "stage:pm-pending"
+              Add-NextLabel "stage:arch-pending"
+              $nextStage = "codex_architect"
+            }
+            "codex_architect" {
+              Remove-CurrentLabel "stage:arch-pending"
+              Add-NextLabel "stage:team-plan-pending"
+              $nextStage = "claude_lead_plan"
+            }
             "claude_lead_plan" {
               Remove-CurrentLabel "stage:team-plan-pending"
               Add-NextLabel "stage:team-dev-pending"
