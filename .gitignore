@@ -61,3 +61,6 @@ feedback/
 !feedback/README.md
 aktools_log.log*
 memory/
+
+# Agent runtime temp files
+.agent/tmp/
