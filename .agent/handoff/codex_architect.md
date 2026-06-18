@@ -1,0 +1,19 @@
+# Agent Handoff: codex_architect
+
+Feature: historical-pr-triage-pr-2-and-pr-3
+Title: [V15.0 Restart 3] Historical PR Triage: PR #2 and PR #3
+Epic branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
+Risk level: unknown
+
+Required read order:
+1. AGENTS.md
+2. docs/process/AGENT_DEVELOPMENT_PIPELINE.md
+3. docs/process/BRANCH_WORKFLOW.md
+4. docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md
+5. docs/pipeline/AUTO_MERGE_POLICY.md
+
+Task:
+- Read the requirements document at `docs/requirements/20260618-historical-pr-triage-pr-2-and-pr-3-requirements.md`.
+- Produce the architecture design at `docs/design/20260618-historical-pr-triage-pr-2-and-pr-3-architecture.md`.
+- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for Claude Team A/B/C.
+- Do not write product code in this stage.
