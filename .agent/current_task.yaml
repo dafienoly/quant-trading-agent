@@ -4,7 +4,7 @@ risk_level: unknown
 issue_number: 62
 issue_url: https://github.com/dafienoly/quant-trading-agent/issues/62
 epic_branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
-current_stage: acceptance_pending
+current_stage: merge_gate_pending
 created_at: '2026-06-18T08:49:27.347996+00:00'
 required_docs:
   requirements: docs/requirements/20260618-historical-pr-triage-pr-2-and-pr-3-requirements.md
@@ -55,4 +55,4 @@ stage_status:
   phase_test: passed
   claude_lead_review: passed
   codex_review: passed
-  acceptance: pending
+  acceptance: passed
