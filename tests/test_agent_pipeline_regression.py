@@ -233,3 +233,19 @@ def test_restricted_diff_no_trading_paths():
             capture_output=True, text=True, cwd=REPO_ROOT, timeout=30,
         )
         assert name not in proc.stdout, f"restricted path found: {name}"
+
+
+# -- PowerShell syntax check -------------------------------------------------
+
+def test_runner_reference_powershell_parses():
+    """Verify that the PowerShel runner reference parses without syntax errors.
+    
+    Uses the regression suite's check_runner which validates runner syntax
+    and safety patterns.
+    """
+    from scripts.agent_pipeline_regression import check_runner
+    results = check_runner(REPO_ROOT)
+    parse_checks = [r for r in results if r.name.startswith("runner_")]
+    for r in parse_checks:
+        if r.severity == "critical" and not r.passed:
+            pytest.fail(f"Runner check failed: {r.name}: {r.message}")

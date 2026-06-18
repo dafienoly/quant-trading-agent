@@ -1283,7 +1283,6 @@ exit "`$CODEX_EXIT"
     )
     Write-Utf8Markdown -Path $guidePath -Lines $guideLines
   }
-}
   default {
     Write-Error "Unsupported smoke-test stage: $Stage"
     exit 2
