@@ -113,6 +113,7 @@ jobs:
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
           $branch = "${{ steps.init.outputs.epic_branch }}"
+          $reuseRemoteBranch = $false
 
           $existingPrRaw = gh pr view $branch --json number,state,merged,headRefName,url 2>$null
           if ($LASTEXITCODE -eq 0 -and $existingPrRaw) {
@@ -123,6 +124,7 @@ jobs:
             }
             if ($existingPr.state -eq "OPEN") {
               Write-Host "Open PR #$($existingPr.number) already exists for branch '$branch'; reusing branch."
+              $reuseRemoteBranch = $true
             } elseif ($existingPr.state -eq "CLOSED") {
               if ($existingPr.merged -eq $true) {
                 Write-Error "Branch '$branch' belongs to merged PR #$($existingPr.number); refusing to reuse it."
@@ -138,9 +140,16 @@ jobs:
             }
           }
 
-          git switch -c $branch
-          if ($LASTEXITCODE -ne 0) {
-            git switch $branch
+          if ($reuseRemoteBranch) {
+            git fetch origin $branch
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git switch -C $branch --track origin/$branch
+            if ($LASTEXITCODE -ne 0) {
+              git switch -C $branch origin/$branch
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          } else {
+            git switch -c $branch
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 

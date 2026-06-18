@@ -211,6 +211,13 @@ def test_issue_bootstrap_queries_pr_state_before_reuse():
     assert "set-pr-metadata" in text
 
 
+def test_issue_bootstrap_reuses_open_pr_from_remote_branch():
+    text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
+
+    assert "git fetch origin $branch" in text
+    assert "git switch -C $branch --track origin/$branch" in text
+
+
 def test_stage_runner_validates_dispatched_pr_is_open_and_matches_ref():
     text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
 
