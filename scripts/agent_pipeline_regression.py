@@ -574,6 +574,34 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
 # ---------------------------------------------------------------------------
 
 
+
+def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
+    """Verify agent-issue-bootstrap.yml passes required real/strict env vars."""
+    checks: list[CheckResult] = []
+    text = _read(repo_root / ".github" / "workflows" / "agent-issue-bootstrap.yml")
+    if text is None:
+        checks.append(CheckResult("bootstrap_exists", "critical", False, "agent-issue-bootstrap.yml not found"))
+        return checks
+    checks.append(CheckResult("bootstrap_exists", "critical", True, "agent-issue-bootstrap.yml exists"))
+
+    required_vars = [
+        "AGENT_REAL_CODEX_PM",
+        "AGENT_REAL_CODEX_PM_STRICT",
+        "AGENT_REAL_CODEX_ARCHITECT",
+        "AGENT_REAL_CODEX_ARCHITECT_STRICT",
+        "AGENT_REAL_CLAUDE_LEAD_PLAN",
+        "AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT",
+    ]
+    for var in required_vars:
+        # Check for the env var definition in the file
+        pattern = f"{var}: ${{{{ vars.{var}"
+        if pattern in text:
+            checks.append(CheckResult(f"bootstrap_env_{var}", "critical", True, f"bootstrap passes {var}"))
+        else:
+            checks.append(CheckResult(f"bootstrap_env_{var}", "critical", False, f"bootstrap missing {var}"))
+
+    return checks
+
 def check_forbidden_markers(repo_root: Path) -> list[CheckResult]:
     """Verify that formal stage artifacts do not contain forbidden markers."""
     checks: list[CheckResult] = []
@@ -651,6 +679,7 @@ def collect_checks(repo_root: Path, base: str = "origin/main", strict: bool = Fa
     all_checks.extend(check_gates(repo_root))
     all_checks.extend(run_pipeline_simulation(repo_root))
     all_checks.extend(check_forbidden_markers(repo_root))
+    all_checks.extend(check_bootstrap_env(repo_root))
 
     critical_fail = sum(1 for c in all_checks if c.severity == "critical" and not c.passed)
     warning_fail = sum(1 for c in all_checks if c.severity == "warning" and not c.passed)
