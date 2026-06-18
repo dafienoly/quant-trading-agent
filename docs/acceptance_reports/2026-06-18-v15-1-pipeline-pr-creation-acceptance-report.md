@@ -21,7 +21,7 @@ git ls-files .agent/tmp
 | --- | --- |
 | `TMPDIR=/tmp/codex-pytest .venv/bin/python -m pytest -s tests/test_agent_pipeline_automation.py -q` | PASS，42 passed |
 | `TMPDIR=/tmp/codex-pytest .venv/bin/python scripts/agent_pipeline_regression.py --strict` | PASS，Status: PASS，Critical failures: 0 |
-| `TMPDIR=/tmp/codex-pytest .venv/bin/python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q` | PASS，67 passed |
+| `TMPDIR=/tmp/codex-pytest .venv/bin/python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q` | PASS，68 passed |
 | `git diff --check` | PASS，无输出 |
 | restricted module 检查 | PASS，无敏感路径命中 |
 | `git ls-files .agent/tmp` | PASS，无输出 |
@@ -29,6 +29,7 @@ git ls-files .agent/tmp
 ## 失败场景验证
 
 - closed PR 不允许作为后续 stage 的 `pr_number` 继续流转。
+- 复用已有 open PR 时，bootstrap 会从 `origin/<branch>` 检出远端分支，避免从当前 checkout 新建同名本地分支。
 - workflow_dispatch 传入的 PR 若不是 open，stage runner fail closed。
 - workflow_dispatch 传入的 PR head ref 若不等于当前 ref，stage runner fail closed。
 - Merge Gate 即使检查通过，也不会自动合并 main。
