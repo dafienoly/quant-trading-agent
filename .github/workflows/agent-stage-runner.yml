@@ -70,6 +70,28 @@ jobs:
       - name: Install lightweight pipeline dependencies
         run: python -m pip install --upgrade pyyaml
 
+      - name: Validate dispatched PR is open and matches ref
+        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pr = "${{ inputs.pr_number }}"
+          $expectedBranch = "${{ github.ref_name }}"
+          $prState = gh pr view $pr --json number,state,headRefName,url | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $prState) {
+            Write-Error "Could not load PR #$pr for stage dispatch."
+            exit 2
+          }
+          if ($prState.state -ne "OPEN") {
+            Write-Error "PR #$pr is '$($prState.state)', not OPEN. Failing closed."
+            exit 2
+          }
+          if ($prState.headRefName -ne $expectedBranch) {
+            Write-Error "PR #$pr head '$($prState.headRefName)' does not match workflow ref '$expectedBranch'."
+            exit 2
+          }
+
       - name: Determine stage
         id: stage
         run: |
