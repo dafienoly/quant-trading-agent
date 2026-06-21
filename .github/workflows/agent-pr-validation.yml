@@ -1,0 +1,165 @@
+name: Agent PR 轻量验证
+
+run-name: >-
+  PR #${{ github.event.pull_request.number || 'manual' }} Pipeline 轻量验证
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: agent-pr-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Pipeline 轻量验证
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出 PR 代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装轻量验证依赖
+        run: python -m pip install pytest pyyaml
+
+      - name: 同步 main 比较基线
+        run: git fetch origin +refs/heads/main:refs/remotes/origin/main --prune
+
+      - name: 运行严格 Pipeline 回归并写入 JSON
+        id: regression
+        run: |
+          mkdir -p .agent/reports
+          python scripts/agent_pipeline_regression.py --strict --json --output .agent/reports/pipeline_report.json
+
+      - name: 运行 Pipeline 自动化测试
+        if: always()
+        run: >-
+          python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q
+          --basetemp=runtime/pytest-tmp-agent-pr-validation
+
+      - name: 检查 Git diff 格式
+        if: always()
+        run: git diff --check
+
+      - name: 检查交易敏感模块
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff --name-only origin/main...HEAD)"
+          printf '%s\n' "$changed_files"
+          if printf '%s\n' "$changed_files" | grep -Eiq '(^|/)(src/(broker|execution|execution_engine|order|account|risk|risk_engine)/|miniQMT/|integrations/miniqmt/)|miniqmt|live[_ -]?trading|real[_ -]?order'; then
+            echo "检测到交易敏感模块改动，PR validation 按安全策略阻断。" >&2
+            exit 2
+          fi
+
+      - name: 检查临时 Pipeline 产物未被跟踪
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked_files="$(git ls-files .agent/tmp .agent/reports)"
+          if [ -n "$tracked_files" ]; then
+            echo "以下运行期文件不应被 Git 跟踪：" >&2
+            printf '%s\n' "$tracked_files" >&2
+            exit 2
+          fi
+
+      - name: 生成 Pipeline 诊断报告
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p .agent/reports
+          if [ ! -s .agent/reports/pipeline_report.json ]; then
+            cat > .agent/reports/pipeline_report.json <<'JSON'
+          {
+            "status": "fail",
+            "summary": {
+              "critical_count": 1,
+              "warning_count": 0,
+              "info_count": 0
+            },
+            "checks": [
+              {
+                "name": "diagnostic_fallback",
+                "severity": "critical",
+                "passed": false,
+                "message": "正式回归报告未生成；这是诊断 fallback，请查看 Actions 日志。"
+              }
+            ],
+            "artifacts": {
+              "diagnostic_fallback": true
+            }
+          }
+          JSON
+          fi
+
+          set +e
+          python scripts/agent_pipeline_report_viewer.py \
+            --input .agent/reports/pipeline_report.json \
+            --output .agent/reports/pipeline_dashboard.html
+          viewer_status=$?
+          set -e
+
+          if [ "$viewer_status" -ne 0 ] || [ ! -s .agent/reports/pipeline_dashboard.html ]; then
+            cat > .agent/reports/pipeline_dashboard.html <<'HTML'
+          <!doctype html>
+          <html lang="zh-CN"><meta charset="utf-8"><title>Pipeline 诊断报告</title>
+          <body><h1>Pipeline 诊断报告</h1><p>正式 Dashboard 生成失败；这是诊断 fallback，请查看同一 artifact 中的 JSON 与 Actions 日志。</p></body></html>
+          HTML
+          fi
+
+      - name: 上传 Pipeline Dashboard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-dashboard-pr-${{ github.event.pull_request.number || github.run_id }}-${{ github.run_id }}
+          path: |
+            .agent/reports/pipeline_report.json
+            .agent/reports/pipeline_dashboard.html
+            .agent/gates/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 更新 PR Dashboard 查看说明
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ARTIFACT_NAME: pipeline-dashboard-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker='<!-- agent-pipeline-dashboard -->'
+          body="$(cat <<EOF
+          $marker
+          ## 查看 Pipeline Dashboard
+
+          本次 PR 验证已生成 JSON 报告和静态 HTML Dashboard。
+
+          查看路径：打开本 PR 的 **Checks / Actions**，进入最新的 **Agent PR 轻量验证** 运行，在 **Artifacts** 中选择 \`$ARTIFACT_NAME\`，查看 \`pipeline_dashboard.html\` 和 \`pipeline_report.json\`。
+
+          Dashboard artifact 仅用于诊断和人工审阅，不代表 PR 已获准合并；main 仍需人工审阅和手动合并。
+          EOF
+          )"
+
+          existing_id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq '.[] | select(.user.type == "Bot" and (.body | contains("<!-- agent-pipeline-dashboard -->"))) | .id' | head -n 1)"
+          if [ -n "$existing_id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" -f body="$body" >/dev/null
+          else
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi

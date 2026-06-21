@@ -64,3 +64,4 @@ memory/
 
 # Agent runtime temp files
 .agent/tmp/
+.agent/reports/

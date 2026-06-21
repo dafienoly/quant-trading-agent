@@ -79,7 +79,7 @@ ARTIFACT_DIRS = (
 class DashboardModel:
     """Aggregated data model for the dashboard."""
     def __init__(self) -> None:
-        self.title: str = "Agent Pipeline Dashboard"
+        self.title: str = "Agent Pipeline 可视化报告"
         self.generated_at: str = datetime.now(timezone.utc).isoformat()
         self.input_path: str = ""
         self.output_path: str = ""
@@ -99,14 +99,14 @@ def load_regression_report(path: str | Path) -> dict[str, Any]:
     """Load and validate V13 regression JSON."""
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(f"report not found: {p}")
+        raise FileNotFoundError(f"报告不存在：{p}")
     raw = p.read_text(encoding="utf-8")
     try:
         report = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON in {p}: {exc}") from exc
+        raise ValueError(f"{p} 中的 JSON 无效：{exc}") from exc
     if "status" not in report or "checks" not in report:
-        raise ValueError(f"report missing required fields (status, checks): {p}")
+        raise ValueError(f"报告缺少必填字段 status/checks：{p}")
     return report
 
 
@@ -165,24 +165,24 @@ def scan_artifact_inventory(repo_root: Path) -> dict[str, list[str]]:
 def _categorize_check_name(name: str) -> str:
     """Extract a human-readable category from a check name."""
     if name.startswith("workflow"):
-        return "Workflow"
+        return "工作流"
     if name.startswith("runner"):
-        return "Runner"
+        return "运行器"
     if name.startswith("gate"):
-        return "Gates"
+        return "门禁"
     if name.startswith("artifact"):
-        return "Artifacts"
+        return "产物"
     if name.startswith("handoff"):
-        return "Handoffs"
+        return "交接"
     if name.startswith("sim"):
-        return "Pipeline Simulation"
+        return "Pipeline 模拟"
     if name.startswith("restricted"):
-        return "Restricted Files"
+        return "受限文件"
     if name.startswith("gitignore") or name.startswith("agent_tmp") or name.startswith("branch_no"):
-        return "Runtime Temp"
+        return "运行期临时目录"
     if name.startswith("cmd_step") or name.startswith("label_func"):
-        return "Workflow"
-    return "Other"
+        return "工作流"
+    return "其他"
 
 
 def summarize_checks(report: dict[str, Any]) -> dict[str, int]:
@@ -219,7 +219,6 @@ def build_stage_timeline(
     """Build stage timeline from gates and artifact presence."""
     timeline: list[dict[str, Any]] = []
     for stage in STAGE_ORDER:
-        gate_key = stage.replace("codex_", "").replace("claude_", "").replace("_", "")
         # Try to find matching gate
         gate_data: dict[str, Any] = {"exists": False, "passed": False}
         for gk, gv in gates.items():
@@ -251,7 +250,6 @@ def build_model(
     """Build the full dashboard model from inputs."""
     root = repo_root or REPO_ROOT
     report = load_regression_report(input_path)
-    state = load_state(root)
     gates = load_gate_status(root)
     artifacts = scan_artifact_inventory(root)
 
@@ -289,7 +287,9 @@ def _status_color(status: str) -> str:
 
 def _severity_badge(severity: str) -> str:
     colors = {"critical": "#dc3545", "warning": "#ffc107", "info": "#17a2b8"}
-    return f'<span style="background:{colors.get(severity,"#6c757f")};color:{"#000" if severity=="warning" else "#fff"};padding:2px 8px;border-radius:10px;font-size:0.8em">{severity}</span>'
+    labels = {"critical": "严重", "warning": "警告", "info": "信息"}
+    label = labels.get(severity, severity)
+    return f'<span style="background:{colors.get(severity,"#6c757f")};color:{"#000" if severity=="warning" else "#fff"};padding:2px 8px;border-radius:10px;font-size:0.8em">{label}</span>'
 
 
 def _check_icon(passed: bool) -> str:
@@ -315,33 +315,36 @@ def render_dashboard_html(model: DashboardModel) -> str:
         if not c["passed"]:
             failed_rows += row
 
+    status_labels = {"pass": "通过", "warn": "有警告", "fail": "失败"}
+    status_label = status_labels.get(model.status, "未知")
+
     # Failed / warning section
     failed_section = ""
     if not failed_rows:
-        failed_section = '<p style="color:#28a745">All checks passed. No failures or warnings.</p>'
+        failed_section = '<p style="color:#28a745">全部检查通过，没有失败或警告。</p>'
     else:
-        failed_section = f"""<h2>Failed / Warning Checks</h2><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><tr><th>OK</th><th>Severity</th><th>Name</th><th>Message</th></tr>{failed_rows}</table>"""
+        failed_section = f"""<h2>失败与警告项</h2><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><tr><th>结果</th><th>级别</th><th>检查项</th><th>说明</th></tr>{failed_rows}</table>"""
 
     # Stage timeline
     stage_rows = ""
     for st in model.stage_timeline:
         gate_icon = "✅" if st["gate_passed"] else ("❌" if st["gate_exists"] else "⏳")
         art_icon = "✅" if st["has_artifacts"] else "❌"
-        art_list = ", ".join(st["artifacts"][:3]) if st["artifacts"] else "(none)"
+        art_list = ", ".join(st["artifacts"][:3]) if st["artifacts"] else "（无）"
         stage_rows += f"<tr><td>{st['name']}</td><td>{gate_icon}</td><td>{art_icon}</td><td style='font-size:0.85em'>{art_list}</td></tr>\n"
 
     # Gate status
     gate_rows = ""
     for gk, gv in sorted(model.gates.items()):
         passed_icon = "✅" if gv.get("passed") else "❌"
-        decision = gv.get("decision") or "—"
+        decision = gv.get("decision") or "无"
         gate_rows += f"<tr><td>{gk}</td><td>{passed_icon}</td><td>{decision}</td><td>{gv.get('found_count','?')}</td><td>{gv.get('missing_count','?')}</td></tr>\n"
 
     # Artifact inventory
     art_sections = ""
     for subdir, files in sorted(model.artifacts.items()):
         file_list = "".join(f"<li>{f}</li>" for f in files[:10])
-        more = f"<li><em>... and {len(files)-10} more</em></li>" if len(files) > 10 else ""
+        more = f"<li><em>另有 {len(files)-10} 个文件</em></li>" if len(files) > 10 else ""
         art_sections += f"<h3>{subdir}</h3><ul>{file_list}{more}</ul>\n"
 
     # Restricted file safety
@@ -350,7 +353,7 @@ def render_dashboard_html(model: DashboardModel) -> str:
     if r:
         restricted_html = f"<p>{_check_icon(r['passed'])} {r['message']}</p>"
     else:
-        restricted_html = "<p>No restricted-file data in report.</p>"
+        restricted_html = "<p>报告中没有受限文件检查数据。</p>"
 
     # Temp hygiene
     temp_html = ""
@@ -361,7 +364,7 @@ def render_dashboard_html(model: DashboardModel) -> str:
     raw_json = json.dumps(model.raw_report, indent=2, ensure_ascii=False)
 
     html = f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <title>{model.title}</title>
@@ -384,55 +387,55 @@ table {{ background: #fff; }}
 </head>
 <body>
 <h1>{model.title}</h1>
-<p>Generated: {ts}</p>
-<p>Input: <code>{model.input_path}</code> | Output: <code>{model.output_path}</code></p>
+<p>生成时间：{ts}</p>
+<p>输入：<code>{model.input_path}</code> | 输出：<code>{model.output_path}</code></p>
 
-<div class="status-card status-{model.status}">Status: {model.status.upper()}</div>
+<div class="status-card status-{model.status}">状态：{status_label}</div>
 
 <div class="summary-grid">
-<div class="summary-item"><h3 style="color:#dc3545">{sc['critical_count']}</h3><p>Critical</p></div>
-<div class="summary-item"><h3 style="color:#ffc107">{sc['warning_count']}</h3><p>Warnings</p></div>
-<div class="summary-item"><h3 style="color:#17a2b8">{sc['info_count']}</h3><p>Info</p></div>
-<div class="summary-item"><h3>{sc['total_checks']}</h3><p>Total Checks</p></div>
+<div class="summary-item"><h3 style="color:#dc3545">{sc['critical_count']}</h3><p>严重失败</p></div>
+<div class="summary-item"><h3 style="color:#ffc107">{sc['warning_count']}</h3><p>警告</p></div>
+<div class="summary-item"><h3 style="color:#17a2b8">{sc['info_count']}</h3><p>信息项</p></div>
+<div class="summary-item"><h3>{sc['total_checks']}</h3><p>检查总数</p></div>
 </div>
 
-<h2>Category Breakdown</h2>
+<h2>分类统计</h2>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-<tr><th>Category</th><th>Total</th><th>Passed</th><th>Failed</th></tr>
+<tr><th>分类</th><th>总数</th><th>通过</th><th>失败</th></tr>
 {cat_rows}
 </table>
 
 {failed_section}
 
-<h2>All Checks</h2>
+<h2>全部检查项</h2>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-<tr><th>OK</th><th>Severity</th><th>Name</th><th>Message</th></tr>
+<tr><th>结果</th><th>级别</th><th>检查项</th><th>说明</th></tr>
 {check_rows}
 </table>
 
-<h2>Pipeline Stage Timeline</h2>
+<h2>Pipeline 阶段时间线</h2>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-<tr><th>Stage</th><th>Gate</th><th>Artifacts</th><th>Artifact Files</th></tr>
+<tr><th>阶段</th><th>门禁</th><th>产物</th><th>产物文件</th></tr>
 {stage_rows}
 </table>
 
-<h2>Gate Status</h2>
+<h2>门禁状态</h2>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">
-<tr><th>Gate</th><th>Passed</th><th>Decision</th><th>Found</th><th>Missing</th></tr>
+<tr><th>门禁</th><th>通过</th><th>结论</th><th>已找到</th><th>缺失</th></tr>
 {gate_rows}
 </table>
 
-<h2>Artifact Inventory</h2>
+<h2>文档产物清单</h2>
 {art_sections}
 
-<h2>Restricted-File Safety</h2>
+<h2>受限文件安全检查</h2>
 {restricted_html}
 
-<h2>Runtime Temp Hygiene</h2>
+<h2>运行期临时目录卫生</h2>
 {temp_html}
 
-<h2>Raw JSON</h2>
-<div class="collapsible" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Click to toggle raw JSON</div>
+<h2>原始 JSON</h2>
+<div class="collapsible" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">点击展开或收起原始 JSON</div>
 <pre style="background:#fff;border:1px solid #ddd;padding:10px;overflow:auto;max-height:500px">{raw_json}</pre>
 
 </body>
@@ -486,12 +489,12 @@ def serve_dashboard(output_path: str | Path, host: str = "127.0.0.1", port: int 
             pass  # quiet
 
     server = HTTPServer((host, port), Handler)
-    print(f"Serving Agent Pipeline Dashboard at http://{host}:{port}/{filename}")
-    print("Press Ctrl+C to stop.")
+    print(f"Agent Pipeline 可视化报告地址：http://{host}:{port}/{filename}")
+    print("按 Ctrl+C 停止服务。")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServer stopped.")
+        print("\n服务已停止。")
         server.server_close()
 
 
@@ -501,31 +504,31 @@ def serve_dashboard(output_path: str | Path, host: str = "127.0.0.1", port: int 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Agent Pipeline Dashboard / Report Viewer"
+        description="Agent Pipeline 可视化报告生成器"
     )
     parser.add_argument(
         "--input", required=True,
-        help="Path to V13 regression JSON (e.g. .agent/reports/v13_pipeline_regression.json)"
+        help="Pipeline 回归 JSON 路径，例如 .agent/reports/pipeline_report.json"
     )
     parser.add_argument(
         "--output", default="",
-        help="Path for generated HTML dashboard"
+        help="生成的 HTML Dashboard 路径"
     )
     parser.add_argument(
         "--open", action="store_true",
-        help="Open the generated HTML in browser after creation"
+        help="生成后在浏览器中打开 HTML"
     )
     parser.add_argument(
         "--serve", action="store_true",
-        help="Serve the dashboard via local HTTP server"
+        help="通过本地 HTTP 服务展示 Dashboard"
     )
     parser.add_argument(
         "--port", type=int, default=8765,
-        help="Port for local server (default: 8765)"
+        help="本地服务端口，默认 8765"
     )
     parser.add_argument(
         "--json-summary", action="store_true",
-        help="Output JSON summary instead of HTML"
+        help="输出 JSON 摘要而不是 HTML"
     )
     return parser
 
@@ -535,7 +538,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.json_summary and not args.output:
-        print("error: --output is required unless --json-summary is used", file=sys.stderr)
+        print("错误：除 --json-summary 外必须提供 --output", file=sys.stderr)
         return 2
 
     try:
@@ -544,10 +547,10 @@ def main() -> int:
             output_path=args.output or "/dev/null",
         )
     except FileNotFoundError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"错误：{exc}", file=sys.stderr)
         return 2
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"错误：{exc}", file=sys.stderr)
         return 2
 
     if args.json_summary:
@@ -556,13 +559,13 @@ def main() -> int:
 
     html = render_dashboard_html(model)
     out_path = write_dashboard(html, args.output)
-    print(f"Dashboard written to {out_path.resolve()}")
+    print(f"Pipeline 可视化报告已写入 {out_path.resolve()}")
 
     if args.open:
         try:
             webbrowser.open(str(out_path.resolve()))
         except Exception as exc:
-            print(f"warning: could not open browser: {exc}", file=sys.stderr)
+            print(f"警告：无法打开浏览器：{exc}", file=sys.stderr)
 
     if args.serve:
         serve_dashboard(args.output, port=args.port)
