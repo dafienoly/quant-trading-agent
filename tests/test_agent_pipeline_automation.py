@@ -161,7 +161,14 @@ def test_feature_state_branch_includes_issue_number_for_restart_isolation():
         issue_number=62,
     )
 
-    assert state["epic_branch"] == "epic/20260618-agent-pipeline-issue-62"
+    epic_branch = state["epic_branch"]
+
+    assert epic_branch.startswith("epic/")
+    assert epic_branch.endswith("-agent-pipeline-issue-62")
+
+    date_part = epic_branch.split("/")[1].split("-")[0]
+    assert len(date_part) == 8
+    assert date_part.isdigit()
 
 
 def test_same_feature_restarts_use_distinct_issue_scoped_branches():
