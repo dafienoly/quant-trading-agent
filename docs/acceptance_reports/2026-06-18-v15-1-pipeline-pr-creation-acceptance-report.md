@@ -53,3 +53,13 @@ git ls-files .agent/tmp
 ## 是否可合并建议
 
 建议进入人工审阅。自动化验收通过，但本仓库禁止自动合并 main，必须由用户人工审阅和手动合并。
+
+## 补充验证：日期相关测试稳定性修复
+
+人工复验时发现 `test_feature_state_branch_includes_issue_number_for_restart_isolation` 使用固定日期 `20260618`，会导致测试在后续日期运行时失败。已修复为验证 `epic/<8位日期>-agent-pipeline-issue-62` 格式，避免测试依赖固定日期，同时保留对 issue number 隔离逻辑的验证。
+
+复验结果：
+
+```text
+TMPDIR=/tmp/codex-pytest python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q
+=> 68 passed
