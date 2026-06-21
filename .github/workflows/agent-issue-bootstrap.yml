@@ -67,6 +67,7 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           FEATURE_ID: ${{ inputs.feature_id }}
           RISK_LEVEL: ${{ inputs.risk_level || '' }}
+          GITHUB_RUN_ID_VALUE: ${{ github.run_id }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -89,6 +90,9 @@ jobs:
           if ($env:ISSUE_URL) {
             $argsList += @("--issue-url", $env:ISSUE_URL)
           }
+          if ($env:GITHUB_RUN_ID_VALUE) {
+            $argsList += @("--run-id", $env:GITHUB_RUN_ID_VALUE)
+          }
 
           python scripts/agent_pipeline.py init-feature @argsList
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -102,14 +106,50 @@ jobs:
           "feature_id=$featureId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Create or switch epic branch
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
           $branch = "${{ steps.init.outputs.epic_branch }}"
-          git switch -c $branch
-          if ($LASTEXITCODE -ne 0) {
-            git switch $branch
+          $reuseRemoteBranch = $false
+
+          $existingPrRaw = gh pr view $branch --json number,state,merged,headRefName,url 2>$null
+          if ($LASTEXITCODE -eq 0 -and $existingPrRaw) {
+            $existingPr = $existingPrRaw | ConvertFrom-Json
+            if ($existingPr.headRefName -ne $branch) {
+              Write-Error "PR lookup for '$branch' returned head '$($existingPr.headRefName)'; failing closed."
+              exit 2
+            }
+            if ($existingPr.state -eq "OPEN") {
+              Write-Host "Open PR #$($existingPr.number) already exists for branch '$branch'; reusing branch."
+              $reuseRemoteBranch = $true
+            } elseif ($existingPr.state -eq "CLOSED") {
+              if ($existingPr.merged -eq $true) {
+                Write-Error "Branch '$branch' belongs to merged PR #$($existingPr.number); refusing to reuse it."
+                exit 2
+              }
+              $branch = "$branch-restart-${{ github.run_id }}-${{ github.run_attempt }}"
+              Write-Host "Closed unmerged PR #$($existingPr.number) exists for the requested branch. Using new branch '$branch'."
+              python scripts/agent_pipeline.py set-pr-metadata --pr-number 0 --pr-url "pending" --epic-branch $branch
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            } else {
+              Write-Error "Unexpected PR state '$($existingPr.state)' for branch '$branch'; failing closed."
+              exit 2
+            }
+          }
+
+          if ($reuseRemoteBranch) {
+            git fetch origin $branch
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git switch -C $branch --track origin/$branch
+            if ($LASTEXITCODE -ne 0) {
+              git switch -C $branch origin/$branch
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          } else {
+            git switch -c $branch
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -200,7 +240,9 @@ jobs:
           } else {
             git commit -m "chore(agent): bootstrap ${{ steps.init.outputs.feature_id }} pipeline"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            git push -u origin "${{ steps.init.outputs.epic_branch }}"
+            $branch = python scripts/agent_pipeline.py print-state --key epic_branch
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git push -u origin $branch
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -209,12 +251,50 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $branch = "${{ steps.init.outputs.epic_branch }}"
+          $branch = python scripts/agent_pipeline.py print-state --key epic_branch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $title = "agent: ${{ steps.init.outputs.feature_id }}"
           $body = "Issue-driven Agent pipeline branch. See .agent/current_task.yaml and .agent/handoff/."
-          gh pr view $branch --json number
-          if ($LASTEXITCODE -ne 0) {
+
+          git push -u origin $branch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $prRaw = gh pr view $branch --json number,state,merged,headRefName,url 2>$null
+          if ($LASTEXITCODE -eq 0 -and $prRaw) {
+            $existingPr = $prRaw | ConvertFrom-Json
+            if ($existingPr.headRefName -ne $branch) {
+              Write-Error "PR #$($existingPr.number) head '$($existingPr.headRefName)' does not match branch '$branch'."
+              exit 2
+            }
+            if ($existingPr.state -eq "OPEN") {
+              Write-Host "Reusing open PR #$($existingPr.number) for branch '$branch'."
+            } elseif ($existingPr.state -eq "CLOSED") {
+              Write-Error "Refusing to update closed PR #$($existingPr.number) for branch '$branch'."
+              exit 2
+            } else {
+              Write-Error "Unexpected PR state '$($existingPr.state)' for branch '$branch'."
+              exit 2
+            }
+          } else {
             gh pr create --base main --head $branch --title $title --body $body
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          $confirmed = gh pr view $branch --json number,state,merged,headRefName,url | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $confirmed) { exit 2 }
+          if ($confirmed.state -ne "OPEN" -or $confirmed.headRefName -ne $branch) {
+            Write-Error "Confirmed PR is not reusable: state=$($confirmed.state), head=$($confirmed.headRefName), branch=$branch"
+            exit 2
+          }
+          python scripts/agent_pipeline.py set-pr-metadata --pr-number $confirmed.number --pr-url $confirmed.url --epic-branch $branch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git add .agent/state.json .agent/current_task.yaml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "chore(agent): record pipeline PR metadata"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git push
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -234,10 +314,18 @@ jobs:
           gh issue edit $issue --remove-label "stage:pm-pending"
           if ($LASTEXITCODE -ne 0) { Write-Host "stage:pm-pending was not removed; continuing." }
 
-          $branch = "${{ steps.init.outputs.epic_branch }}"
-          $pr = gh pr view $branch --json number --jq ".number"
+          $branch = python scripts/agent_pipeline.py print-state --key epic_branch
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pr = python scripts/agent_pipeline.py print-state --key pr_number
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($LASTEXITCODE -ne 0 -or -not $pr) {
             Write-Error "Could not find pipeline PR for branch '$branch'."
+            exit 2
+          }
+          $prState = gh pr view $pr --json number,state,headRefName,url | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $prState) { exit 2 }
+          if ($prState.state -ne "OPEN" -or $prState.headRefName -ne $branch) {
+            Write-Error "Pipeline PR #$pr is not open or does not match branch '$branch'."
             exit 2
           }
 

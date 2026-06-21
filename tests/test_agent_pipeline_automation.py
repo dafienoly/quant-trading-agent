@@ -7,6 +7,8 @@ from src.product_app.agent_pipeline_automation import (
     build_feature_state,
     check_required_reports,
     classify_changed_files,
+    read_state,
+    set_pr_metadata,
     slugify_feature,
     write_feature_state,
     write_handoff,
@@ -149,6 +151,94 @@ def test_feature_state_contains_team_pipeline_defaults():
     assert state["team_pipeline"]["max_codex_review_attempts"] == 3
     assert state["agent_roles"]["codex_a"] == ["pm", "acceptance"]
     assert state["agent_roles"]["claude_b"] == ["phase_dev"]
+
+
+def test_feature_state_branch_includes_issue_number_for_restart_isolation():
+    state = build_feature_state(
+        title="[Feature] Agent Pipeline",
+        feature_id="agent-pipeline",
+        risk_level="docs-only",
+        issue_number=62,
+    )
+
+    epic_branch = state["epic_branch"]
+
+    assert epic_branch.startswith("epic/")
+    assert epic_branch.endswith("-agent-pipeline-issue-62")
+
+    date_part = epic_branch.split("/")[1].split("-")[0]
+    assert len(date_part) == 8
+    assert date_part.isdigit()
+
+
+def test_same_feature_restarts_use_distinct_issue_scoped_branches():
+    first = build_feature_state(
+        title="[Feature] Agent Pipeline",
+        feature_id="agent-pipeline",
+        risk_level="docs-only",
+        issue_number=62,
+    )
+    second = build_feature_state(
+        title="[Feature] Agent Pipeline",
+        feature_id="agent-pipeline",
+        risk_level="docs-only",
+        issue_number=63,
+    )
+
+    assert first["epic_branch"] != second["epic_branch"]
+    assert first["epic_branch"].endswith("-issue-62")
+    assert second["epic_branch"].endswith("-issue-63")
+
+
+def test_pr_metadata_is_written_to_state_and_current_task(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] Agent Pipeline",
+        feature_id="agent-pipeline",
+        risk_level="docs-only",
+        issue_number=62,
+    )
+    write_feature_state(tmp_path, state)
+
+    set_pr_metadata(tmp_path, pr_number=64, pr_url="https://github.com/dafienoly/quant-trading-agent/pull/64")
+
+    updated = read_state(tmp_path)
+    assert updated["pr_number"] == 64
+    assert updated["pr_url"] == "https://github.com/dafienoly/quant-trading-agent/pull/64"
+    assert updated["pull_request"]["number"] == 64
+    task_text = (tmp_path / ".agent" / "current_task.yaml").read_text(encoding="utf-8")
+    assert "pr_number: 64" in task_text
+
+
+def test_issue_bootstrap_queries_pr_state_before_reuse():
+    text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
+
+    assert "gh pr view $branch --json number,state,merged,headRefName,url" in text
+    assert "$existingPr.state -eq \"OPEN\"" in text
+    assert "$existingPr.state -eq \"CLOSED\"" in text
+    assert "set-pr-metadata" in text
+
+
+def test_issue_bootstrap_reuses_open_pr_from_remote_branch():
+    text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
+
+    assert "git fetch origin $branch" in text
+    assert "git switch -C $branch --track origin/$branch" in text
+
+
+def test_stage_runner_validates_dispatched_pr_is_open_and_matches_ref():
+    text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
+
+    assert "Validate dispatched PR is open and matches ref" in text
+    assert "gh pr view $pr --json number,state,headRefName,url" in text
+    assert "$prState.state -ne \"OPEN\"" in text
+    assert "$prState.headRefName -ne $expectedBranch" in text
+
+
+def test_main_merge_gate_never_auto_merges():
+    text = Path(".github/workflows/agent-main-merge-gate.yml").read_text(encoding="utf-8")
+
+    assert "gh pr merge" not in text
+    assert "需要人工审阅和手动合并" in text
 
 
 def test_codex_pm_handoff_only_requests_requirements(tmp_path: Path):

@@ -20,6 +20,7 @@ from src.product_app.agent_pipeline_automation import (  # noqa: E402
     classify_changed_files,
     normalize_gate_decision,
     read_state,
+    set_pr_metadata,
     sync_state_from_gates,
     write_feature_state,
     write_handoff,
@@ -48,6 +49,7 @@ def cmd_init_feature(args: argparse.Namespace) -> int:
         risk_level=args.risk_level,
         issue_number=args.issue_number,
         issue_url=args.issue_url,
+        run_id=args.run_id,
     )
     write_feature_state(root, state)
     for stage in args.handoff_stage:
@@ -139,6 +141,18 @@ def cmd_sync_state_from_gates(args: argparse.Namespace) -> int:
     return 0 if not result.get("updated") or result["diagnostics"]["consistent"] else 2
 
 
+def cmd_set_pr_metadata(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    state = set_pr_metadata(
+        root,
+        pr_number=args.pr_number,
+        pr_url=args.pr_url,
+        epic_branch=args.epic_branch,
+    )
+    print(json.dumps(state, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent pipeline automation CLI")
     parser.set_defaults(func=None)
@@ -154,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--risk-level", default="unknown")
     p.add_argument("--issue-number", type=int)
     p.add_argument("--issue-url")
+    p.add_argument("--run-id")
     p.add_argument(
         "--handoff-stage",
         action="append",
@@ -227,6 +242,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true",
                    help="Report changes without writing")
     p.set_defaults(func=cmd_sync_state_from_gates)
+
+    p = init.add_parser("set-pr-metadata", parents=[common_root],
+                        help="Persist the confirmed pull request identity into pipeline state")
+    p.add_argument("--pr-number", type=int, required=True)
+    p.add_argument("--pr-url", required=True)
+    p.add_argument("--epic-branch")
+    p.set_defaults(func=cmd_set_pr_metadata)
 
     return parser
 

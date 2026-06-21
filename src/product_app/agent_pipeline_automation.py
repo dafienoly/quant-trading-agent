@@ -115,18 +115,26 @@ class PipelineFeature:
     risk_level: str
     issue_number: int | None = None
     issue_url: str | None = None
+    run_id: str | None = None
     epic_branch: str | None = None
     current_stage: str = "pm_pending"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def with_default_branch(self) -> "PipelineFeature":
-        branch = self.epic_branch or f"epic/{today_slug()}-{self.feature_id}"
+        if self.issue_number is not None:
+            branch_suffix = f"issue-{self.issue_number}"
+        elif self.run_id:
+            branch_suffix = f"run-{self.run_id}"
+        else:
+            branch_suffix = "manual"
+        branch = self.epic_branch or f"epic/{today_slug()}-{self.feature_id}-{branch_suffix}"
         return PipelineFeature(
             feature_id=self.feature_id,
             title=self.title,
             risk_level=self.risk_level,
             issue_number=self.issue_number,
             issue_url=self.issue_url,
+            run_id=self.run_id,
             epic_branch=branch,
             current_stage=self.current_stage,
             created_at=self.created_at,
@@ -265,6 +273,7 @@ def build_feature_state(
     risk_level: str = "unknown",
     issue_number: int | None = None,
     issue_url: str | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     feature = PipelineFeature(
         feature_id=feature_id or slugify_feature(title),
@@ -272,6 +281,7 @@ def build_feature_state(
         risk_level=risk_level,
         issue_number=issue_number,
         issue_url=issue_url,
+        run_id=run_id,
     ).with_default_branch()
     state = asdict(feature)
     state["required_docs"] = {
@@ -316,6 +326,32 @@ def build_feature_state(
     ]
     state["stage_status"] = {stage: "pending" for stage in STAGE_ORDER}
     state["stage_status"]["pm"] = "pending"
+    return state
+
+
+def set_pr_metadata(
+    root: Path,
+    *,
+    pr_number: int,
+    pr_url: str,
+    epic_branch: str | None = None,
+) -> dict[str, Any]:
+    """Persist the confirmed GitHub PR identity into pipeline state files."""
+    state = read_state(root)
+    state["pr_number"] = pr_number
+    state["pr_url"] = pr_url
+    state["pull_request"] = {
+        "number": pr_number,
+        "url": pr_url,
+    }
+    if epic_branch:
+        state["epic_branch"] = epic_branch
+        state["pull_request"]["head_ref"] = epic_branch
+    write_json(root / STATE_PATH, state)
+    (root / CURRENT_TASK_PATH).write_text(
+        yaml.safe_dump(state, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
     return state
 
 
