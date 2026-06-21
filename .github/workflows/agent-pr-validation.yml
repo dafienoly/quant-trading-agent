@@ -46,9 +46,9 @@ jobs:
 
       - name: 运行 Pipeline 自动化测试
         if: always()
-        run: >-
-          python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q
-          --basetemp=runtime/pytest-tmp-agent-pr-validation
+        run: |
+          mkdir -p runtime
+          python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q --basetemp=runtime/pytest-tmp-agent-pr-validation
 
       - name: 检查 Git diff 格式
         if: always()

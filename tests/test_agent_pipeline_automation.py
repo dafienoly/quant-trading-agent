@@ -256,6 +256,7 @@ def test_pr_validation_runs_required_lightweight_checks():
         "python -m pytest tests/test_agent_pipeline_automation.py "
         "tests/test_agent_pipeline_regression.py -q" in text
     )
+    assert "mkdir -p runtime" in text
     assert "git diff --check" in text
     assert "git diff --name-only origin/main...HEAD" in text
     assert "git ls-files .agent/tmp .agent/reports" in text
