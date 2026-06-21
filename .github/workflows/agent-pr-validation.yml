@@ -45,16 +45,19 @@ jobs:
           python scripts/agent_pipeline_regression.py --strict --json --output .agent/reports/pipeline_report.json
 
       - name: 运行 Pipeline 自动化测试
+        id: tests
         if: always()
         run: |
           mkdir -p runtime
           python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q --basetemp=runtime/pytest-tmp-agent-pr-validation
 
       - name: 检查 Git diff 格式
+        id: diff_check
         if: always()
         run: git diff --check
 
       - name: 检查交易敏感模块
+        id: restricted
         if: always()
         shell: bash
         run: |
@@ -67,6 +70,7 @@ jobs:
           fi
 
       - name: 检查临时 Pipeline 产物未被跟踪
+        id: tracked_files
         if: always()
         shell: bash
         run: |
@@ -80,6 +84,12 @@ jobs:
 
       - name: 生成 Pipeline 诊断报告
         if: always()
+        env:
+          REGRESSION_OUTCOME: ${{ steps.regression.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          DIFF_OUTCOME: ${{ steps.diff_check.outcome }}
+          RESTRICTED_OUTCOME: ${{ steps.restricted.outcome }}
+          TRACKED_OUTCOME: ${{ steps.tracked_files.outcome }}
         shell: bash
         run: |
           mkdir -p .agent/reports
@@ -106,6 +116,67 @@ jobs:
           }
           JSON
           fi
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report_path = Path(".agent/reports/pipeline_report.json")
+          try:
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+          except (json.JSONDecodeError, OSError) as exc:
+              report = {
+                  "status": "fail",
+                  "summary": {},
+                  "checks": [{
+                      "name": "diagnostic_report_load",
+                      "severity": "critical",
+                      "passed": False,
+                      "message": f"无法读取正式回归报告；这是诊断记录：{exc}",
+                  }],
+                  "artifacts": {"diagnostic_fallback": True},
+              }
+
+          outcomes = {
+              "strict_regression": os.environ.get("REGRESSION_OUTCOME", "unknown"),
+              "target_pytest": os.environ.get("TEST_OUTCOME", "unknown"),
+              "git_diff_check": os.environ.get("DIFF_OUTCOME", "unknown"),
+              "restricted_paths": os.environ.get("RESTRICTED_OUTCOME", "unknown"),
+              "tracked_runtime_files": os.environ.get("TRACKED_OUTCOME", "unknown"),
+          }
+          checks = [
+              check for check in report.get("checks", [])
+              if not str(check.get("name", "")).startswith("github_step_")
+          ]
+          for name, outcome in outcomes.items():
+              checks.append({
+                  "name": f"github_step_{name}",
+                  "severity": "critical",
+                  "passed": outcome == "success",
+                  "message": f"GitHub Actions 步骤结果：{outcome}",
+              })
+
+          report["checks"] = checks
+          if any(outcome != "success" for outcome in outcomes.values()):
+              report["status"] = "fail"
+          report["summary"] = {
+              "critical_count": sum(
+                  1 for check in checks
+                  if check.get("severity") == "critical" and not check.get("passed")
+              ),
+              "warning_count": sum(
+                  1 for check in checks
+                  if check.get("severity") == "warning" and not check.get("passed")
+              ),
+              "info_count": sum(1 for check in checks if check.get("severity") == "info"),
+          }
+          report.setdefault("artifacts", {})["workflow_step_outcomes"] = outcomes
+          report_path.write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
 
           set +e
           python scripts/agent_pipeline_report_viewer.py \

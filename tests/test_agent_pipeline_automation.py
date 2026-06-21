@@ -273,6 +273,18 @@ def test_pr_validation_uploads_dashboard_even_when_validation_fails():
     assert "查看 Pipeline Dashboard" in text
 
 
+def test_pr_validation_report_aggregates_all_step_outcomes():
+    text = PR_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "REGRESSION_OUTCOME: ${{ steps.regression.outcome }}" in text
+    assert "TEST_OUTCOME: ${{ steps.tests.outcome }}" in text
+    assert "DIFF_OUTCOME: ${{ steps.diff_check.outcome }}" in text
+    assert "RESTRICTED_OUTCOME: ${{ steps.restricted.outcome }}" in text
+    assert "TRACKED_OUTCOME: ${{ steps.tracked_files.outcome }}" in text
+    assert '"workflow_step_outcomes"' in text
+    assert 'report["status"] = "fail"' in text
+
+
 def test_pipeline_workflows_keep_diagnostic_artifacts_on_failure():
     for workflow in (
         Path(".github/workflows/agent-stage-runner.yml"),
