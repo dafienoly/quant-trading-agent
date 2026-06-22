@@ -4,18 +4,24 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.product_app.agent_pipeline_automation import (
+    STAGES_WITH_GATES,
     build_feature_state,
     check_required_reports,
+    check_state_gate_consistency,
     classify_changed_files,
+    normalize_gate_decision,
     read_state,
     set_pr_metadata,
     slugify_feature,
+    sync_state_from_gates,
     write_feature_state,
     write_handoff,
+    write_json,
 )
 
 
 RUNNER_REFERENCE = Path("docs/ops/agent-runners/run-codex-stage.ps1.reference")
+PR_VALIDATION_WORKFLOW = Path(".github/workflows/agent-pr-validation.yml")
 
 
 def _valid_requirements(feature_id: str = "agent-pipeline") -> str:
@@ -241,6 +247,64 @@ def test_main_merge_gate_never_auto_merges():
     assert "需要人工审阅和手动合并" in text
 
 
+def test_pr_validation_runs_required_lightweight_checks():
+    text = PR_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "pull_request:" in text
+    assert "python scripts/agent_pipeline_regression.py --strict" in text
+    assert (
+        "python -m pytest tests/test_agent_pipeline_automation.py "
+        "tests/test_agent_pipeline_regression.py -q" in text
+    )
+    assert "mkdir -p runtime" in text
+    assert "git diff --check" in text
+    assert "git diff --name-only origin/main...HEAD" in text
+    assert "git ls-files .agent/tmp .agent/reports" in text
+
+
+def test_pr_validation_uploads_dashboard_even_when_validation_fails():
+    text = PR_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "if: always()" in text
+    assert "actions/upload-artifact@v4" in text
+    assert ".agent/reports/pipeline_report.json" in text
+    assert ".agent/reports/pipeline_dashboard.html" in text
+    assert "<!-- agent-pipeline-dashboard -->" in text
+    assert "查看 Pipeline Dashboard" in text
+
+
+def test_pr_validation_report_aggregates_all_step_outcomes():
+    text = PR_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "REGRESSION_OUTCOME: ${{ steps.regression.outcome }}" in text
+    assert "TEST_OUTCOME: ${{ steps.tests.outcome }}" in text
+    assert "DIFF_OUTCOME: ${{ steps.diff_check.outcome }}" in text
+    assert "RESTRICTED_OUTCOME: ${{ steps.restricted.outcome }}" in text
+    assert "TRACKED_OUTCOME: ${{ steps.tracked_files.outcome }}" in text
+    assert '"workflow_step_outcomes"' in text
+    assert 'report["status"] = "fail"' in text
+
+
+def test_pipeline_workflows_keep_diagnostic_artifacts_on_failure():
+    for workflow in (
+        Path(".github/workflows/agent-stage-runner.yml"),
+        Path(".github/workflows/agent-main-merge-gate.yml"),
+    ):
+        text = workflow.read_text(encoding="utf-8")
+        assert "生成 Pipeline 诊断报告" in text
+        assert "上传 Pipeline Dashboard artifact" in text
+        assert "if: always()" in text
+        assert "actions/upload-artifact@v4" in text
+        assert ".agent/reports/pipeline_report.json" in text
+        assert ".agent/reports/pipeline_dashboard.html" in text
+
+
+def test_agent_report_runtime_directory_is_ignored_and_untracked():
+    gitignore = Path(".gitignore").read_text(encoding="utf-8")
+
+    assert ".agent/reports/" in gitignore
+
+
 def test_codex_pm_handoff_only_requests_requirements(tmp_path: Path):
     state = build_feature_state(
         title="[Feature] Agent Pipeline",
@@ -400,15 +464,6 @@ def test_runner_reference_avoids_powershell_pipe_capture_for_codex_output():
 # ---------------------------------------------------------------------------
 # State / gate consistency
 # ---------------------------------------------------------------------------
-
-from src.product_app.agent_pipeline_automation import (
-    FULL_STAGE_ORDER,
-    STAGES_WITH_GATES,
-    check_state_gate_consistency,
-    sync_state_from_gates,
-    write_json,
-)
-
 
 def _write_gate(tmp_path: Path, gate_name: str, *, passed: bool, found_keys: list[str] | None = None):
     """Helper to write a minimal gate JSON."""
@@ -604,9 +659,6 @@ def test_pre_gate_stages_passed_when_downstream_gate_evidence(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # Gate decision normalization
 # ---------------------------------------------------------------------------
-
-from src.product_app.agent_pipeline_automation import normalize_gate_decision
-
 
 def test_normalize_accepted():
     assert normalize_gate_decision("accepted") == "ACCEPTED"

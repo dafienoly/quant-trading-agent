@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -33,6 +31,7 @@ if str(REPO_ROOT) not in sys.path:
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "agent-stage-runner.yml"
 RUNNER_REFERENCE = REPO_ROOT / "docs" / "ops" / "agent-runners" / "run-codex-stage.ps1.reference"
 GITIGNORE_PATH = REPO_ROOT / ".gitignore"
+PR_VALIDATION_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "agent-pr-validation.yml"
 
 CANONICAL_STAGES = (
     "codex_pm",
@@ -253,7 +252,7 @@ def check_runner(repo_root: Path) -> list[CheckResult]:
 
 
 def check_runtime_temp(repo_root: Path, base: str = "origin/main") -> list[CheckResult]:
-    """Validate .agent/tmp directory hygiene."""
+    """Validate .agent/tmp and .agent/reports directory hygiene."""
     checks: list[CheckResult] = []
     gitignore = _read(repo_root / ".gitignore")
 
@@ -262,12 +261,23 @@ def check_runtime_temp(repo_root: Path, base: str = "origin/main") -> list[Check
     else:
         checks.append(CheckResult("gitignore_agent_tmp", "critical", False, ".gitignore missing .agent/tmp/"))
 
+    if gitignore and ".agent/reports/" in gitignore:
+        checks.append(CheckResult("gitignore_agent_reports", "critical", True, ".gitignore 已包含 .agent/reports/"))
+    else:
+        checks.append(CheckResult("gitignore_agent_reports", "critical", False, ".gitignore 缺少 .agent/reports/"))
+
     # Check tracked files
-    tracked = _git(f"ls-files .agent/tmp", repo_root)
+    tracked = _git("ls-files .agent/tmp", repo_root)
     if not tracked:
         checks.append(CheckResult("agent_tmp_not_tracked", "critical", True, ".agent/tmp not tracked"))
     else:
         checks.append(CheckResult("agent_tmp_not_tracked", "critical", False, f".agent/tmp has tracked files: {tracked[:100]}"))
+
+    tracked_reports = _git("ls-files .agent/reports", repo_root)
+    if not tracked_reports:
+        checks.append(CheckResult("pipeline_reports_not_tracked", "critical", True, ".agent/reports 没有已跟踪文件"))
+    else:
+        checks.append(CheckResult("pipeline_reports_not_tracked", "critical", False, f".agent/reports 存在已跟踪文件：{tracked_reports[:100]}"))
 
     # Check branch diff
     try:
@@ -279,6 +289,48 @@ def check_runtime_temp(repo_root: Path, base: str = "origin/main") -> list[Check
     except Exception:
         checks.append(CheckResult("branch_no_agent_tmp_diff", "warning", True, "diff check skipped (no base)"))
 
+    return checks
+
+
+def check_pr_validation_workflow(repo_root: Path) -> list[CheckResult]:
+    """Validate the lightweight pull-request workflow and dashboard upload."""
+    checks: list[CheckResult] = []
+    path = repo_root / PR_VALIDATION_WORKFLOW_PATH.relative_to(REPO_ROOT)
+    text = _read(path)
+    if text is None:
+        checks.append(CheckResult("pr_validation_exists", "critical", False, "未找到 agent-pr-validation.yml"))
+        return checks
+
+    checks.append(CheckResult("pr_validation_exists", "critical", True, "agent-pr-validation.yml 已存在"))
+    required_commands = (
+        "python scripts/agent_pipeline_regression.py --strict",
+        "python -m pytest tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q",
+        "git diff --check",
+        "git diff --name-only origin/main...HEAD",
+        "git ls-files .agent/tmp .agent/reports",
+    )
+    missing_commands = [command for command in required_commands if command not in text]
+    checks.append(CheckResult(
+        "pr_validation_required_commands",
+        "critical",
+        not missing_commands,
+        "所有必需命令均已配置" if not missing_commands else f"缺少命令：{missing_commands}",
+    ))
+
+    artifact_markers = (
+        "if: always()",
+        "actions/upload-artifact@v4",
+        ".agent/reports/pipeline_report.json",
+        ".agent/reports/pipeline_dashboard.html",
+        "<!-- agent-pipeline-dashboard -->",
+    )
+    missing_markers = [marker for marker in artifact_markers if marker not in text]
+    checks.append(CheckResult(
+        "pr_validation_dashboard_artifact",
+        "critical",
+        not missing_markers,
+        "Dashboard artifact 与 PR 查看说明已配置" if not missing_markers else f"缺少标记：{missing_markers}",
+    ))
     return checks
 
 
@@ -380,9 +432,6 @@ def check_gates(repo_root: Path) -> list[CheckResult]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
 
-        # Create minimal fixture: feature state + all required artifacts
-        from src.product_app.agent_pipeline_automation import build_feature_state, write_feature_state
-
         try:
             _simulate_pipeline(tmp, "gate-test-feature")
             checks.append(CheckResult("gate_simulation_runs", "info", True, "gate simulation completed"))
@@ -451,8 +500,6 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
         write_feature_state,
         write_handoff,
     )
-    from scripts.agent_pipeline import cmd_check_gates
-
     # 1. Init feature
     state = build_feature_state(
         title="[Simulation] Regression Test",
@@ -627,8 +674,13 @@ def check_forbidden_markers(repo_root: Path) -> list[CheckResult]:
                 if marker in stripped and not stripped.startswith('#'):
                     found = True
                     break
-            checks.append(CheckResult(f"forbidden_{marker[:20].replace(' ', '_')}", "critical", not found,
-                          f"'{marker}' {"found in runner" if found else "not found in runner"}"))
+            result_text = "在 runner 中发现" if found else "runner 中未发现"
+            checks.append(CheckResult(
+                f"forbidden_{marker[:20].replace(' ', '_')}",
+                "critical",
+                not found,
+                f"'{marker}' {result_text}",
+            ))
     else:
         checks.append(CheckResult("forbidden_runner_read", "critical", False, "cannot read runner reference"))
 
@@ -643,8 +695,13 @@ def check_forbidden_markers(repo_root: Path) -> list[CheckResult]:
                 if marker in stripped and not stripped.startswith('#'):
                     found = True
                     break
-            checks.append(CheckResult(f"claude_forbidden_{marker[:20].replace(' ', '_')}", "critical", not found,
-                          f"'{marker}' {"found in claude runner" if found else "not found in claude runner"}"))
+            result_text = "在 Claude runner 中发现" if found else "Claude runner 中未发现"
+            checks.append(CheckResult(
+                f"claude_forbidden_{marker[:20].replace(' ', '_')}",
+                "critical",
+                not found,
+                f"'{marker}' {result_text}",
+            ))
 
     # Check for UTF-8 BOM in formal artifacts
     docs_paths = [
@@ -674,6 +731,7 @@ def collect_checks(repo_root: Path, base: str = "origin/main", strict: bool = Fa
     all_checks.extend(check_workflow(repo_root))
     all_checks.extend(check_runner(repo_root))
     all_checks.extend(check_runtime_temp(repo_root, base))
+    all_checks.extend(check_pr_validation_workflow(repo_root))
     all_checks.extend(check_restricted_diff(repo_root, base))
     all_checks.extend(check_artifacts(repo_root))
     all_checks.extend(check_gates(repo_root))
@@ -741,11 +799,12 @@ def render_human(report: dict[str, Any]) -> str:
 
 def render_json(report: dict[str, Any], output: Path | None = None) -> str:
     """Render report as JSON, optionally writing to a file."""
+    if output:
+        report.setdefault("artifacts", {})["report_path"] = str(output)
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(text, encoding="utf-8")
-        report["artifacts"]["report_path"] = str(output)
     return text
 
 
@@ -768,7 +827,6 @@ def main() -> int:
     repo = REPO_ROOT
 
     report = collect_checks(repo, base=args.base, strict=args.strict)
-    s = report["summary"]
 
     if args.json or args.output:
         output_path = Path(args.output) if args.output else None
