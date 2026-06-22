@@ -43,6 +43,21 @@ class JobState(str, Enum):
 class JobInfo:
     """作业信息"""
 
+
+    _last_refresh_result: dict | None = None
+
+    def get_refresh_status(self) -> dict:
+        if self._last_refresh_result is None:
+            return {"status": "IDLE"}
+        return dict(self._last_refresh_result)
+
+    def _set_refresh_result(self, status: str, data: list | None = None, error: str | None = None) -> None:
+        self._last_refresh_result = {
+            "status": status,
+            "data": data,
+            "error": error,
+        }
+
     def __init__(self, name: str, state: JobState = JobState.IDLE):
         self.name = name
         self.state = state
@@ -70,6 +85,21 @@ class ServiceManager:
     管理后台轮询作业的启动、停止和状态查询。
     状态持久化到 runtime/state/jobs.json。
     """
+
+
+    _last_refresh_result: dict | None = None
+
+    def get_refresh_status(self) -> dict:
+        if self._last_refresh_result is None:
+            return {"status": "IDLE"}
+        return dict(self._last_refresh_result)
+
+    def _set_refresh_result(self, status: str, data: list | None = None, error: str | None = None) -> None:
+        self._last_refresh_result = {
+            "status": status,
+            "data": data,
+            "error": error,
+        }
 
     def __init__(self, state_dir: str = "runtime/state"):
         self._state_dir = Path(state_dir)
@@ -335,12 +365,4 @@ def get_service_manager() -> ServiceManager:
     return _service_manager
 
 
-    def get_refresh_status(self) -> dict:
-        return self._last_refresh_result if hasattr(self, '_last_refresh_result') else {}
 
-    def _set_refresh_result(self, status: str, data: list | None = None, error: str | None = None) -> None:
-        self._last_refresh_result = {
-            "status": status,
-            "data": data,
-            "error": error,
-        }

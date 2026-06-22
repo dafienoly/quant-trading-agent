@@ -12,6 +12,7 @@
 - data_status=FAILED 时 Signal Agent 和订单草稿 API 必须阻断
 - 因子、回测、信号不能绕过 LiveDataService 直接读 provider
 """
+
 from __future__ import annotations
 
 REFRESH_IDLE = "IDLE"
@@ -20,6 +21,8 @@ REFRESH_RUNNING = "RUNNING"
 REFRESH_SUCCEEDED = "SUCCEEDED"
 REFRESH_FAILED = "FAILED"
 REFRESH_CANCELLED = "CANCELLED"
+
+
 
 
 import os
