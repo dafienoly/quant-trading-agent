@@ -19,3 +19,9 @@ Task:
 - Produce `docs/test_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-<n>-test-report.md`.
 - If the phase passes, route back to Claude Code B for the next phase unless all phases are complete.
 - Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.
+
+## 中文要求
+
+- 用户可见输出默认中文。
+- 功能说明和验收报告必须包含中文内容。
+- 代码标识和 JSON key 保留英文。

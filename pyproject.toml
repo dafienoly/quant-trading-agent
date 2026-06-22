@@ -38,6 +38,10 @@ ui = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end tests requiring external services",
+    "browser: tests requiring Playwright/browser",
+]
 
 [tool.ruff]
 line-length = 100

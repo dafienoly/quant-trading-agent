@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,9 @@ REJECT_PATTERNS = (
     "This is a placeholder",
     "placeholder",
 )
+
+# Required Chinese characters minimum for non-pure-doc reports
+MIN_CHINESE_CHARS = 30
 
 ALLOWED_PURE_DOC_DIRS = (
     "docs/",
@@ -66,7 +70,23 @@ def is_pure_docs_changed(files: list[str]) -> bool:
     return all(f.startswith("docs/") for f in files)
 
 
-def check_report_content(path: str | Path, strict: bool) -> list[str]:
+def _section_has_content(text: str, heading: str) -> bool:
+    """Check that a Markdown section heading has substantive body content."""
+    pattern = rf"(?m)^##\s*{re.escape(heading)}\s*$(.*?)(?=\n##\s|\Z)"
+    m = re.search(pattern, text, re.DOTALL)
+    if not m:
+        return False
+    body = m.group(1).strip()
+    if not body:
+        return False
+    # Body consisting only of whitespace, dashes, or backticks is empty
+    stripped = body.replace('-', '').replace('`', '').strip()
+    if not stripped:
+        return False
+    return True
+
+
+def check_report_content(path: str | Path, strict: bool, require_chinese: bool = False) -> list[str]:
     """Check a single report file for content rules. Returns list of issues."""
     issues: list[str] = []
     p = Path(path)
@@ -83,26 +103,50 @@ def check_report_content(path: str | Path, strict: bool) -> list[str]:
     if not text.strip():
         return ["_empty"]
 
-    # Reject placeholder patterns
+    # Reject placeholder patterns (only in standalone context, not discussion)
+    # A line is a "standalone placeholder" if it IS the line content, not discussed
+    lines = text.split('\n')
     for pat in REJECT_PATTERNS:
-        if pat.lower() in text.lower():
-            issues.append(f"contains forbidden pattern: {pat}")
-            if not strict:
-                break  # one is enough for non-strict
+        for line in lines:
+            s = line.strip().rstrip('.。，,!！:：')
+            # Match if line IS the pattern (possibly with colon) or is mostly the pattern
+            if s.lower().startswith(pat.lower()):
+                issues.append(f"contains standalone forbidden pattern: {pat}")
+                break
+        else:
+            continue
 
-    # Check required sections
-    title_found = text.strip().startswith("#")
+    # Check required sections with content
+    sections_found = 0
+    sections_empty = []
+    title_found = False
+    for line in lines:
+        if line.strip().startswith("# ") or line.strip().startswith("#　"):
+            title_found = True
+            break
     if not title_found:
         issues.append("missing Markdown title")
 
-    sections_found = 0
     for section in REQUIRED_SECTIONS:
         if section in text:
-            sections_found += 1
+            if _section_has_content(text, section):
+                sections_found += 1
+            else:
+                sections_empty.append(section)
+        else:
+            issues.append(f"missing section: {section}")
 
-    if sections_found < len(REQUIRED_SECTIONS):
-        missing = [s for s in REQUIRED_SECTIONS if s not in text]
-        issues.append(f"missing sections: {', '.join(missing)}")
+    if sections_empty:
+        issues.append(f"empty sections (heading only): {', '.join(sections_empty)}")
+
+    # Chinese content requirement
+    if require_chinese:
+        # Count Chinese characters outside Markdown headings
+        body_lines = [ln for ln in lines if not ln.strip().startswith("#")]
+        body_text = "\n".join(body_lines)
+        chinese_chars = sum(1 for c in body_text if '\u4e00' <= c <= '\u9fff')
+        if chinese_chars < MIN_CHINESE_CHARS:
+            issues.append("insufficient Chinese content in report body")
 
     return issues
 
@@ -163,7 +207,7 @@ def validate_reports(
 
     # Content validation for each report
     for f in dev_reports + accept_reports:
-        issues = check_report_content(root / f, strict)
+        issues = check_report_content(root / f, strict, require_chinese=True)
         if issues:
             result["issues"].extend(f"{f}: {i}" for i in issues)
         result["report_files"][f] = {

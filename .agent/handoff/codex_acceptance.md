@@ -18,3 +18,9 @@ Task:
 - Conclusion must be one of: ACCEPTED, ACCEPTED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED.
 - ACCEPTED_WITH_NOTES is acceptable only for non-blocking notes.
 - CHANGES_REQUESTED or BLOCKED must fail the acceptance gate.
+
+## 中文要求
+
+- 用户可见输出默认中文。
+- 功能说明和验收报告必须包含中文内容。
+- 代码标识和 JSON key 保留英文。

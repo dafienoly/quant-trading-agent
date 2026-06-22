@@ -327,3 +327,10 @@ Each test report in `docs/test_reports/` must include:
 - Test Engineer Agent onboarding: `docs/process/NEW_TEST_ENGINEER_AGENT_ONBOARDING.md`
 - Full development pipeline: `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`
 - Self-test checklist: `docs/policy/SELF_TEST_CHECKLIST.md`
+
+## 中文输出要求
+
+- 用户可见输出和新功能文档默认使用中文。
+- 非纯文档 PR 必须在 diff 中包含 `docs/dev_reports/` 的中文功能说明和 `docs/acceptance/` 的中文验收报告。
+- 报告必须包含：变更范围、测试命令、测试结果、安全确认、最终结论。
+- 代码标识、JSON key、环境变量和第三方术语保留英文。
