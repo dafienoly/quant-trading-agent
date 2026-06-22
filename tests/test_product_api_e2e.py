@@ -8,7 +8,7 @@ import os
 import pytest
 import requests
 
-BASE = os.environ.get("PRODUCT_API_BASE_URL", "http://localhost:8001")
+BASE = os.environ.get("PRODUCT_API_BASE_URL", "http://localhost:8000")
 RUN_E2E = os.environ.get("RUN_PRODUCT_E2E") == "1"
 
 pytestmark = pytest.mark.skipif(not RUN_E2E, reason="设置 RUN_PRODUCT_E2E=1 以启用")

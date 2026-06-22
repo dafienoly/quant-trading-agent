@@ -214,6 +214,7 @@ jobs:
           path: |
             .agent/reports/pipeline_report.json
             .agent/reports/pipeline_dashboard.html
+            .agent/reports/pr_report_gate.json
             .agent/gates/*.json
           if-no-files-found: error
           retention-days: 14
