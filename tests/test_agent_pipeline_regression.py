@@ -241,8 +241,8 @@ def test_sim_manual_approval_preserved():
 
 def test_human_output_renders():
     proc = _run()
-    assert "Agent Pipeline Regression Suite" in proc.stdout
-    assert "Status:" in proc.stdout
+    assert "Agent Pipeline 回归测试套件" in proc.stdout
+    assert "状态：通过" in proc.stdout
 
 
 def test_restricted_diff_no_trading_paths():

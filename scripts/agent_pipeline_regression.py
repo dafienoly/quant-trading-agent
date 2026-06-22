@@ -771,12 +771,13 @@ def render_human(report: dict[str, Any]) -> str:
     """Render a regression report as human-readable text."""
     lines: list[str] = []
     lines.append("=" * 60)
-    lines.append("Agent Pipeline Regression Suite")
+    lines.append("Agent Pipeline 回归测试套件")
     lines.append("=" * 60)
-    lines.append(f"Status: {report['status'].upper()}")
-    lines.append(f"Critical failures: {report['summary']['critical_count']}")
-    lines.append(f"Warnings: {report['summary']['warning_count']}")
-    lines.append(f"Info checks: {report['summary']['info_count']}")
+    status_labels = {"pass": "通过", "fail": "失败", "warn": "警告"}
+    lines.append(f"状态：{status_labels.get(report['status'], report['status'])}")
+    lines.append(f"严重失败：{report['summary']['critical_count']}")
+    lines.append(f"警告：{report['summary']['warning_count']}")
+    lines.append(f"信息项：{report['summary']['info_count']}")
     lines.append("")
 
     # Group by check prefix
