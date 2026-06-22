@@ -1,5 +1,5 @@
 """产品 API 端到端测试"""
-import requests
+import pytest\nimport requests
 import json
 
 base = "http://localhost:8001"

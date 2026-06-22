@@ -488,7 +488,7 @@ def render_configuration() -> None:
 
     mode = st.selectbox(
         t("trading_mode"),
-        ["LEVEL_0", "LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM", "LEVEL_3_AUTO"],
+        ["LEVEL_0", "LEVEL_1_SIGNAL_ONLY", "LEVEL_2_HUMAN_CONFIRM"],
         index=1,
         key="config_trading_mode",
     )
