@@ -82,6 +82,13 @@ jobs:
             exit 2
           fi
 
+      - name: 运行 PR 报告门禁校验
+        id: report_gate
+        if: always()
+        run: |
+          python scripts/validate_pr_reports.py --base origin/main --head HEAD --strict --output .agent/reports/pr_report_gate.json
+          echo "exit=$?" >> $GITHUB_OUTPUT
+
       - name: 生成 Pipeline 诊断报告
         if: always()
         env:
