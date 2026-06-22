@@ -253,3 +253,41 @@ def test_missing_required_sections(tmp_path: Path):
         capture_output=True, text=True, cwd=repo, timeout=30,
     )
     assert proc.returncode != 0
+
+# -- i18n / language tests ------------------------------------------------
+
+def test_dashboard_title_is_chinese():
+    """Dashboard title should be Chinese by default."""
+    from scripts.agent_pipeline_report_viewer import DashboardModel
+    m = DashboardModel()
+    # Should contain Chinese characters
+    assert any('一' <= c <= '鿿' for c in m.title), f"title not Chinese: {m.title}"
+
+
+def test_regression_status_is_chinese():
+    """Regression human output should contain Chinese labels."""
+    report = {
+        "status": "pass",
+        "summary": {"critical_count": 0, "warning_count": 0, "info_count": 0},
+        "checks": [],
+    }
+    from scripts.agent_pipeline_regression import render_human
+    output = render_human(report)
+    assert "状态" in output, "human output missing Chinese status label"
+    assert "严重" in output, "human output missing Chinese severity label"
+
+
+def test_regression_header_is_chinese():
+    from scripts.agent_pipeline_regression import render_human
+    output = render_human({"status": "pass", "summary": {"critical_count": 0, "warning_count": 0, "info_count": 0}, "checks": []})
+    assert "回归测试套件" in output, "header not Chinese"
+
+
+def test_dashboard_severity_labels_chinese():
+    from scripts.agent_pipeline_report_viewer import _severity_badge
+    badge = _severity_badge("critical")
+    assert "严重" in badge, "severity badge not Chinese"
+    badge = _severity_badge("warning")
+    assert "警告" in badge, "warning badge not Chinese"
+    badge = _severity_badge("info")
+    assert "信息" in badge, "info badge not Chinese"
