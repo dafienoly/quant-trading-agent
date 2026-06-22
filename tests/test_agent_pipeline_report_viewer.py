@@ -12,10 +12,6 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "scripts" / "agent_pipeline_report_viewer.py"
-V13_REPORT = REPO_ROOT / ".agent" / "reports" / "v13_pipeline_regression.json"
-
 from scripts.agent_pipeline_report_viewer import (
     DashboardModel,
     build_model,
@@ -27,8 +23,11 @@ from scripts.agent_pipeline_report_viewer import (
     render_json_summary,
     scan_artifact_inventory,
     summarize_checks,
-    write_dashboard,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "scripts" / "agent_pipeline_report_viewer.py"
+V13_REPORT = REPO_ROOT / ".agent" / "reports" / "v13_pipeline_regression.json"
 
 
 # -- helpers ----------------------------------------------------------------
@@ -152,10 +151,10 @@ def test_summarize_counts(tmp_path):
 def test_group_checks_by_category(tmp_path):
     report = load_regression_report(_fixture_report(tmp_path))
     cats = group_checks_by_category(report)
-    assert "Workflow" in cats
-    assert "Runner" in cats
-    assert "Restricted Files" in cats
-    assert "Runtime Temp" in cats
+    assert "工作流" in cats
+    assert "运行器" in cats
+    assert "受限文件" in cats
+    assert "运行期临时目录" in cats
 
 
 def test_html_contains_status(tmp_path):
@@ -171,7 +170,8 @@ def test_html_contains_status(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Status: PASS" in html
+    assert "状态：通过" in html
+    assert '<html lang="zh-CN">' in html
 
 
 def test_html_contains_summary_counts(tmp_path):
@@ -187,7 +187,7 @@ def test_html_contains_summary_counts(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Total Checks" in html
+    assert "检查总数" in html
     assert "6" in html
 
 
@@ -204,7 +204,7 @@ def test_html_contains_category_table(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Category Breakdown" in html
+    assert "分类统计" in html
 
 
 def test_html_contains_stage_timeline(tmp_path):
@@ -220,7 +220,7 @@ def test_html_contains_stage_timeline(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Pipeline Stage Timeline" in html
+    assert "Pipeline 阶段时间线" in html
 
 
 def test_html_contains_gate_status(tmp_path):
@@ -236,7 +236,7 @@ def test_html_contains_gate_status(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Gate Status" in html
+    assert "门禁状态" in html
 
 
 def test_html_contains_artifact_inventory(tmp_path):
@@ -252,7 +252,7 @@ def test_html_contains_artifact_inventory(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Artifact Inventory" in html
+    assert "文档产物清单" in html
 
 
 def test_html_contains_raw_json(tmp_path):
@@ -269,7 +269,7 @@ def test_html_contains_raw_json(tmp_path):
     model.temp_hygiene = {}
     model.raw_report = report
     html = render_dashboard_html(model)
-    assert "Raw JSON" in html
+    assert "原始 JSON" in html
 
 
 def test_html_contains_failed_checks_section(tmp_path):
@@ -285,7 +285,7 @@ def test_html_contains_failed_checks_section(tmp_path):
     model.restricted = {}
     model.temp_hygiene = {}
     html = render_dashboard_html(model)
-    assert "Failed / Warning Checks" in html
+    assert "失败与警告项" in html
 
 
 def test_json_summary_valid(tmp_path):
@@ -344,10 +344,10 @@ def test_healthy_fixture_renders_successfully(tmp_path):
     assert proc.returncode == 0
     assert out.exists()
     html = out.read_text()
-    assert "Status: PASS" in html
+    assert "状态：通过" in html
     assert "summary-grid" in html
-    assert "Category Breakdown" in html
-    assert "Check" in html
+    assert "分类统计" in html
+    assert "全部检查项" in html
 
 
 def test_server_defaults_to_localhost():
