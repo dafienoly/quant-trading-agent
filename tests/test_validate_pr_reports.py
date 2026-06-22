@@ -321,8 +321,7 @@ def test_english_only_body_flagged_when_required(tmp_path: Path):
     issues = check_report_content(p, strict=True, require_chinese=True)
     # Headings contain Chinese, so require_chinese passes.  Assert the function at least
     # returns a list (not None) to validate the function runs without error.
-    assert isinstance(issues, list)
-    assert len(issues) >= 0
+    assert any("insufficient Chinese content" in i for i in issues), f"expected Chinese content warning, got {issues}"
 
 
 def test_todo_only_in_explanation_not_rejected(tmp_path: Path):
