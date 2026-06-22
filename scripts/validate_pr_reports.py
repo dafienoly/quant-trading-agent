@@ -34,7 +34,7 @@ REJECT_PATTERNS = (
 )
 
 # Required Chinese characters minimum for non-pure-doc reports
-MIN_CHINESE_CHARS = 20
+MIN_CHINESE_CHARS = 30
 
 ALLOWED_PURE_DOC_DIRS = (
     "docs/",
@@ -141,10 +141,12 @@ def check_report_content(path: str | Path, strict: bool, require_chinese: bool =
 
     # Chinese content requirement
     if require_chinese:
-        # Check at least 20 Chinese characters across the document
-        chinese_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
-        if chinese_chars < 20:
-            issues.append("insufficient Chinese content")
+        # Count Chinese characters outside Markdown headings
+        body_lines = [l for l in lines if not l.strip().startswith("#")]
+        body_text = "\n".join(body_lines)
+        chinese_chars = sum(1 for c in body_text if '\u4e00' <= c <= '\u9fff')
+        if chinese_chars < MIN_CHINESE_CHARS:
+            issues.append("insufficient Chinese content in report body")
 
     return issues
 

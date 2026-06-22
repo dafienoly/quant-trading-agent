@@ -85,8 +85,8 @@ def test_non_docs_pr_passes_with_reports(tmp_path: Path):
     _git_commit_all(repo, "base")
     subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
     (repo / "src" / "change.py").write_text("# change")
-    _write_report(repo / "docs" / "dev_reports" / "feature-dev.md", "# 功能说明\n\n## 变更范围\n\n修改了脚本内容检查逻辑。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过。\n\n## 安全确认\n\n无交易模块变更。\n\n## 最终结论\n\nACCEPTED\n")
-    _write_report(repo / "docs" / "acceptance" / "feature-accept.md", "# 验收报告\n\n## 变更范围\n\n与功能说明一致。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过。\n\n## 安全确认\n\n无交易模块变更。\n\n## 最终结论\n\nACCEPTED\n")
+    _write_report(repo / "docs" / "dev_reports" / "feature-dev.md", "# 功能说明\n\n## 变更范围\n\n修改了脚本内容检查逻辑，增加了 Markdown 章节正文验证和中文字符数检查。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过，所有测试用例均验证正确。\n\n## 安全确认\n\n无交易模块变更，不修改 Merge Gate，不自动合并 main。\n\n## 最终结论\n\nACCEPTED\n")
+    _write_report(repo / "docs" / "acceptance" / "feature-accept.md", "# 验收报告\n\n## 变更范围\n\n与功能说明一致，覆盖了错误处理和边界情况。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过，验证结果正确。\n\n## 安全确认\n\n无交易模块变更，不修改 Merge Gate。\n\n## 最终结论\n\nACCEPTED\n")
     _git_commit_all(repo, "feature")
 
     proc = subprocess.run(

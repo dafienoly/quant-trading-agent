@@ -48,6 +48,7 @@ def test_product_quotes_endpoint_returns_requested_provider_quotes(monkeypatch):
 
 def test_product_quotes_endpoint_falls_back_to_demo_and_records_feedback(monkeypatch):
     import src.product_app.market_data as market_data
+    monkeypatch.setattr(market_data, "is_trading_hours", lambda: True)
 
     class BrokenProvider:
         def get_realtime_quotes(self, symbols):
