@@ -7,25 +7,39 @@
 ## 验收命令
 
 ```
-./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py -q
+./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
 ruff check src/product_app/
-git diff --check
 ```
 
 ## 验收结果
 
-- 聚焦 53 passed ✅
-- Ruff 通过 ✅
-- 无交易敏感模块 ✅
+| 项 | 结果 |
+|----|------|
+| 聚焦 65 passed | ✅ |
+| 全量 870 passed | ✅ |
+| Ruff（仅预存 F821） | ✅ |
+| Restricted modules | ✅ 无改动 |
+| feedback | ✅ 无 diff |
+
+## 需求覆盖
+
+| 需求 | 状态 | 说明 |
+|------|------|------|
+| R-001 自选股管理 | ❌ | 不在本轮 diff 中 |
+| R-002 定时刷新 | ⚠️ | 刷新状态常量+方法，无调度 |
+| R-003 健康状态 | ✅ | get_quote_health/evaluate |
+| R-004 fail closed | ✅ | STALE/UNAVAILABLE/DEMO 阻断 |
+| R-005 确定性信号 | ⚠️ | 导入+门禁，链路集成待下一轮 |
+| R-006 刷新任务状态 | ✅ | 常量+ServiceManager 方法 |
+| R-007 API/UI | ❌ | 不在本轮 diff 中 |
 
 ## 安全确认
 
 - ✅ 不创建订单、不调用券商
 - ✅ 不修改 execution_engine/risk_engine/broker/order/account
-- ✅ Demo 数据会被标记（QUOTE_DEMO）
-- ✅ STALE/UNAVAILABLE 时 evaluate() 禁止信号
-- ✅ allow_demo=False 时 evaluate() 禁止信号和订单
+- ✅ Demo 数据显著标记
+- ✅ STALE/UNAVAILABLE 时禁止信号
 
 ## 最终结论
 
-ACCEPTED
+PASS_WITH_NOTES

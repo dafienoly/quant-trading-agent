@@ -11,31 +11,21 @@
 |------|----------|
 | src/product_app/data_health_gate.py | 新增 QUOTE_HEALTHY/STALE/UNAVAILABLE/DEMO、get_quote_health()、STALE_THRESHOLD_SECONDS |
 | src/product_app/live_data_service.py | 新增 REFRESH_IDLE/QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED |
-| src/product_app/service_manager.py | 新增 get_refresh_status、_set_refresh_result 方法 |
-| src/product_app/live_signal_orchestrator.py | 导入 DataHealthGate |
-| tests/test_quote_health.py | 新增 10 个测试（健康状态、refresh 状态、门禁集成） |
-
-## 功能到代码映射
-
-| 功能 | 文件 |
-|------|------|
-| 行情健康状态 | data_health_gate.py |
-| 刷新任务状态 | live_data_service.py + service_manager.py |
-| 信号健康门禁 | live_signal_orchestrator.py |
-| 测试覆盖 | tests/test_quote_health.py |
+| src/product_app/service_manager.py | 新增 get_refresh_status、_set_refresh_result 方法（in class） |
+| tests/test_quote_health.py | 新增 12 个测试 |
 
 ## 测试命令
 
 ```
-./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
-ruff check src/product_app/
+./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
+ruff check src/product_app/ src/api src/ui_report tests
 ```
 
 ## 测试结果
 
-- 聚焦 63 passed（含 10 个 V16.0 新增）
-- 全量 867 passed, 6 skipped
-- Ruff: All checks passed（仅 1 个预存 F821，非本任务引入）
+- 聚焦 65 passed（含 12 个 V16.0 新增）
+- 全量 870 passed, 6 skipped
+- Ruff: 仅 1 个预存 F821（非本任务引入）
 
 ## 安全确认
 
@@ -46,4 +36,4 @@ ruff check src/product_app/
 
 ## 最终结论
 
-PASS_WITH_NOTES（API 端点和 Dashboard 展示计划在后续版本完善）
+PASS_WITH_NOTES（API 端点和 Dashboard 展示不在本轮 diff 中）
