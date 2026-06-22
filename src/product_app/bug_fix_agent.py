@@ -1,26 +1,24 @@
 """Bug 自动分析与修复 Agent
 
-基于 DeepSeek API 的自动化 Bug 分析与修复方案生成。
+基于统一 DeepSeek Runtime 的自动化 Bug 分析与修复方案生成。
 提供 Bug 根因分析、修复方案提议和自动执行修复的能力。
 """
 from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from pydantic import ValidationError
 
-try:
-    from openai import OpenAI
-except ModuleNotFoundError:
-    OpenAI = None  # type: ignore[assignment]
+from src.llm.deepseek_runtime import DeepSeekRuntime
+from src.llm.model_router import ModelRouter
+from src.llm.schemas import BugFixAnalysis, BugFixProposal, DeepSeekRequest
 
 
 # ============================================================
@@ -45,6 +43,14 @@ _BLOCKED_PATTERNS = ("risk_engine", "execution_engine", "trading_log", "backtest
 _MAX_CONTEXT_FILES = 3
 _MAX_LINES_PER_FILE = 200
 
+_BUGFIX_TOOLS = [
+    "read_feedback_bug",
+    "search_project_text",
+    "read_project_file",
+    "read_test_report",
+    "read_dev_report",
+]
+
 
 @dataclass
 class BugFixExecutionContext:
@@ -68,18 +74,24 @@ class BugFixExecutionContext:
 class BugFixAgent:
     """Bug 自动分析与修复 Agent
 
-    通过 DeepSeek API 对 Bug 报告进行根因分析、生成修复方案，
+    通过 DeepSeek Runtime 对 Bug 报告进行根因分析、生成修复方案，
     并在审批后自动执行代码修改和测试验证。
     """
 
-    def __init__(self) -> None:
-        from src.llm.model_router import ModelRouter
-
-        config = ModelRouter().get_config()
+    def __init__(self, runtime: DeepSeekRuntime | None = None) -> None:
+        self._router = ModelRouter()
+        config = self._router.get_config()
         self.api_key = os.environ.get(config.api_key_env, "")
         self.api_base = config.api_base
         self.model = config.model
         self.project_root = _PROJECT_ROOT
+        self._runtime = runtime
+
+    @property
+    def runtime(self) -> DeepSeekRuntime:
+        if self._runtime is None:
+            self._runtime = DeepSeekRuntime(router=self._router)
+        return self._runtime
 
     # ----------------------------------------------------------
     # 公开方法
@@ -94,8 +106,7 @@ class BugFixAgent:
         返回:
             分析结果字典，包含 root_cause、affected_files、fix_steps、
             risk_level、estimated_impact 等键。
-            如果 JSON 解析失败，返回包含 raw_analysis 的字典。
-            如果发生异常，返回 {"error": str(e)}。
+            Runtime 或 schema 校验失败时返回结构化失败状态。
         """
         try:
             context = self._build_context(bug_report)
@@ -103,37 +114,28 @@ class BugFixAgent:
             system_prompt = (
                 "你是一个专业的量化交易系统 Bug 分析专家。"
                 "请根据提供的 Bug 报告和项目代码上下文，分析 Bug 的根本原因。"
-                "请以 JSON 格式返回分析结果，包含以下字段：\n"
-                "- root_cause: 根本原因分析\n"
-                "- affected_files: 受影响的文件列表\n"
-                "- fix_steps: 修复步骤列表\n"
-                "- risk_level: 风险等级 (low/medium/high/critical)\n"
-                "- estimated_impact: 预估影响范围\n"
-                "只返回 JSON，不要包含其他内容。"
+                "只返回符合给定 schema 的 JSON，不得修改代码或执行命令。"
             )
-
-            user_prompt = (
-                f"## Bug 报告\n\n"
-                f"**标题**: {bug_report.get('title', '')}\n"
-                f"**组件**: {bug_report.get('component', '')}\n"
-                f"**严重程度**: {bug_report.get('severity', '')}\n"
-                f"**摘要**: {bug_report.get('summary', '')}\n"
-                f"**异常类型**: {bug_report.get('exception_type', '')}\n"
-                f"**异常消息**: {bug_report.get('exception_message', '')}\n"
-                f"**堆栈跟踪**: {bug_report.get('sanitized_traceback', '')}\n"
-                f"**用户操作**: {bug_report.get('user_action', '')}\n"
-                f"**触发端点**: {bug_report.get('endpoint_or_page', '')}\n"
+            result = self.runtime.chat_json(
+                DeepSeekRequest(
+                    profile="bugfix_analysis",
+                    schema_name="bugfix_analysis",
+                    system_prompt=system_prompt,
+                    user_prompt=self._build_analysis_prompt(bug_report, context),
+                    tools=_BUGFIX_TOOLS,
+                )
             )
-
-            if context:
-                user_prompt += f"\n## 相关项目代码\n\n{context}"
-
-            response_text = self._call_deepseek(system_prompt, user_prompt)
-            return self._parse_json_response(response_text)
+            if result.status != "ok" or result.data is None:
+                return self._runtime_failure(result.status, result.error)
+            try:
+                return BugFixAnalysis.model_validate(result.data).model_dump(mode="json")
+            except ValidationError as exc:
+                logger.warning("Bug 分析结果二次 schema 校验失败 error_count={}", exc.error_count())
+                return {"status": "invalid_response", "error": "schema_validation_failed"}
 
         except Exception as e:
-            logger.error(f"Bug 分析失败: {e}")
-            return {"error": str(e)}
+            logger.error("Bug 分析失败 error_type={}", type(e).__name__)
+            return {"status": "api_error", "error": "agent_internal_error"}
 
     def propose_fix(self, bug_report: dict, analysis: dict) -> dict:
         """根据分析结果生成修复方案
@@ -151,34 +153,25 @@ class BugFixAgent:
             system_prompt = (
                 "你是一个专业的量化交易系统代码修复专家。"
                 "请根据 Bug 报告和根因分析结果，生成具体的修复方案。"
-                "请以 JSON 格式返回修复方案，包含以下字段：\n"
-                "- fix_description: 修复方案描述\n"
-                "- code_changes: 代码变更列表，每项包含 file_path、change_type (add/modify/delete)、diff\n"
-                "- risk_level: 风险等级 (low/medium/high/critical)\n"
-                "- estimated_impact: 预估影响范围\n"
-                "- test_suggestions: 测试建议列表\n"
-                "diff 格式示例：\n"
-                "```diff\n"
-                "--- a/file.py\n"
-                "+++ b/file.py\n"
-                "@@ -10,3 +10,3 @@\n"
-                "-old_code\n"
-                "+new_code\n"
-                "```\n"
-                "只返回 JSON，不要包含其他内容。"
+                "只返回符合给定 schema 的 JSON。所有方案必须要求人工审批，"
+                "不得修改受限交易、风控、执行、交易日志或回测报告模块。"
             )
-
-            user_prompt = (
-                f"## Bug 报告\n\n"
-                f"**标题**: {bug_report.get('title', '')}\n"
-                f"**组件**: {bug_report.get('component', '')}\n"
-                f"**摘要**: {bug_report.get('summary', '')}\n"
-                f"**异常消息**: {bug_report.get('exception_message', '')}\n"
-                f"\n## 根因分析\n\n{json.dumps(analysis, ensure_ascii=False, indent=2)}"
+            result = self.runtime.chat_json(
+                DeepSeekRequest(
+                    profile="bugfix_proposal",
+                    schema_name="bugfix_proposal",
+                    system_prompt=system_prompt,
+                    user_prompt=self._build_proposal_prompt(bug_report, analysis),
+                    tools=_BUGFIX_TOOLS,
+                )
             )
-
-            response_text = self._call_deepseek(system_prompt, user_prompt)
-            proposal = self._parse_json_response(response_text)
+            if result.status != "ok" or result.data is None:
+                return self._runtime_failure(result.status, result.error)
+            try:
+                proposal = BugFixProposal.model_validate(result.data).model_dump(mode="json")
+            except ValidationError as exc:
+                logger.warning("Bug 修复提案二次 schema 校验失败 error_count={}", exc.error_count())
+                return {"status": "invalid_response", "error": "schema_validation_failed"}
 
             # 检查是否涉及受限模块
             code_changes = proposal.get("code_changes", [])
@@ -188,14 +181,14 @@ class BugFixAgent:
                 return {
                     "blocked": True,
                     "blocked_files": blocked_files,
-                    "reason": "修复方案涉及受限模块（risk_engine/trading_log/backtest_report），需要人工审核确认",
+                    "reason": "修复方案涉及受限模块，需要人工审核确认",
                 }
 
             return proposal
 
         except Exception as e:
-            logger.error(f"生成修复方案失败: {e}")
-            return {"error": str(e)}
+            logger.error("生成修复方案失败 error_type={}", type(e).__name__)
+            return {"status": "api_error", "error": "agent_internal_error"}
 
     def execute_fix(
         self,
@@ -309,49 +302,41 @@ class BugFixAgent:
     # 内部方法
     # ----------------------------------------------------------
 
-    def _call_deepseek(self, system_prompt: str, user_prompt: str) -> str:
-        """调用 DeepSeek API
+    @staticmethod
+    def _runtime_failure(status: str, error: dict[str, Any] | None) -> dict[str, str]:
+        reason = str((error or {}).get("reason", status))
+        return {"status": status, "error": reason}
 
-        使用 OpenAI 兼容 SDK 调用 DeepSeek，支持 3 次重试和指数退避。
+    @staticmethod
+    def _build_analysis_prompt(bug_report: dict, context: str) -> str:
+        prompt = (
+            f"## Bug 报告\n\n"
+            f"**Bug ID**: {bug_report.get('bug_id', '')}\n"
+            f"**标题**: {bug_report.get('title', '')}\n"
+            f"**组件**: {bug_report.get('component', '')}\n"
+            f"**严重程度**: {bug_report.get('severity', '')}\n"
+            f"**摘要**: {bug_report.get('summary', '')}\n"
+            f"**异常类型**: {bug_report.get('exception_type', '')}\n"
+            f"**异常消息**: {bug_report.get('exception_message', '')}\n"
+            f"**脱敏堆栈**: {bug_report.get('sanitized_traceback', '')}\n"
+            f"**用户操作**: {bug_report.get('user_action', '')}\n"
+            f"**触发端点**: {bug_report.get('endpoint_or_page', '')}\n"
+        )
+        if context:
+            prompt += f"\n## 相关项目代码\n\n{context}"
+        return prompt
 
-        参数:
-            system_prompt: 系统提示词
-            user_prompt: 用户提示词
-
-        返回:
-            模型生成的文本内容
-
-        异常:
-            所有重试耗尽后抛出最后一次异常
-        """
-        max_retries = 3
-        last_exception: Exception | None = None
-
-        for attempt in range(max_retries):
-            try:
-                if OpenAI is None:
-                    raise RuntimeError("openai package is not installed; cannot call DeepSeek API")
-                client = OpenAI(
-                    api_key=self.api_key,
-                    base_url=self.api_base,
-                )
-                response = client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                )
-                return response.choices[0].message.content or ""
-
-            except Exception as e:
-                last_exception = e
-                if attempt < max_retries - 1:
-                    delay = 2 ** (attempt + 1)
-                    logger.warning(f"DeepSeek API 调用失败 (第{attempt + 1}次)，{delay}秒后重试: {e}")
-                    time.sleep(delay)
-
-        raise last_exception  # type: ignore[misc]
+    @staticmethod
+    def _build_proposal_prompt(bug_report: dict, analysis: dict) -> str:
+        return (
+            f"## Bug 报告\n\n"
+            f"**Bug ID**: {bug_report.get('bug_id', '')}\n"
+            f"**标题**: {bug_report.get('title', '')}\n"
+            f"**组件**: {bug_report.get('component', '')}\n"
+            f"**摘要**: {bug_report.get('summary', '')}\n"
+            f"**异常消息**: {bug_report.get('exception_message', '')}\n"
+            f"\n## 已校验根因分析\n\n{json.dumps(analysis, ensure_ascii=False, indent=2)}"
+        )
 
     def _build_context(self, bug_report: dict) -> str:
         """根据 Bug 报告的组件信息，收集相关项目代码作为上下文
@@ -412,36 +397,6 @@ class BugFixAgent:
     # ----------------------------------------------------------
     # 辅助方法
     # ----------------------------------------------------------
-
-    @staticmethod
-    def _parse_json_response(text: str) -> dict:
-        """解析 LLM 返回的 JSON 文本
-
-        优先直接解析，失败后尝试从 markdown 代码块中提取 JSON。
-
-        参数:
-            text: LLM 返回的原始文本
-
-        返回:
-            解析后的字典，解析失败时返回包含 raw_analysis 的字典
-        """
-        # 尝试直接解析
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # 尝试从 markdown 代码块中提取
-        pattern = r"```(?:json)?\s*\n?(.*?)\n?\s*```"
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                pass
-
-        logger.warning("无法解析 LLM 返回的 JSON，返回原始文本")
-        return {"raw_analysis": text}
 
     @staticmethod
     def _apply_diff(original_content: str, diff: str) -> str | None:

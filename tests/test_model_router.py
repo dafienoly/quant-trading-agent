@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.llm.schemas import DeepSeekResult
 from src.llm.model_router import ModelRouter
 
 
@@ -76,7 +77,7 @@ def test_chat_json_returns_unavailable_when_openai_missing(monkeypatch):
     result = router.chat_json(
         system_prompt="test",
         user_prompt="test",
-        schema_name="test",
+        schema_name="factor_discovery",
     )
 
     assert result["status"] == "unavailable"
@@ -91,3 +92,38 @@ def test_get_config_does_not_import_openai(monkeypatch):
     assert config.provider == "deepseek"
     assert config.model == "deepseek-v4-flash"
     assert config.api_key_present is True
+
+
+def test_chat_json_delegates_to_runtime(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    captured = {}
+
+    class FakeRuntime:
+        def __init__(self, router):
+            captured["router"] = router
+
+        def chat_json(self, request):
+            captured["request"] = request
+            return DeepSeekResult(
+                status="ok",
+                data={
+                    "status": "ok",
+                    "explanation": "由确定性规则生成。",
+                    "evidence": ["risk gate passed"],
+                    "risk_notes": ["仅用于解释"],
+                    "decision_source": "quant_rules_and_risk_gate",
+                },
+                model="fake",
+            )
+
+    monkeypatch.setattr("src.llm.deepseek_runtime.DeepSeekRuntime", FakeRuntime)
+
+    result = ModelRouter().chat_json(
+        system_prompt="return json",
+        user_prompt="explain",
+        schema_name="signal_explanation",
+    )
+
+    assert captured["request"].profile == "signal_explanation"
+    assert result["status"] == "ok"
+    assert result["llm_provider"] == "deepseek"
