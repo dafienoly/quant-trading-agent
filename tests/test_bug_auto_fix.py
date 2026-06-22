@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
+from src.llm.schemas import DeepSeekResult
 from src.product_app.bug_fix_agent import BugFixAgent
 from src.product_app.bug_fix_workflow import BugFixWorkflow
 from src.product_app.bug_watchdog import BugWatchdog
@@ -24,58 +25,16 @@ from src.product_app.service_manager import JobState, ServiceManager
 # ============================================================
 
 
-class _MockChoice:
-    """模拟 OpenAI response.choices[0]"""
+class _StaticRuntime:
+    """按顺序返回预置 DeepSeekResult 的 Runtime 测试替身。"""
 
-    def __init__(self, content: str):
-        self.message = _MockMessage(content)
+    def __init__(self, results: list[DeepSeekResult]):
+        self.results = list(results)
+        self.requests = []
 
-
-class _MockMessage:
-    """模拟 OpenAI response.choices[0].message"""
-
-    def __init__(self, content: str):
-        self.content = content
-
-
-class _MockResponse:
-    """模拟 OpenAI chat.completions.create() 返回值"""
-
-    def __init__(self, content: str):
-        self.choices = [_MockChoice(content)]
-
-
-class _MockCompletions:
-    """模拟 OpenAI chat.completions"""
-
-    def __init__(self, side_effects: list):
-        """side_effects: 每次调用返回的内容或异常列表"""
-        self._side_effects = list(side_effects)
-        self._call_count = 0
-
-    def create(self, **kwargs):
-        idx = self._call_count
-        self._call_count += 1
-        if idx < len(self._side_effects):
-            effect = self._side_effects[idx]
-            if isinstance(effect, Exception):
-                raise effect
-            return _MockResponse(effect)
-        return _MockResponse("")
-
-
-class _MockChat:
-    """模拟 OpenAI chat"""
-
-    def __init__(self, completions: _MockCompletions):
-        self.completions = completions
-
-
-class _MockOpenAIClient:
-    """模拟 OpenAI 客户端"""
-
-    def __init__(self, side_effects: list, **kwargs):
-        self.chat = _MockChat(_MockCompletions(side_effects))
+    def chat_json(self, request):
+        self.requests.append(request)
+        return self.results.pop(0)
 
 
 def _make_bug_report_dict(
@@ -136,22 +95,23 @@ def _write_bug_json(bug_dir: Path, bug_id: str, **extra_fields) -> Path:
 class TestBugFixAgent:
     """BugFixAgent 单元测试：使用 monkeypatch 模拟 DeepSeek API"""
 
-    def test_analyze_success(self, monkeypatch, tmp_path):
+    def test_analyze_success(self, tmp_path):
         """测试 analyze() 正常返回根因分析结果"""
-        analysis_json = json.dumps({
+        analysis_data = {
+            "status": "ok",
             "root_cause": "数据源返回空值未做校验",
             "affected_files": ["src/data_gateway/akshare_provider.py"],
             "fix_steps": ["添加空值校验", "添加重试逻辑"],
             "risk_level": "medium",
             "estimated_impact": "影响数据获取模块",
-        })
-
-        monkeypatch.setattr(
-            "src.product_app.bug_fix_agent.OpenAI",
-            lambda **kwargs: _MockOpenAIClient(side_effects=[analysis_json]),
+            "needs_human_review": True,
+            "evidence": [],
+        }
+        runtime = _StaticRuntime(
+            [DeepSeekResult(status="ok", data=analysis_data, model="test-model")]
         )
 
-        agent = BugFixAgent()
+        agent = BugFixAgent(runtime=runtime)
         agent.project_root = tmp_path
 
         bug_report = _make_bug_report_dict()
@@ -164,66 +124,64 @@ class TestBugFixAgent:
         assert "fix_steps" in result
         assert result["risk_level"] == "medium"
         assert "estimated_impact" in result
+        assert runtime.requests[0].profile == "bugfix_analysis"
 
-    def test_analyze_json_in_markdown_codeblock(self, monkeypatch):
-        """测试 analyze() 能解析 markdown 代码块中的 JSON"""
-        analysis_data = {
-            "root_cause": "缺少空值检查",
-            "affected_files": [],
-            "fix_steps": [],
-            "risk_level": "low",
-            "estimated_impact": "无",
-        }
-        wrapped = "```json\n" + json.dumps(analysis_data, ensure_ascii=False) + "\n```"
-
-        monkeypatch.setattr(
-            "src.product_app.bug_fix_agent.OpenAI",
-            lambda **kwargs: _MockOpenAIClient(side_effects=[wrapped]),
+    def test_analyze_invalid_json_fails_closed(self):
+        """Runtime 判定非法 JSON 后，Agent 不得把原文当作成功结果"""
+        runtime = _StaticRuntime(
+            [
+                DeepSeekResult(
+                    status="invalid_response",
+                    error={"reason": "invalid_json"},
+                    model="test-model",
+                )
+            ]
         )
-
-        agent = BugFixAgent()
+        agent = BugFixAgent(runtime=runtime)
         result = agent.analyze(_make_bug_report_dict())
 
-        assert "root_cause" in result
-        assert result["root_cause"] == "缺少空值检查"
+        assert result == {"status": "invalid_response", "error": "invalid_json"}
 
-    def test_analyze_non_json_response(self, monkeypatch):
-        """测试 analyze() 对非 JSON 响应返回 raw_analysis"""
-        plain_text = "这个 Bug 是因为数据源返回了空值，建议添加校验逻辑。"
-
-        monkeypatch.setattr(
-            "src.product_app.bug_fix_agent.OpenAI",
-            lambda **kwargs: _MockOpenAIClient(side_effects=[plain_text]),
+    def test_analyze_empty_response_fails_closed(self):
+        """空内容不得进入后续修复提案流程"""
+        runtime = _StaticRuntime(
+            [
+                DeepSeekResult(
+                    status="invalid_response",
+                    error={"reason": "empty_content"},
+                    model="test-model",
+                )
+            ]
         )
-
-        agent = BugFixAgent()
+        agent = BugFixAgent(runtime=runtime)
         result = agent.analyze(_make_bug_report_dict())
 
-        assert "raw_analysis" in result
-        assert plain_text in result["raw_analysis"]
+        assert result == {"status": "invalid_response", "error": "empty_content"}
 
-    def test_propose_fix_success(self, monkeypatch):
+    def test_propose_fix_success(self):
         """测试 propose_fix() 正常返回修复方案"""
-        proposal_json = json.dumps({
+        proposal_data = {
+            "status": "ok",
             "fix_description": "添加空值校验和重试逻辑",
             "code_changes": [
                 {
                     "file_path": "src/data_gateway/akshare_provider.py",
                     "change_type": "modify",
                     "diff": "--- a/src/data_gateway/akshare_provider.py\n+++ b/src/data_gateway/akshare_provider.py\n@@ -10,3 +10,3 @@\n-old_code\n+new_code\n",
+                    "reason": "拒绝空值",
                 }
             ],
             "risk_level": "low",
             "estimated_impact": "仅影响数据获取",
             "test_suggestions": ["测试空值场景"],
-        })
+            "requires_approval": True,
+        }
 
-        monkeypatch.setattr(
-            "src.product_app.bug_fix_agent.OpenAI",
-            lambda **kwargs: _MockOpenAIClient(side_effects=[proposal_json]),
+        agent = BugFixAgent(
+            runtime=_StaticRuntime(
+                [DeepSeekResult(status="ok", data=proposal_data, model="test-model")]
+            )
         )
-
-        agent = BugFixAgent()
         bug_report = _make_bug_report_dict()
         analysis = {"root_cause": "test", "affected_files": [], "fix_steps": []}
         result = agent.propose_fix(bug_report, analysis)
@@ -233,29 +191,32 @@ class TestBugFixAgent:
         assert "code_changes" in result
         assert len(result["code_changes"]) == 1
         assert result["risk_level"] == "low"
+        assert result["requires_approval"] is True
 
-    def test_propose_fix_blocked_module(self, monkeypatch):
+    def test_propose_fix_blocked_module(self):
         """测试 propose_fix() 检测到受限模块时返回 blocked"""
-        proposal_json = json.dumps({
+        proposal_data = {
+            "status": "ok",
             "fix_description": "修改风控引擎",
             "code_changes": [
                 {
                     "file_path": "src/risk_engine/runtime.py",
                     "change_type": "modify",
                     "diff": "--- a/src/risk_engine/runtime.py\n+++ b/src/risk_engine/runtime.py\n@@ -1,1 +1,1 @@\n-old\n+new\n",
+                    "reason": "修改风控实现",
                 }
             ],
             "risk_level": "critical",
             "estimated_impact": "风控模块",
-            "test_suggestions": [],
-        })
+            "test_suggestions": ["风控回归测试"],
+            "requires_approval": True,
+        }
 
-        monkeypatch.setattr(
-            "src.product_app.bug_fix_agent.OpenAI",
-            lambda **kwargs: _MockOpenAIClient(side_effects=[proposal_json]),
+        agent = BugFixAgent(
+            runtime=_StaticRuntime(
+                [DeepSeekResult(status="ok", data=proposal_data, model="test-model")]
+            )
         )
-
-        agent = BugFixAgent()
         bug_report = _make_bug_report_dict()
         analysis = {"root_cause": "test", "affected_files": [], "fix_steps": []}
         result = agent.propose_fix(bug_report, analysis)
@@ -315,62 +276,23 @@ class TestBugFixAgent:
         assert blocked is True
         assert len(files) == 1
 
-    def test_call_deepseek_retry(self, monkeypatch):
-        """测试 _call_deepseek() 的重试机制：前两次失败，第三次成功"""
-        call_count = 0
+    def test_runtime_timeout_is_returned_without_agent_fallback(self):
+        """重试由 Runtime 负责；Agent 对最终 timeout 保持 fail closed"""
+        runtime = _StaticRuntime(
+            [
+                DeepSeekResult(
+                    status="timeout",
+                    error={"reason": "max_retries_exceeded", "attempts": 3},
+                    model="test-model",
+                )
+            ]
+        )
+        agent = BugFixAgent(runtime=runtime)
 
-        class _FlakyOpenAI:
-            def __init__(self, **kwargs):
-                pass
+        result = agent.analyze(_make_bug_report_dict())
 
-            @property
-            def chat(self):
-                return self
-
-            @property
-            def completions(self):
-                return self
-
-            def create(self, **kwargs):
-                nonlocal call_count
-                call_count += 1
-                if call_count <= 2:
-                    raise ConnectionError("API 连接失败")
-                return _MockResponse("重试成功")
-
-        # 跳过 time.sleep 以加速测试
-        monkeypatch.setattr("src.product_app.bug_fix_agent.time.sleep", lambda s: None)
-        monkeypatch.setattr("src.product_app.bug_fix_agent.OpenAI", _FlakyOpenAI)
-
-        agent = BugFixAgent()
-        result = agent._call_deepseek("system", "user")
-
-        assert result == "重试成功"
-        assert call_count == 3
-
-    def test_parse_json_response(self):
-        """测试 _parse_json_response() 对各种输入的处理"""
-        # 1. 合法 JSON 字符串
-        valid_json = '{"key": "value", "num": 42}'
-        result = BugFixAgent._parse_json_response(valid_json)
-        assert result == {"key": "value", "num": 42}
-
-        # 2. markdown 代码块中的 JSON
-        codeblock = '```json\n{"key": "wrapped"}\n```'
-        result = BugFixAgent._parse_json_response(codeblock)
-        assert result == {"key": "wrapped"}
-
-        # 3. 无语言标注的代码块
-        codeblock_no_lang = '```\n{"key": "no_lang"}\n```'
-        result = BugFixAgent._parse_json_response(codeblock_no_lang)
-        assert result == {"key": "no_lang"}
-
-        # 4. 非 JSON 文本
-        plain = "This is just plain text, not JSON at all."
-        result = BugFixAgent._parse_json_response(plain)
-        assert "raw_analysis" in result
-        assert plain in result["raw_analysis"]
-
+        assert result == {"status": "timeout", "error": "max_retries_exceeded"}
+        assert len(runtime.requests) == 1
 
 # ============================================================
 # TestBugWatchdog
