@@ -333,3 +333,14 @@ def get_service_manager() -> ServiceManager:
     if _service_manager is None:
         _service_manager = ServiceManager()
     return _service_manager
+
+
+    def get_refresh_status(self) -> dict:
+        return self._last_refresh_result if hasattr(self, '_last_refresh_result') else {}
+
+    def _set_refresh_result(self, status: str, data: list | None = None, error: str | None = None) -> None:
+        self._last_refresh_result = {
+            "status": status,
+            "data": data,
+            "error": error,
+        }

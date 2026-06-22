@@ -14,6 +14,14 @@
 """
 from __future__ import annotations
 
+REFRESH_IDLE = "IDLE"
+REFRESH_QUEUED = "QUEUED"
+REFRESH_RUNNING = "RUNNING"
+REFRESH_SUCCEEDED = "SUCCEEDED"
+REFRESH_FAILED = "FAILED"
+REFRESH_CANCELLED = "CANCELLED"
+
+
 import os
 from typing import Any
 

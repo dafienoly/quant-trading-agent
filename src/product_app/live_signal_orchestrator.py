@@ -23,6 +23,9 @@ from loguru import logger
 from src.product_app.data_health_gate import DataHealthGate
 
 
+from src.product_app.data_health_gate import DataHealthGate
+
+
 # ---------------------------------------------------------------------------
 # 信号 ID 计数器（进程内，按日期重置）
 # ---------------------------------------------------------------------------
