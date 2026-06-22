@@ -154,7 +154,7 @@ jobs:
               "target_pytest": os.environ.get("TEST_OUTCOME", "unknown"),
               "git_diff_check": os.environ.get("DIFF_OUTCOME", "unknown"),
               "restricted_paths": os.environ.get("RESTRICTED_OUTCOME", "unknown"),
-              "tracked_runtime_files": os.environ.get("TRACKED_OUTPUT", "unknown"),
+              "tracked_runtime_files": os.environ.get("TRACKED_OUTCOME", "unknown"),
               "report_gate": os.environ.get("REPORT_GATE_OUTCOME", "unknown"),
           }
           checks = [

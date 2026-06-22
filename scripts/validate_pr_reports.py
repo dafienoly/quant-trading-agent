@@ -205,7 +205,7 @@ def validate_reports(
 
     # Content validation for each report
     for f in dev_reports + accept_reports:
-        issues = check_report_content(root / f, strict)
+        issues = check_report_content(root / f, strict, require_chinese=True)
         if issues:
             result["issues"].extend(f"{f}: {i}" for i in issues)
         result["report_files"][f] = {

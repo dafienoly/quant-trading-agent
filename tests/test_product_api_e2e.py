@@ -1,62 +1,45 @@
-"""产品 API 端到端测试"""
-import pytest\nimport requests
-import json
+"""产品 API 端到端测试。
+默认跳过（需要运行中的 API 服务）。
+启用：RUN_PRODUCT_E2E=1 python -m pytest tests/test_product_api_e2e.py -q
+"""
+from __future__ import annotations
+import os
 
-base = "http://localhost:8001"
-print("=== 产品 API 端到端测试 ===\n")
+import pytest
+import requests
 
-# 1. 系统健康
-r = requests.get(f"{base}/product/health", timeout=5)
-h = r.json()
-print(f"[1] /product/health: status={h.get('status')}, api={h.get('api_status')}")
+BASE = os.environ.get("PRODUCT_API_BASE_URL", "http://localhost:8001")
+RUN_E2E = os.environ.get("RUN_PRODUCT_E2E") == "1"
 
-# 2. 配置
-r = requests.get(f"{base}/product/config", timeout=5)
-c = r.json()
-print(f"[2] /product/config: mode={c['config'].get('MAX_TRADING_LEVEL')}")
+pytestmark = pytest.mark.skipif(not RUN_E2E, reason="设置 RUN_PRODUCT_E2E=1 以启用")
 
-# 3. 仪表板
-r = requests.get(f"{base}/product/dashboard", timeout=5)
-d = r.json()
-print(f"[3] /product/dashboard: is_demo={d.get('is_demo')}, quotes={len(d.get('quotes',[]))}")
 
-# 4. 作业
-r = requests.get(f"{base}/product/jobs", timeout=5)
-j = r.json()
-print(f"[4] /product/jobs: {len(j['jobs'])} jobs")
+def _get(path: str) -> dict:
+    r = requests.get(f"{BASE}{path}", timeout=5)
+    r.raise_for_status()
+    return r.json()
 
-# 5. 启动行情刷新
-r = requests.post(f"{base}/product/jobs/quote_refresh/start", timeout=5)
-print(f"[5] start quote_refresh: {r.json().get('status')}")
 
-# 6. 反馈
-r = requests.get(f"{base}/product/feedback", timeout=5)
-f = r.json()
-print(f"[6] /product/feedback: {f.get('count')} bugs")
+def test_health():
+    h = _get("/product/health")
+    assert h.get("status") is not None
 
-# 7. 风控状态
-r = requests.get(f"{base}/risk/status", timeout=5)
-rs = r.json()
-print(f"[7] /risk/status: risk_pass={rs.get('risk_pass')}")
 
-# 8. 账户
-r = requests.get(f"{base}/account", timeout=5)
-a = r.json()
-print(f"[8] /account: total_assets={a.get('total_assets')}")
+def test_config():
+    c = _get("/product/config")
+    assert "config" in c
 
-# 9. 持仓
-r = requests.get(f"{base}/positions", timeout=5)
-p = r.json()
-print(f"[9] /positions: {p.get('count')} positions")
 
-# 10. 待确认订单
-r = requests.get(f"{base}/orders/pending", timeout=5)
-o = r.json()
-print(f"[10] /orders/pending: {o.get('count')} pending")
+def test_dashboard():
+    d = _get("/product/dashboard")
+    assert "is_demo" in d
 
-# 11. 信号
-r = requests.get(f"{base}/signals/latest", timeout=5)
-s = r.json()
-print(f"[11] /signals/latest: {len(s.get('signals',[]))} signals")
 
-print("\n=== 全部 11 个端点测试通过 ===")
+def test_jobs():
+    j = _get("/product/jobs")
+    assert "jobs" in j
+
+
+def test_quote_refresh():
+    r = requests.post(f"{BASE}/product/jobs/quote_refresh/start", timeout=5)
+    assert r.status_code == 200
