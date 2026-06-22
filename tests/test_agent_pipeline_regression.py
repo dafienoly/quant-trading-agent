@@ -42,6 +42,15 @@ def test_json_output_is_valid():
     assert isinstance(report["checks"], list)
 
 
+def test_output_json_records_report_path(tmp_path: Path):
+    output = tmp_path / "pipeline_report.json"
+    proc = _run("--output", str(output))
+
+    assert proc.returncode in (0, 1, 2)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["artifacts"]["report_path"] == str(output)
+
+
 def test_strict_mode_turns_warnings_into_failure():
     # We don't force warnings, but verify the mode runs cleanly
     proc = _run("--strict")
@@ -191,6 +200,16 @@ def test_restricted_diff_clean():
             return
 
 
+def test_pr_validation_workflow_is_covered_by_regression_suite():
+    report = _json_report()
+    checks = {c["name"]: c for c in report["checks"]}
+
+    assert checks["pr_validation_exists"]["passed"]
+    assert checks["pr_validation_required_commands"]["passed"]
+    assert checks["pr_validation_dashboard_artifact"]["passed"]
+    assert checks["pipeline_reports_not_tracked"]["passed"]
+
+
 # -- pipeline simulation -----------------------------------------------------
 
 def test_sim_all_gates_pass():
@@ -239,7 +258,7 @@ def test_restricted_diff_no_trading_paths():
 
 def test_runner_reference_powershell_parses():
     """Verify that the PowerShel runner reference parses without syntax errors.
-    
+
     Uses the regression suite's check_runner which validates runner syntax
     and safety patterns.
     """

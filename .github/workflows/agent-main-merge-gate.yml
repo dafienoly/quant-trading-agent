@@ -153,10 +153,10 @@ jobs:
           if ($pr) {
             gh pr edit $pr --add-label "stage:manual-approval-required"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh pr comment $pr --body "Auto-main merge blocked by policy. See .agent/gates/auto_merge_gate.json."
+            gh pr comment $pr --body "自动化 Merge Gate 已按安全策略阻断。请查看 .agent/gates/auto_merge_gate.json、验收报告和本次 Actions 运行中的 Pipeline Dashboard artifact；main 仍需人工审阅和手动合并。"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          Write-Host "Manual approval required by auto-main policy; workflow completed after labeling the PR."
+          Write-Host "自动化策略要求人工审批；PR 已标记，workflow 不会自动合并。"
           exit 0
 
       - name: Mark PR ready for manual review when gate passes
@@ -174,4 +174,59 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh pr comment $pr --body "自动化 Merge Gate 已通过基础检查，但本仓库禁止自动合并 main。该 PR 需要人工审阅和手动合并。请查看 .agent/gates/auto_merge_gate.json 与验收报告后再决定。"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Host "Gate passed. PR needs manual review and manual merge."
+          Write-Host "门禁已通过；PR 仍需人工审阅和手动合并。"
+
+      - name: 生成 Pipeline 诊断报告
+        if: always()
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force -Path .agent/reports | Out-Null
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+          python scripts/agent_pipeline_regression.py --strict --json --output .agent/reports/pipeline_report.json
+          $regressionStatus = $LASTEXITCODE
+
+          if (-not (Test-Path .agent/reports/pipeline_report.json) -or (Get-Item .agent/reports/pipeline_report.json).Length -eq 0) {
+            $fallback = @{
+              status = "fail"
+              summary = @{ critical_count = 1; warning_count = 0; info_count = 0 }
+              checks = @(@{
+                name = "diagnostic_fallback"
+                severity = "critical"
+                passed = $false
+                message = "正式回归报告未生成；这是诊断 fallback，请查看 Actions 日志。"
+              })
+              artifacts = @{ diagnostic_fallback = $true }
+            }
+            $fallbackJson = $fallback | ConvertTo-Json -Depth 8
+            $reportPath = Join-Path (Get-Location) ".agent/reports/pipeline_report.json"
+            [System.IO.File]::WriteAllText($reportPath, $fallbackJson, $utf8NoBom)
+          }
+
+          python scripts/agent_pipeline_report_viewer.py --input .agent/reports/pipeline_report.json --output .agent/reports/pipeline_dashboard.html
+          $viewerStatus = $LASTEXITCODE
+          if ($viewerStatus -ne 0 -or -not (Test-Path .agent/reports/pipeline_dashboard.html)) {
+            $fallbackHtml = @'
+          <!doctype html>
+          <html lang="zh-CN"><meta charset="utf-8"><title>Pipeline 诊断报告</title>
+          <body><h1>Pipeline 诊断报告</h1><p>正式 Dashboard 生成失败；这是诊断 fallback，请查看同一 artifact 中的 JSON 与 Actions 日志。</p></body></html>
+          '@
+            $dashboardPath = Join-Path (Get-Location) ".agent/reports/pipeline_dashboard.html"
+            [System.IO.File]::WriteAllText($dashboardPath, $fallbackHtml, $utf8NoBom)
+          }
+
+          Write-Host "严格回归退出码：$regressionStatus；Dashboard 生成退出码：$viewerStatus"
+          exit 0
+
+      - name: 上传 Pipeline Dashboard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-dashboard-merge-gate-pr-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.run_id }}
+          path: |
+            .agent/reports/pipeline_report.json
+            .agent/reports/pipeline_dashboard.html
+            .agent/gates/*.json
+            .agent/changed_files.txt
+          if-no-files-found: error
+          retention-days: 14
