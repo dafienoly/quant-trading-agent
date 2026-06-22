@@ -142,7 +142,7 @@ def check_report_content(path: str | Path, strict: bool, require_chinese: bool =
     # Chinese content requirement
     if require_chinese:
         # Count Chinese characters outside Markdown headings
-        body_lines = [l for l in lines if not l.strip().startswith("#")]
+        body_lines = [ln for ln in lines if not ln.strip().startswith("#")]
         body_text = "\n".join(body_lines)
         chinese_chars = sum(1 for c in body_text if '\u4e00' <= c <= '\u9fff')
         if chinese_chars < MIN_CHINESE_CHARS:
