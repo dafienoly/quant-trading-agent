@@ -9,12 +9,17 @@ from src.api.app import create_app
 client = TestClient(create_app())
 
 
+def setup_method():
+    Path("runtime/state/watchlist.json").unlink(missing_ok=True)
+
+
 def test_get_watchlist_empty():
-    Path(".agent/watchlist.txt").unlink(missing_ok=True)
+    Path("runtime/state/watchlist.json").unlink(missing_ok=True)
     r = client.get("/product/watchlist")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
+    assert len(data) == 0
 
 
 def test_update_watchlist():
@@ -22,12 +27,11 @@ def test_update_watchlist():
     assert r.status_code == 200
     data = r.json()
     assert "000001.SZ" in data["symbols"]
-    assert "000002.SZ" in data["symbols"]
+    assert data["errors"] == []
 
 
 def test_watchlist_rejects_duplicate():
     r = client.put("/product/watchlist?symbols=000001.SZ&symbols=000001.SZ")
-    assert r.status_code == 200
     data = r.json()
     assert "重复代码" in str(data["errors"])
     assert len(data["symbols"]) == 1

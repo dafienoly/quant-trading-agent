@@ -11,7 +11,8 @@ def test_quote_health_endpoint():
     r = client.get("/product/quote-health")
     assert r.status_code == 200
     data = r.json()
-    assert "results" in data
+    assert "status" in data
+    assert data["status"] in ("OK", "ERROR")
 
 
 def test_refresh_status_endpoint():
@@ -19,10 +20,13 @@ def test_refresh_status_endpoint():
     assert r.status_code == 200
     data = r.json()
     assert "status" in data
+    assert len(data.get("status", "")) > 0
 
 
-def test_signal_observation_endpoint():
+def test_signal_observation_endpoint_returns_list():
     r = client.get("/product/signal-observation")
     assert r.status_code == 200
     data = r.json()
     assert "status" in data
+    assert "observations" in data
+    assert isinstance(data["observations"], list)

@@ -202,7 +202,7 @@ def compute_factors(
 @router.get("/watchlist")
 def get_watchlist() -> list[str]:
     try:
-        with open(".agent/watchlist.txt") as f:
+        with open("runtime/state/watchlist.json") as f:
             symbols = [s.strip() for s in f if s.strip()]
             return symbols[:50]
     except FileNotFoundError:
@@ -226,26 +226,25 @@ def update_readonly_watchlist(symbols: list[str] = Query(...)) -> dict:
             continue
         seen.add(s)
         valid.append(s)
-    Path(".agent").mkdir(exist_ok=True)
-    Path(".agent/watchlist.txt").write_text("\n".join(valid))
+    Path("runtime/state").mkdir(parents=True, exist_ok=True)
+    Path("runtime/state/watchlist.json").write_text("\n".join(valid))
     return {"symbols": valid, "errors": errors}
 
 
 @router.get("/quote-health")
 def quote_health() -> dict:
     from src.product_app.data_health_gate import DataHealthGate
-    from src.product_app.live_data_service import LiveDataService
+    from src.product_app.market_data import fetch_product_quotes
     gate = DataHealthGate()
     try:
-        lds = LiveDataService()
-        quotes = lds.fetch_product_quotes([])
+        quotes = fetch_product_quotes([])
         results = {}
         for sym, data in quotes.items():
             h = gate.get_quote_health(data)
             results[sym] = h
-        return {"results": results}
+        return {"results": results, "status": "OK"}
     except Exception as exc:
-        return {"results": {}, "note": "行情服务暂不可用", "error": str(exc)}
+        return {"results": {}, "status": "ERROR", "note": "行情服务暂不可用", "error": str(exc)}
 
 
 @router.get("/refresh-status")
@@ -258,12 +257,12 @@ def refresh_status() -> dict:
 @router.get("/signal-observation")
 def signal_observation() -> dict:
     from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
-    orch = LiveSignalOrchestrator()
     try:
+        orch = LiveSignalOrchestrator()
         obs = orch.observe()
+        return {"status": "OK", "observations": obs, "count": len(obs)}
     except Exception as exc:
-        return {"status": "ERROR", "error": str(exc)}
-    return {"status": "OK", "observations": obs}
+        return {"status": "ERROR", "error": str(exc), "observations": []}
 
 
 @router.get("/jobs")
