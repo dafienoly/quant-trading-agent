@@ -15,7 +15,7 @@ ruff check src/product_app/
 
 | 项 | 结果 |
 |----|------|
-| 聚焦 65 passed | ✅ |
+| 聚焦 66 passed | ✅ |
 | 全量 870 passed | ✅ |
 | Ruff（仅预存 F821） | ✅ |
 | Restricted modules | ✅ 无改动 |

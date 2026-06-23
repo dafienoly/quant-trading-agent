@@ -23,7 +23,7 @@ ruff check src/product_app/ src/api src/ui_report tests
 
 ## 测试结果
 
-- 聚焦 65 passed（含 12 个 V16.0 新增）
+- 聚焦 66 passed（含 13 个 V16.0 新增）
 - 全量 870 passed, 6 skipped
 - Ruff: 仅 1 个预存 F821（非本任务引入）
 
