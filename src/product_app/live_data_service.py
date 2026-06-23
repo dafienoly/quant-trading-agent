@@ -34,6 +34,13 @@ from src.data_gateway.live_data_mapper import (
     FUNDAMENTALS_REQUIRED_FIELDS,
 )
 
+REFRESH_IDLE = "IDLE"
+REFRESH_QUEUED = "QUEUED"
+REFRESH_RUNNING = "RUNNING"
+REFRESH_SUCCEEDED = "SUCCEEDED"
+REFRESH_FAILED = "FAILED"
+REFRESH_CANCELLED = "CANCELLED"
+
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------

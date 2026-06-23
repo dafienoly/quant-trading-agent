@@ -71,6 +71,21 @@ class ServiceManager:
     状态持久化到 runtime/state/jobs.json。
     """
 
+
+    _last_refresh_result: dict | None = None
+
+    def get_refresh_status(self) -> dict:
+        if self._last_refresh_result is None:
+            return {"status": "IDLE"}
+        return dict(self._last_refresh_result)
+
+    def _set_refresh_result(self, status: str, data: list | None = None, error: str | None = None) -> None:
+        self._last_refresh_result = {
+            "status": status,
+            "data": data,
+            "error": error,
+        }
+
     def __init__(self, state_dir: str = "runtime/state"):
         self._state_dir = Path(state_dir)
         self._state_dir.mkdir(parents=True, exist_ok=True)
@@ -333,3 +348,6 @@ def get_service_manager() -> ServiceManager:
     if _service_manager is None:
         _service_manager = ServiceManager()
     return _service_manager
+
+
+

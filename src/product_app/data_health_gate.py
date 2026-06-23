@@ -43,11 +43,40 @@ class DataHealthGate:
     └──────────────────────────────────┴────────────────┴──────────────┴───────────────────┘
     """
 
+    STALE_THRESHOLD_SECONDS = 30.0
+
+    QUOTE_HEALTHY = "HEALTHY"
+    QUOTE_STALE = "STALE"
+    QUOTE_UNAVAILABLE = "UNAVAILABLE"
+    QUOTE_DEMO = "DEMO"
+
     DELAY_THRESHOLDS: dict[str, float] = {
         "LEVEL_1_SIGNAL_ONLY": 120.0,
         "LEVEL_2_HUMAN_CONFIRM": 60.0,
         "LEVEL_3_AUTO": 10.0,
     }
+
+    def get_quote_health(self, quote: dict | None, is_demo: bool = False, _now=None) -> str:
+        if quote is None:
+            return self.QUOTE_UNAVAILABLE
+        if is_demo:
+            return self.QUOTE_DEMO
+        received = quote.get("received_at") or quote.get("timestamp")
+        if not received:
+            return self.QUOTE_STALE
+        import datetime
+        try:
+            if isinstance(received, str):
+                dt = datetime.datetime.fromisoformat(received)
+            else:
+                dt = datetime.datetime.fromtimestamp(received)
+        except (ValueError, TypeError):
+            return self.QUOTE_STALE
+        now_dt = _now if _now else datetime.datetime.now(dt.tzinfo)
+        age = (now_dt - dt).total_seconds()
+        if age > self.STALE_THRESHOLD_SECONDS:
+            return self.QUOTE_STALE
+        return self.QUOTE_HEALTHY
 
     def evaluate(
         self,
