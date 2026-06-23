@@ -43,21 +43,6 @@ class JobState(str, Enum):
 class JobInfo:
     """作业信息"""
 
-
-    _last_refresh_result: dict | None = None
-
-    def get_refresh_status(self) -> dict:
-        if self._last_refresh_result is None:
-            return {"status": "IDLE"}
-        return dict(self._last_refresh_result)
-
-    def _set_refresh_result(self, status: str, data: list | None = None, error: str | None = None) -> None:
-        self._last_refresh_result = {
-            "status": status,
-            "data": data,
-            "error": error,
-        }
-
     def __init__(self, name: str, state: JobState = JobState.IDLE):
         self.name = name
         self.state = state

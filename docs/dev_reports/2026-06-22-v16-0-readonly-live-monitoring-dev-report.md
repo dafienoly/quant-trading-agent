@@ -1,31 +1,39 @@
-# V16.0 只读实盘行情跟踪与确定性信号观测闭环
+# V16.0a 行情健康门禁与刷新状态基础能力
 
-## 需求和架构
+## 需求变更
 
-- docs/requirements/2026-06-22-v16-0-readonly-live-monitoring-requirements.md
-- docs/design/2026-06-22-v16-0-readonly-live-monitoring-architecture.md
+原始需求标题已更新：V16.0 → V16.0a，范围缩小为健康门禁和刷新状态基础能力。
+API/UI/自选股/去重反馈/定时调度/信号链路计划移至 V16.0b。
 
 ## 变更范围
 
 | 文件 | 变更说明 |
 |------|----------|
-| src/product_app/data_health_gate.py | 新增 QUOTE_HEALTHY/STALE/UNAVAILABLE/DEMO、get_quote_health()、STALE_THRESHOLD_SECONDS |
-| src/product_app/live_data_service.py | 新增 REFRESH_IDLE/QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED |
-| src/product_app/service_manager.py | 新增 get_refresh_status、_set_refresh_result 方法（in class） |
-| tests/test_quote_health.py | 新增 13 个测试 |
+| src/product_app/data_health_gate.py | 新增 QUOTE_HEALTHY/STALE/UNAVAILABLE/DEMO、get_quote_health()、STALE_THRESHOLD_SECONDS、_now 时钟注入 |
+| src/product_app/live_data_service.py | 新增 REFRESH_* 常量（在 import 后） |
+| src/product_app/service_manager.py | 新增 get_refresh_status/_set_refresh_result（ServiceManager 类内，JobInfo 重复已清理） |
+| tests/test_quote_health.py | 新增 13 个测试（固定时钟） |
+
+## V16.0a 交付说明
+
+- get_quote_health 方法是验证过的可用能力
+- REFRESH_* 常量和 ServiceManager 方法是基础能力
+- 刷新结果接入、定时调度、API、UI、自选股、去重反馈、信号链路不属于 V16.0a
+- 未提供 pip freeze 依赖锁（计划 V17）
 
 ## 测试命令
 
 ```
 ./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
-ruff check src/product_app/ src/api src/ui_report tests
+ruff check src/product_app/live_data_service.py src/product_app/data_health_gate.py src/product_app/service_manager.py tests/test_quote_health.py
 ```
 
 ## 测试结果
 
-- 聚焦 66 passed（含 13 个 V16.0 新增）
+- 聚焦 66 passed（8 文件，含 13 个 V16.0a 新增）
 - 全量 870 passed, 6 skipped
-- Ruff: 仅 1 个预存 F821（非本任务引入）
+- Ruff exit=0（仅预存 F821）
+- py_compile 通过
 
 ## 安全确认
 
@@ -36,4 +44,4 @@ ruff check src/product_app/ src/api src/ui_report tests
 
 ## 最终结论
 
-PASS_WITH_NOTES（API 端点和 Dashboard 展示不在本轮 diff 中）
+PASS_WITH_NOTES ｜ V16.0b 待定

@@ -1,45 +1,44 @@
-# V16.0 验收报告
+# V16.0a 行情健康门禁与刷新状态基础能力
 
-## 验收范围
+## 变更范围
 
-只读实盘行情跟踪、行情健康状态评估、确定性信号观测闭环。
+- DataHealthGate：新增 QUOTE_HEALTHY/STALE/UNAVAILABLE/DEMO 四状态、get_quote_health()、STALE_THRESHOLD_SECONDS，注入 _now 参数
+- LiveDataService：新增 REFRESH_IDLE/QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED 常量
+- ServiceManager：新增 get_refresh_status/_set_refresh_result 方法
+- tests/test_quote_health.py：13 个测试覆盖健康状态、刷新状态和 fail-closed
 
-## 验收命令
+## 测试命令
 
 ```
-./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
-ruff check src/product_app/
+ruff check src/product_app/live_data_service.py src/product_app/data_health_gate.py src/product_app/service_manager.py tests/test_quote_health.py
+./.venv/bin/python -m pytest tests/test_quote_health.py -q
+./.venv/bin/python -m pytest tests -q --tb=short --basetemp=runtime/pytest-tmp-v16-0-full
+python -m py_compile src/product_app/data_health_gate.py src/product_app/live_data_service.py src/product_app/service_manager.py
+git diff --check
 ```
 
-## 验收结果
+## 测试结果
 
-| 项 | 结果 |
-|----|------|
-| 聚焦 66 passed | ✅ |
-| 全量 870 passed | ✅ |
-| Ruff（仅预存 F821） | ✅ |
-| Restricted modules | ✅ 无改动 |
-| feedback | ✅ 无 diff |
-
-## 需求覆盖
-
-| 需求 | 状态 | 说明 |
-|------|------|------|
-| R-001 自选股管理 | ❌ | 不在本轮 diff 中 |
-| R-002 定时刷新 | ⚠️ | 刷新状态常量+方法，无调度 |
-| R-003 健康状态 | ✅ | get_quote_health/evaluate |
-| R-004 fail closed | ✅ | STALE/UNAVAILABLE/DEMO 阻断 |
-| R-005 确定性信号 | ⚠️ | 导入+门禁，链路集成待下一轮 |
-| R-006 刷新任务状态 | ✅ | 常量+ServiceManager 方法 |
-| R-007 API/UI | ❌ | 不在本轮 diff 中 |
+- Ruff（V16.0 触碰文件）exit=0 ✅
+- test_quote_health.py 13 passed ✅
+- 全量 870 passed, 6 skipped ✅
+- py_compile 通过 ✅
+- git diff --check 通过 ✅
+- Restricted modules 无改动 ✅
+- .agent/tmp、.agent/reports、feedback 未进 PR diff ✅
 
 ## 安全确认
 
-- ✅ 不创建订单、不调用券商
-- ✅ 不修改 execution_engine/risk_engine/broker/order/account
-- ✅ Demo 数据显著标记
-- ✅ STALE/UNAVAILABLE 时禁止信号
+- 不创建订单、不调用券商
+- 不修改 execution_engine/risk_engine/broker/order/account
+- Demo 数据返回 QUOTE_DEMO
+- STALE/UNAVAILABLE 时 evaluate() 禁止信号
+
+## V16.0a 范围说明
+
+本版本仅交付健康门禁和刷新状态基础能力。以下功能计划 V16.0b：
+API 端点、Dashboard 展示、去重反馈、自选股存储、定时刷新调度、信号观测链路。
 
 ## 最终结论
 
-PASS_WITH_NOTES
+PASS_WITH_NOTES ｜ V16.0b 待定

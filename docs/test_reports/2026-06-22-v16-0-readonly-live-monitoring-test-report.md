@@ -1,45 +1,42 @@
-# V16.0 测试报告
+# V16.0a 行情健康门禁与刷新状态基础能力
 
-## 需求和架构路径
+## 变更范围
 
-- 需求：docs/requirements/2026-06-22-v16-0-readonly-live-monitoring-requirements.md
-- 架构：docs/design/2026-06-22-v16-0-readonly-live-monitoring-architecture.md
-- 开发：docs/dev_reports/2026-06-22-v16-0-readonly-live-monitoring-dev-report.md
+| 套件 | 用例 | 结果 |
+|------|------|------|
+| test_quote_health.py | 13 | ✅ 全部通过 |
+| 已有聚焦测试（7 文件） | 53 | ✅ 全部通过 |
+| 聚焦总计（8 文件） | 66 | ✅ 全部通过 |
+| 全量 tests | 870 | ✅ 全部通过 |
+
+## 测试命令
+
+```
+./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
+./.venv/bin/python -m pytest tests -q --basetemp=runtime/pytest-tmp-v16-0-full
+ruff check src/product_app/
+```
 
 ## 测试环境
 
-Python 3.14, ruff 0.11
+Python 3.14, ruff 0.11, Ubuntu 24.04 WSL
 
-## 覆盖矩阵
+## 覆盖场景
 
-| 测试文件 | 用例数 | 结果 |
-|----------|--------|------|
-| test_quote_health.py | 10 | ✅ 全部通过 |
-| 已有测试（7 文件） | 53 | ✅ 全部通过 |
-| 全量 tests | 867 | ✅ 全部通过 |
-
-## 测试场景覆盖
-
-| 场景 | 状态 | 说明 |
-|------|------|------|
-| 正常行情返回 HEALTHY | ✅ | get_quote_health 测试 |
-| 过期行情返回 STALE | ✅ | 60s 过期检测 |
-| None 行情返回 UNAVAILABLE | ✅ | |
-| Demo 数据返回 DEMO | ✅ | |
-| 无时间戳返回 STALE | ✅ | |
-| STALE 禁止信号和订单 | ✅ | evaluate 测试 |
-| 正常允许研究和信号 | ✅ | |
-| 刷新任务初始 IDLE | ✅ | ServiceManager |
-| 刷新结果设置/读取 | ✅ | _set_refresh_result |
-| REFRESH 常量可导入 | ✅ | |
-
-## 遗漏列表
-
-- API 端点（获取/更新自选股、行情快照、健康状态、启动刷新、刷新状态、信号观测）
-- Dashboard 展示（源代码修改、最新价、涨跌幅、数据来源、行情时间等）
-- 去重反馈记录
-- 自选股存储
+| 场景 | 状态 |
+|------|------|
+| 正常行情返回 HEALTHY | ✅ |
+| 过期行情返回 STALE | ✅ |
+| None 行情返回 UNAVAILABLE | ✅ |
+| Demo 行情返回 DEMO | ✅ |
+| 无时间戳返回 STALE | ✅ |
+| STALE 禁止信号和订单 | ✅ |
+| Demo 数据拒绝信号 | ✅ |
+| 全部 provider 失败 fail closed | ✅ |
+| 刷新任务初始 IDLE | ✅ |
+| 刷新结果设置/读取 | ✅ |
+| REFRESH 常量可导入 | ✅ |
 
 ## 最终结论
 
-PASS_WITH_NOTES
+PASS_WITH_NOTES ｜ V16.0b 待定
