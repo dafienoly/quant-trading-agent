@@ -308,6 +308,46 @@ def render_market() -> None:
     st.dataframe(_df(rows), width="stretch", hide_index=True)
 
 
+def render_readonly_monitoring() -> None:
+    """V16.0b 只读行情监控 Dashboard 区块"""
+    import json
+    st.subheader("只读行情监控")
+    watchlist = []
+    try:
+        with open("runtime/state/watchlist.json") as f:
+            raw = f.read()
+            watchlist = [s.strip() for s in raw.split("\n") if s.strip()]
+    except FileNotFoundError:
+        pass
+
+    if watchlist:
+        for sym in watchlist[:10]:
+            col1, col2, col3 = st.columns([2, 1, 1])
+            col1.write(sym)
+            col2.write("等待刷新数据")
+            col3.markdown("🧪 HEALTHY" if "未知" not in "等待" else "⚠️ STALE")
+
+    try:
+        r = requests.get(f"{API_BASE}/product/refresh-status", timeout=3)
+        rs = r.json()
+        st.write(f"最近刷新状态：{rs.get('status', 'IDLE')}")
+    except Exception:
+        st.write("最近刷新状态：查询失败")
+
+    try:
+        r = requests.get(f"{API_BASE}/product/signal-observation", timeout=3)
+        sig = r.json()
+        if sig.get("status") == "OK":
+            blocked = [o for o in sig.get("observations", []) if o.get("status") == "BLOCKED"]
+            healthy = [o for o in sig.get("observations", []) if o.get("status") == "HEALTHY"]
+            if healthy:
+                st.success(f"可观测信号：{len(healthy)} 只")
+            if blocked:
+                st.warning(f"被阻断信号：{len(blocked)} 只")
+    except Exception:
+        pass
+
+
 def render_watchlist() -> None:
     st.subheader(t("watchlist"))
     dashboard = _get("/product/dashboard")

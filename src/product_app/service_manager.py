@@ -288,6 +288,17 @@ class ServiceManager:
                 self._set_refresh_result("SUCCEEDED", data=list(quote_result.keys()))
             except Exception as exc:
                 self._set_refresh_result("FAILED", error=str(exc))
+                try:
+                    from src.product_app.feedback_service import get_feedback_service
+                    fb = get_feedback_service()
+                    fb.write_bug_report(
+                        title="行情刷新失败",
+                        description=f"quote_refresh 执行失败：{exc}",
+                        category="market_data",
+                        severity="warning",
+                    )
+                except Exception:
+                    pass
                 raise
 
         elif job_name == "watchlist_monitor":
