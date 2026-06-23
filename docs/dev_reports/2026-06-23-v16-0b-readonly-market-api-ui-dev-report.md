@@ -9,7 +9,7 @@
 
 | 文件 | 变更说明 |
 |------|----------|
-| src/api/product_routes.py | 新增 7 个端点：获取/更新自选股、行情健康状态、刷新状态、信号观测 |
+| src/api/product_routes.py | 新增 7 个端点：获取/更新自选股、行情快照、健康状态、触发刷新、刷新状态、信号观测 |
 | src/product_app/service_manager.py | quote_refresh 已接入 _set_refresh_result（SUCCEEDED/FAILED） |
 | tests/test_v16_0b_watchlist_api.py | 4 个测试（自选股 CRUD、重复、非法） |
 | tests/test_v16_0b_readonly_market_dashboard.py | 3 个测试（健康、刷新、信号端点） |

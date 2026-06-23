@@ -243,9 +243,9 @@ def quotes_snapshot() -> dict:
 
 @router.post("/quote-refresh")
 def trigger_quote_refresh() -> dict:
-    from src.product_app.service_manager import ServiceManager
+    from src.product_app.service_manager import get_service_manager
     try:
-        sm = ServiceManager()
+        sm = get_service_manager()
         sm._execute_job("quote_refresh", {"symbols": ""})
         return {"status": "OK", "message": "行情刷新任务已触发"}
     except Exception as exc:
@@ -277,8 +277,8 @@ def quote_health() -> dict:
 
 @router.get("/refresh-status")
 def refresh_status() -> dict:
-    from src.product_app.service_manager import ServiceManager
-    sm = ServiceManager()
+    from src.product_app.service_manager import get_service_manager
+    sm = get_service_manager()
     return sm.get_refresh_status()
 
 
