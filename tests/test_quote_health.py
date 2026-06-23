@@ -16,15 +16,16 @@ class TestQuoteHealth:
     @patch.object(DataHealthGate, "STALE_THRESHOLD_SECONDS", 30.0)
     def test_healthy_quote(self):
         gate = DataHealthGate()
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        health = gate.get_quote_health(_make_quote(now))
+        fixed_now = datetime.datetime(2026, 6, 23, 10, 0, 0, tzinfo=datetime.timezone.utc)
+        health = gate.get_quote_health(_make_quote(fixed_now.isoformat()), _now=fixed_now)
         assert health == gate.QUOTE_HEALTHY, f"expected HEALTHY, got {health}"
 
     @patch.object(DataHealthGate, "STALE_THRESHOLD_SECONDS", 30.0)
     def test_stale_quote(self):
         gate = DataHealthGate()
-        old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=60)).isoformat()
-        health = gate.get_quote_health(_make_quote(old))
+        fixed_now = datetime.datetime(2026, 6, 23, 10, 0, 0, tzinfo=datetime.timezone.utc)
+        old_ts = (fixed_now - datetime.timedelta(seconds=60)).isoformat()
+        health = gate.get_quote_health(_make_quote(old_ts), _now=fixed_now)
         assert health == gate.QUOTE_STALE, f"expected STALE, got {health}"
 
     def test_none_quote_is_unavailable(self):

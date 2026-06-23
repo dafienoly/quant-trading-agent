@@ -12,7 +12,7 @@
 | src/product_app/data_health_gate.py | 新增 QUOTE_HEALTHY/STALE/UNAVAILABLE/DEMO、get_quote_health()、STALE_THRESHOLD_SECONDS |
 | src/product_app/live_data_service.py | 新增 REFRESH_IDLE/QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED |
 | src/product_app/service_manager.py | 新增 get_refresh_status、_set_refresh_result 方法（in class） |
-| tests/test_quote_health.py | 新增 12 个测试 |
+| tests/test_quote_health.py | 新增 13 个测试 |
 
 ## 测试命令
 

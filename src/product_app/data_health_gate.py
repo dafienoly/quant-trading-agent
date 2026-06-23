@@ -56,7 +56,7 @@ class DataHealthGate:
         "LEVEL_3_AUTO": 10.0,
     }
 
-    def get_quote_health(self, quote: dict | None, is_demo: bool = False) -> str:
+    def get_quote_health(self, quote: dict | None, is_demo: bool = False, _now=None) -> str:
         if quote is None:
             return self.QUOTE_UNAVAILABLE
         if is_demo:
@@ -72,7 +72,8 @@ class DataHealthGate:
                 dt = datetime.datetime.fromtimestamp(received)
         except (ValueError, TypeError):
             return self.QUOTE_STALE
-        age = (datetime.datetime.now(dt.tzinfo) - dt).total_seconds()
+        now_dt = _now if _now else datetime.datetime.now(dt.tzinfo)
+        age = (now_dt - dt).total_seconds()
         if age > self.STALE_THRESHOLD_SECONDS:
             return self.QUOTE_STALE
         return self.QUOTE_HEALTHY
