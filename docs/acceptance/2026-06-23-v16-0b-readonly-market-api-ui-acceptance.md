@@ -2,7 +2,7 @@
 
 ## 变更范围
 
-src/api/product_routes.py（6 端点）、src/product_app/service_manager.py（refresh 接入）、3 测试文件（12 用例）
+src/api/product_routes.py（7 端点：获取/更新自选股、行情快照、健康状态、刷新触发、刷新状态、信号观测）、src/product_app/service_manager.py（refresh 接入）、3 测试文件（12 用例）
 
 ## 测试命令
 

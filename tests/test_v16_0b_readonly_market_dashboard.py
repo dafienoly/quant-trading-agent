@@ -9,9 +9,11 @@ client = TestClient(create_app())
 
 def test_quote_health_endpoint():
     r = client.get("/product/quote-health")
-    assert r.status_code in (200, 503)
+    assert r.status_code == 200
     data = r.json()
+    assert data.get("status") == "OK", f"expected OK, got {data}"
     assert "results" in data
+    assert isinstance(data["results"], dict)
 
 
 def test_refresh_status_endpoint():

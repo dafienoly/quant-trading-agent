@@ -231,6 +231,27 @@ def update_readonly_watchlist(symbols: list[str] = Query(...)) -> dict:
     return {"symbols": valid, "errors": errors}
 
 
+@router.get("/quotes-snapshot")
+def quotes_snapshot() -> dict:
+    from src.product_app.market_data import fetch_product_quotes
+    try:
+        result = fetch_product_quotes([])
+        return {"status": "OK", "data": result}
+    except Exception as exc:
+        return {"status": "ERROR", "error": str(exc)}
+
+
+@router.post("/quote-refresh")
+def trigger_quote_refresh() -> dict:
+    from src.product_app.service_manager import ServiceManager
+    try:
+        sm = ServiceManager()
+        sm._execute_job("quote_refresh", {"symbols": ""})
+        return {"status": "OK", "message": "行情刷新任务已触发"}
+    except Exception as exc:
+        return {"status": "ERROR", "error": str(exc)}
+
+
 @router.get("/quote-health")
 def quote_health() -> dict:
     from src.product_app.data_health_gate import DataHealthGate
