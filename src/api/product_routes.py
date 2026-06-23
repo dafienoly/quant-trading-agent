@@ -199,6 +199,73 @@ def compute_factors(
     }
 
 
+@router.get("/watchlist")
+def get_watchlist() -> list[str]:
+    try:
+        with open(".agent/watchlist.txt") as f:
+            symbols = [s.strip() for s in f if s.strip()]
+            return symbols[:50]
+    except FileNotFoundError:
+        return []
+
+
+@router.put("/watchlist")
+def update_readonly_watchlist(symbols: list[str] = Query(...)) -> dict:
+    seen = set()
+    valid = []
+    errors = []
+    for sym in symbols:
+        s = sym.strip().upper()
+        if not s:
+            continue
+        if not s.replace(".", "").isalnum():
+            errors.append(f"非法代码：{sym}")
+            continue
+        if s in seen:
+            errors.append(f"重复代码：{sym}")
+            continue
+        seen.add(s)
+        valid.append(s)
+    Path(".agent").mkdir(exist_ok=True)
+    Path(".agent/watchlist.txt").write_text("\n".join(valid))
+    return {"symbols": valid, "errors": errors}
+
+
+@router.get("/quote-health")
+def quote_health() -> dict:
+    from src.product_app.data_health_gate import DataHealthGate
+    from src.product_app.live_data_service import LiveDataService
+    gate = DataHealthGate()
+    try:
+        lds = LiveDataService()
+        quotes = lds.fetch_product_quotes([])
+        results = {}
+        for sym, data in quotes.items():
+            h = gate.get_quote_health(data)
+            results[sym] = h
+        return {"results": results}
+    except Exception as exc:
+        return {"results": {}, "note": "行情服务暂不可用", "error": str(exc)}
+
+
+@router.get("/refresh-status")
+def refresh_status() -> dict:
+    from src.product_app.service_manager import ServiceManager
+    sm = ServiceManager()
+    return sm.get_refresh_status()
+
+
+@router.get("/signal-observation")
+def signal_observation() -> dict:
+    from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
+    orch = LiveSignalOrchestrator()
+    try:
+        obs = orch.observe()
+    except Exception as exc:
+        return {"status": "ERROR", "error": str(exc)}
+    return {"status": "OK", "observations": obs}
+
+
 @router.get("/jobs")
 def list_jobs() -> dict[str, Any]:
     from src.product_app.service_manager import get_service_manager
