@@ -237,12 +237,19 @@ def quote_health() -> dict:
     from src.product_app.market_data import fetch_product_quotes
     gate = DataHealthGate()
     try:
-        quotes = fetch_product_quotes([])
+        result = fetch_product_quotes([])
+        qlist = []
+        if isinstance(result, dict):
+            qlist = result.get("quotes", [])
+        elif isinstance(result, list):
+            qlist = result
         results = {}
-        for sym, data in quotes.items():
-            h = gate.get_quote_health(data)
-            results[sym] = h
-        return {"results": results, "status": "OK"}
+        for q in qlist:
+            if isinstance(q, dict):
+                sym = q.get("symbol", "unknown")
+                h = gate.get_quote_health(q)
+                results[sym] = h
+        return {"results": results, "status": "OK", "count": len(results)}
     except Exception as exc:
         return {"results": {}, "status": "ERROR", "note": "行情服务暂不可用", "error": str(exc)}
 

@@ -276,14 +276,19 @@ class ServiceManager:
 
         if job_name == "quote_refresh":
             logger.info(f"[{now}] 行情刷新作业执行")
-            quote_result = fetch_product_quotes(
-                params.get("symbols", ""),
-                provider=str(params.get("provider", DEFAULT_DATA_PROVIDER)),
-                allow_demo=_as_bool(params.get("allow_demo"), default=True),
-                force_live=_as_bool(params.get("force_live"), default=False),
-            )
-            quote_result["updated_at"] = now
-            self._write_state_file("latest_quotes.json", quote_result)
+            try:
+                quote_result = fetch_product_quotes(
+                    params.get("symbols", ""),
+                    provider=str(params.get("provider", DEFAULT_DATA_PROVIDER)),
+                    allow_demo=_as_bool(params.get("allow_demo"), default=True),
+                    force_live=_as_bool(params.get("force_live"), default=False),
+                )
+                quote_result["updated_at"] = now
+                self._write_state_file("latest_quotes.json", quote_result)
+                self._set_refresh_result("SUCCEEDED", data=list(quote_result.keys()))
+            except Exception as exc:
+                self._set_refresh_result("FAILED", error=str(exc))
+                raise
 
         elif job_name == "watchlist_monitor":
             logger.info(f"[{now}] 候选股监控作业执行")

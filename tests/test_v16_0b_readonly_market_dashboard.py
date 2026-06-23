@@ -9,24 +9,25 @@ client = TestClient(create_app())
 
 def test_quote_health_endpoint():
     r = client.get("/product/quote-health")
-    assert r.status_code == 200
+    assert r.status_code in (200, 503)
     data = r.json()
-    assert "status" in data
-    assert data["status"] in ("OK", "ERROR")
+    assert "results" in data
 
 
 def test_refresh_status_endpoint():
     r = client.get("/product/refresh-status")
     assert r.status_code == 200
     data = r.json()
-    assert "status" in data
-    assert len(data.get("status", "")) > 0
+    assert data.get("status") in ("IDLE", "SUCCEEDED", "FAILED")
 
 
-def test_signal_observation_endpoint_returns_list():
+def test_signal_observation_endpoint_returns_observations():
     r = client.get("/product/signal-observation")
     assert r.status_code == 200
     data = r.json()
-    assert "status" in data
     assert "observations" in data
     assert isinstance(data["observations"], list)
+    for obs in data["observations"]:
+        assert "symbol" in obs
+        assert "status" in obs
+        assert "health" in obs

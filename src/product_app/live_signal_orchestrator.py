@@ -595,18 +595,24 @@ class LiveSignalOrchestrator:
         results = []
         try:
             from src.product_app.market_data import fetch_product_quotes
-            quotes = fetch_product_quotes([])
+            result = fetch_product_quotes([])
         except Exception:
             return [{"status": "SKIP", "reason": "无可用行情数据"}]
-        if not quotes:
+        items = []
+        if isinstance(result, dict):
+            qlist = result.get("quotes", [])
+            for q in qlist:
+                if isinstance(q, dict):
+                    sym = q.get("symbol", "unknown")
+                    items.append((sym, q))
+                elif isinstance(q, str):
+                    items.append((q, {"symbol": q}))
+        elif isinstance(result, list):
+            for q in result:
+                if isinstance(q, dict):
+                    items.append((q.get("symbol", "unknown"), q))
+        if not items:
             return [{"status": "SKIP", "reason": "无可用行情数据"}]
-        if isinstance(quotes, dict):
-            items = quotes.items()
-        elif isinstance(quotes, list):
-            items = [(s, {"symbol": s}) for s in quotes if isinstance(s, str)]
-            items += [(q.get("symbol", f"idx_{i}"), q) for i, q in enumerate(quotes) if isinstance(q, dict)]
-        else:
-            return [{"status": "SKIP", "reason": "行情数据格式不可识别"}]
         
         for sym, data in items:
             quote = data if isinstance(data, dict) else {"symbol": str(data)}

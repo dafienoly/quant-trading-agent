@@ -9,8 +9,8 @@
 
 | 文件 | 变更说明 |
 |------|----------|
-| src/api/product_routes.py | 新增 6 个端点：获取/更新自选股、行情健康状态、刷新状态、信号观测、只读刷新 |
-| src/product_app/service_manager.py | quote_refresh 写入 refresh status（SUCCEEDED/FAILED） |
+| src/api/product_routes.py | 新增 5 个端点：获取/更新自选股、行情健康状态、刷新状态、信号观测 |
+| src/product_app/service_manager.py | refresh status 基础方法存在，未接入 quote_refresh 调用路径 |
 | tests/test_v16_0b_watchlist_api.py | 4 个测试（自选股 CRUD、重复、非法） |
 | tests/test_v16_0b_readonly_market_dashboard.py | 3 个测试（健康、刷新、信号端点） |
 | tests/test_v16_0b_signal_observation.py | 5 个测试（fail closed、Demo、STALE） |
@@ -35,7 +35,7 @@ ruff check src/api/product_routes.py src/product_app/
 - 不创建订单、不调用券商
 - 不修改 execution_engine/risk_engine/broker/order/account
 - Demo 数据标记 QUOTE_DEMO，禁止信号
-- Dashboard 不展示交易按钮
+- Dashboard 修改不在本轮 diff 中
 
 ## 最终结论
 
