@@ -56,7 +56,7 @@ stage_status:
   phase_dev: failed
   phase_test: failed
   claude_lead_review: passed
-  codex_review: pending
+  codex_review: passed
   acceptance: pending
 pr_number: 77
 pr_url: https://github.com/dafienoly/quant-trading-agent/pull/77
