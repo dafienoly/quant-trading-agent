@@ -39,13 +39,14 @@ if ($repo.Contains($singleQuote)) {
 }
 
 $wslRepo = "/mnt/$drive/$rest"
-$command = "cd `"$wslRepo`" && bash scripts/run-pipeline-team-agent.sh `"$Stage`""
+$scriptPath = "$wslRepo/scripts/run-pipeline-team-agent.sh"
+$command = "cd `"$wslRepo`" && bash `"$scriptPath`" `"$Stage`""
 
 $wslArgs = @()
 if ($env:AGENT_WSL_DISTRO) {
   $wslArgs += @("-d", $env:AGENT_WSL_DISTRO)
 }
-$wslArgs += @("--", "bash", "-lc", $command)
+$wslArgs += @("--", "bash", "-c", $command)
 
 Write-Host "使用仓库内 Team Pipeline runner 执行 stage=$Stage"
 & wsl.exe @wslArgs
