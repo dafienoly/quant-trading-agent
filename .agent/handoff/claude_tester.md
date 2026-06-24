@@ -1,8 +1,8 @@
 # Agent Handoff: claude_tester
 
-Feature: historical-pr-triage-pr-2-and-pr-3
-Title: [V15.0 Restart 3] Historical PR Triage: PR #2 and PR #3
-Epic branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
+Feature: agentops-control-tower-foundationpipeline-api-re
+Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
+Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
 Risk level: unknown
 
 Required read order:
@@ -13,15 +13,11 @@ Required read order:
 5. docs/pipeline/AUTO_MERGE_POLICY.md
 
 Task:
-- Act as Claude Code C, the phase tester.
-- Create a temporary local `test/historical-pr-triage-pr-2-and-pr-3/phase-<n>-tester-<timestamp>` branch from the phase branch under test.
+- Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.
+- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and superpowers.
+- Create a temporary local `test/agentops-control-tower-foundationpipeline-api-re/phase-<n>-tester-<timestamp>` branch from the phase branch under test.
 - Verify the requirements, architecture, team plan, phase dev report, and diff.
-- Produce `docs/test_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-<n>-test-report.md`.
-- If the phase passes, route back to Claude Code B for the next phase unless all phases are complete.
+- Use verification-before-completion; use systematic-debugging for failures.
+- Return to the original branch, delete the temporary test branch, and produce `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-<n>-test-report.md` without changing business code on the original branch.
+- If the phase passes, route back to Claude Code Developer for the next phase unless all phases are complete.
 - Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.
-
-## 中文要求
-
-- 用户可见输出默认中文。
-- 功能说明和验收报告必须包含中文内容。
-- 代码标识和 JSON key 保留英文。
