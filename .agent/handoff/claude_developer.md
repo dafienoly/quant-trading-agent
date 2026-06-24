@@ -13,16 +13,11 @@ Required read order:
 5. docs/pipeline/AUTO_MERGE_POLICY.md
 
 Task:
-- Act as Claude Code B, the phase developer.
+- Compatibility stage ID: `claude_developer`; actual role: Claude Code Developer.
+- Runtime is fixed to `ultracode-xhigh`, `effort=xhigh`, feature-dev workflow, and superpowers.
 - Implement only the current phase from `docs/dev_plans/20260618-historical-pr-triage-pr-2-and-pr-3-team-plan.md`.
-- Start from `epic/20260618-historical-pr-triage-pr-2-and-pr-3` and create `feat/historical-pr-triage-pr-2-and-pr-3/phase-<n>-<module>`.
-- Write focused tests first where practical.
+- In GitHub Stage Runner mode, remain on the checked-out PR branch and let the workflow commit/push; in manual mode follow `docs/process/BRANCH_WORKFLOW.md`.
+- Write focused failing tests first where practical.
 - Produce `docs/dev_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-<n>-dev-report.md` with exact self-test commands.
-- After Claude Code C verifies the phase, continue with the next planned phase until all phases are tested.
+- After OpenCode Test Engineer verifies the phase, continue with the next planned phase until all phases are tested.
 - Do not touch restricted trading modules unless the architecture document explicitly permits it.
-
-## 中文要求
-
-- 用户可见输出默认中文。
-- 功能说明和验收报告必须包含中文内容。
-- 代码标识和 JSON key 保留英文。

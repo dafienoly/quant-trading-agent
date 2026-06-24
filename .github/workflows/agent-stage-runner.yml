@@ -58,10 +58,21 @@ jobs:
       )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
+      - name: Determine checkout ref for dispatching PR
+        id: checkout-ref
+        if: inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $pr = "${{ inputs.pr_number }}"
+          $branch = gh pr view $pr --json headRefName --jq ".headRefName"
+          if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
+          "checkout_ref=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ steps.checkout-ref.outputs.checkout_ref || github.head_ref || github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -124,14 +135,6 @@ jobs:
       - name: Run configured Agent command
         env:
           STAGE: ${{ steps.stage.outputs.stage }}
-          AGENT_REAL_CLAUDE_LEAD_PLAN: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN || '' }}
-          AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT || '' }}
-          AGENT_REAL_CLAUDE_DEVELOPER: ${{ vars.AGENT_REAL_CLAUDE_DEVELOPER || '' }}
-          AGENT_REAL_CLAUDE_DEVELOPER_STRICT: ${{ vars.AGENT_REAL_CLAUDE_DEVELOPER_STRICT || '' }}
-          AGENT_REAL_CLAUDE_TESTER: ${{ vars.AGENT_REAL_CLAUDE_TESTER || '' }}
-          AGENT_REAL_CLAUDE_TESTER_STRICT: ${{ vars.AGENT_REAL_CLAUDE_TESTER_STRICT || '' }}
-          AGENT_REAL_CLAUDE_LEAD_REVIEW: ${{ vars.AGENT_REAL_CLAUDE_LEAD_REVIEW || '' }}
-          AGENT_REAL_CLAUDE_LEAD_REVIEW_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_REVIEW_STRICT || '' }}
           AGENT_REAL_CODEX_REVIEWER: ${{ vars.AGENT_REAL_CODEX_REVIEWER || '' }}
           AGENT_REAL_CODEX_REVIEWER_STRICT: ${{ vars.AGENT_REAL_CODEX_REVIEWER_STRICT || '' }}
           AGENT_REAL_CODEX_PM: ${{ vars.AGENT_REAL_CODEX_PM || '' }}
@@ -142,14 +145,8 @@ jobs:
           AGENT_REAL_CODEX_ACCEPTANCE_STRICT: ${{ vars.AGENT_REAL_CODEX_ACCEPTANCE_STRICT || '' }}
           CODEX_A_PM_AGENT_COMMAND: ${{ secrets.CODEX_A_PM_AGENT_COMMAND || vars.CODEX_A_PM_AGENT_COMMAND }}
           CODEX_B_ARCHITECT_AGENT_COMMAND: ${{ secrets.CODEX_B_ARCHITECT_AGENT_COMMAND || vars.CODEX_B_ARCHITECT_AGENT_COMMAND }}
-          CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
-          CLAUDE_DEVELOPER_AGENT_COMMAND: ${{ secrets.CLAUDE_DEVELOPER_AGENT_COMMAND || vars.CLAUDE_DEVELOPER_AGENT_COMMAND }}
-          CLAUDE_TESTER_AGENT_COMMAND: ${{ secrets.CLAUDE_TESTER_AGENT_COMMAND || vars.CLAUDE_TESTER_AGENT_COMMAND }}
-          BUGFIX_AGENT_COMMAND: ${{ secrets.BUGFIX_AGENT_COMMAND || vars.BUGFIX_AGENT_COMMAND }}
           CODEX_B_REVIEW_AGENT_COMMAND: ${{ secrets.CODEX_B_REVIEW_AGENT_COMMAND || vars.CODEX_B_REVIEW_AGENT_COMMAND }}
           CODEX_A_ACCEPTANCE_AGENT_COMMAND: ${{ secrets.CODEX_A_ACCEPTANCE_AGENT_COMMAND || vars.CODEX_A_ACCEPTANCE_AGENT_COMMAND }}
-          DEVELOPER_AGENT_COMMAND: ${{ secrets.DEVELOPER_AGENT_COMMAND || vars.DEVELOPER_AGENT_COMMAND }}
-          TEST_AGENT_COMMAND: ${{ secrets.TEST_AGENT_COMMAND || vars.TEST_AGENT_COMMAND }}
           REVIEW_AGENT_COMMAND: ${{ secrets.REVIEW_AGENT_COMMAND || vars.REVIEW_AGENT_COMMAND }}
           ACCEPTANCE_AGENT_COMMAND: ${{ secrets.ACCEPTANCE_AGENT_COMMAND || vars.ACCEPTANCE_AGENT_COMMAND }}
           DRY_RUN: ${{ inputs.dry_run || contains(github.event.pull_request.labels.*.name, 'agent:dry-run') }}
@@ -160,30 +157,51 @@ jobs:
             exit 0
           }
 
-          $cmd = ""
           switch ($env:STAGE) {
-            "codex_pm" { $cmd = if ($env:CODEX_A_PM_AGENT_COMMAND) { $env:CODEX_A_PM_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
-            "codex_architect" { $cmd = if ($env:CODEX_B_ARCHITECT_AGENT_COMMAND) { $env:CODEX_B_ARCHITECT_AGENT_COMMAND } else { $env:CLAUDE_LEAD_AGENT_COMMAND } }
-            "claude_lead_plan" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
-            "claude_developer" { $cmd = if ($env:CLAUDE_DEVELOPER_AGENT_COMMAND) { $env:CLAUDE_DEVELOPER_AGENT_COMMAND } else { $env:DEVELOPER_AGENT_COMMAND } }
-            "claude_tester" { $cmd = if ($env:CLAUDE_TESTER_AGENT_COMMAND) { $env:CLAUDE_TESTER_AGENT_COMMAND } else { $env:TEST_AGENT_COMMAND } }
-            "claude_lead_review" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
-            "bugfix" { $cmd = $env:BUGFIX_AGENT_COMMAND }
-            "codex_reviewer" { $cmd = if ($env:CODEX_B_REVIEW_AGENT_COMMAND) { $env:CODEX_B_REVIEW_AGENT_COMMAND } else { $env:REVIEW_AGENT_COMMAND } }
-            "codex_acceptance" { $cmd = if ($env:CODEX_A_ACCEPTANCE_AGENT_COMMAND) { $env:CODEX_A_ACCEPTANCE_AGENT_COMMAND } else { $env:ACCEPTANCE_AGENT_COMMAND } }
-            "postmortem" { $cmd = $env:CLAUDE_LEAD_AGENT_COMMAND }
+            "claude_lead_plan" { & .\scripts\run-team-stage.ps1 -Stage claude_lead_plan }
+            "claude_developer" { & .\scripts\run-team-stage.ps1 -Stage claude_developer }
+            "claude_tester" { & .\scripts\run-team-stage.ps1 -Stage claude_tester }
+            "claude_lead_review" { & .\scripts\run-team-stage.ps1 -Stage claude_lead_review }
+            "bugfix" { & .\scripts\run-team-stage.ps1 -Stage bugfix }
+            "postmortem" { & .\scripts\run-team-stage.ps1 -Stage postmortem }
+            "codex_pm" {
+              $cmd = $env:CODEX_A_PM_AGENT_COMMAND
+              if (-not $cmd) {
+                Write-Error "CODEX_A_PM_AGENT_COMMAND is not configured."
+                exit 2
+              }
+              Invoke-Expression $cmd
+            }
+            "codex_architect" {
+              $cmd = $env:CODEX_B_ARCHITECT_AGENT_COMMAND
+              if (-not $cmd) {
+                Write-Error "CODEX_B_ARCHITECT_AGENT_COMMAND is not configured."
+                exit 2
+              }
+              Invoke-Expression $cmd
+            }
+            "codex_reviewer" {
+              $cmd = if ($env:CODEX_B_REVIEW_AGENT_COMMAND) { $env:CODEX_B_REVIEW_AGENT_COMMAND } else { $env:REVIEW_AGENT_COMMAND }
+              if (-not $cmd) {
+                Write-Error "CODEX_B_REVIEW_AGENT_COMMAND is not configured."
+                exit 2
+              }
+              Invoke-Expression $cmd
+            }
+            "codex_acceptance" {
+              $cmd = if ($env:CODEX_A_ACCEPTANCE_AGENT_COMMAND) { $env:CODEX_A_ACCEPTANCE_AGENT_COMMAND } else { $env:ACCEPTANCE_AGENT_COMMAND }
+              if (-not $cmd) {
+                Write-Error "CODEX_A_ACCEPTANCE_AGENT_COMMAND is not configured."
+                exit 2
+              }
+              Invoke-Expression $cmd
+            }
             default {
               Write-Error "Unknown stage $env:STAGE"
               exit 2
             }
           }
 
-          if (-not $cmd) {
-            Write-Error "Agent command for stage '$env:STAGE' is not configured."
-            exit 2
-          }
-
-          Invoke-Expression $cmd
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run stage gate
@@ -217,7 +235,17 @@ jobs:
           $ErrorActionPreference = "Stop"
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
-          foreach ($path in @(".agent", "docs", "tests", "src")) {
+          foreach ($path in @(
+            ".agent",
+            ".github",
+            "docs",
+            "scripts",
+            "tests",
+            "src",
+            "AGENTS.md",
+            "pyproject.toml",
+            ".gitignore"
+          )) {
             if (Test-Path $path) {
               git add $path
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -342,7 +370,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-      - name: 生成 Pipeline 诊断报告
+      - name: Generate Pipeline Diagnostic Report
         if: always()
         run: |
           $ErrorActionPreference = "Continue"
@@ -360,7 +388,7 @@ jobs:
                 name = "diagnostic_fallback"
                 severity = "critical"
                 passed = $false
-                message = "正式回归报告未生成；这是诊断 fallback，请查看 Actions 日志。"
+                message = "Pipeline regression report not generated. This is a diagnostic fallback; check the Actions log."
               })
               artifacts = @{ diagnostic_fallback = $true }
             }
@@ -372,16 +400,16 @@ jobs:
           python scripts/agent_pipeline_report_viewer.py --input .agent/reports/pipeline_report.json --output .agent/reports/pipeline_dashboard.html
           $viewerStatus = $LASTEXITCODE
           if ($viewerStatus -ne 0 -or -not (Test-Path .agent/reports/pipeline_dashboard.html)) {
-            $fallbackHtml = @'
+            $fallbackHtml = @"
           <!doctype html>
-          <html lang="zh-CN"><meta charset="utf-8"><title>Pipeline 诊断报告</title>
-          <body><h1>Pipeline 诊断报告</h1><p>正式 Dashboard 生成失败；这是诊断 fallback，请查看同一 artifact 中的 JSON 与 Actions 日志。</p></body></html>
-          '@
+          <html lang="en"><meta charset="utf-8"><title>Pipeline Diagnostic Report</title>
+          <body><h1>Pipeline Diagnostic Report</h1><p>Dashboard generation failed. This is a diagnostic fallback; check the JSON artifact and Actions log.</p></body></html>
+          "@
             $dashboardPath = Join-Path (Get-Location) ".agent/reports/pipeline_dashboard.html"
             [System.IO.File]::WriteAllText($dashboardPath, $fallbackHtml, $utf8NoBom)
           }
 
-          Write-Host "严格回归退出码：$regressionStatus；Dashboard 生成退出码：$viewerStatus"
+          Write-Host "Regression exit code: $regressionStatus; Dashboard generation exit code: $viewerStatus"
           exit 0
 
       - name: 上传 Pipeline Dashboard artifact

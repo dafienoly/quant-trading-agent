@@ -20,13 +20,13 @@ Every Agent must read:
 | From | To | Required output |
 |---|---|---|
 | Codex A PM | Codex B Architect | requirements document |
-| Codex B Architect | Claude Code A Lead | architecture document and phase guidance |
-| Claude Code A Lead | Claude Code B Developer | team phase plan |
-| Claude Code B Developer | Claude Code C Tester | code, tests, phase dev report, self-test commands |
-| Claude Code C Tester | Claude Code B Developer | phase test report when more phases remain or blockers exist |
-| Claude Code C Tester | Claude Code A Lead | phase test report when all phases pass |
-| Claude Code A Lead | Codex B Reviewer | Claude lead review after all phases pass |
-| Codex B Reviewer | Claude Code A Lead or Codex A Acceptance | final architecture review report |
+| Codex B Architect | OpenCode Lead | architecture document and phase guidance |
+| OpenCode Lead | Claude Code Developer | team phase plan |
+| Claude Code Developer | OpenCode Test Engineer | code, tests, phase dev report, self-test commands |
+| OpenCode Test Engineer | Claude Code Developer | phase test report when more phases remain or blockers exist |
+| OpenCode Test Engineer | OpenCode Lead | phase test report when all phases pass |
+| OpenCode Lead | Codex B Reviewer | OpenCode lead review after all phases pass |
+| Codex B Reviewer | OpenCode Lead or Codex A Acceptance | final architecture review report |
 | Codex A Acceptance | Merge Gate | acceptance report and user guide when applicable |
 
 ## Machine-Readable Handoff Schema
@@ -63,7 +63,7 @@ restricted_modules_touched: false
 3. Never hide skipped tests or external service failures.
 4. Never omit whether restricted trading modules were touched.
 5. Never use paper/demo success as live-trading proof.
-6. Never route from Claude Code C directly to Codex B. All phases must pass and
-   Claude Code A must produce a lead review first.
+6. Never route from OpenCode Test Engineer directly to Codex B. All phases must
+   pass and OpenCode Lead must produce a lead review first.
 7. Never request Codex B final review when
    `team_pipeline.all_phases_tested=false`.

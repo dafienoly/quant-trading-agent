@@ -28,7 +28,7 @@ handoff must be written to the repository under `.agent/`, `docs/`, or
 |---|---|---|
 | Pipeline state | `.agent/state.json` | Machine-readable current feature metadata |
 | Current task | `.agent/current_task.yaml` | Agent-readable task state |
-| Handoff prompts | `.agent/handoff/*.md` | Stage-specific prompts for Codex A, Codex B, Claude Code A/B/C, acceptance, bugfix, and postmortem agents |
+| Handoff prompts | `.agent/handoff/*.md` | Stage-specific prompts for Codex A/B, OpenCode Lead, Claude Developer, OpenCode Tester, acceptance, bugfix, and postmortem |
 | Gate outputs | `.agent/gates/*.json` | Deterministic pass/fail evidence for stage gates |
 | CLI | `scripts/agent_pipeline.py` | Creates state, handoff prompts, report gates, and auto-merge decisions |
 | GitHub workflows | `.github/workflows/` | Trigger issue-driven stages, CI, bugfix loop, review, acceptance, and merge gate |
@@ -41,11 +41,11 @@ GitHub Issue with agent:pipeline
   -> Codex A creates requirements
   -> Codex B creates architecture
   -> epic/<date-feature> branch is created
-  -> Claude Code A creates phase plan
-  -> Claude Code B implements one phase
-  -> Claude Code C verifies that phase
-  -> if more phases remain, route back to Claude Code B
-  -> Claude Code A reviews the completed team delivery
+  -> OpenCode GLM 5.2 Lead creates phase plan
+  -> Claude Code ultracode-xhigh implements one phase
+  -> OpenCode DeepSeek V4 Pro max verifies that phase
+  -> if more phases remain, route back to Claude Code Developer
+  -> OpenCode Lead reviews the completed team delivery
   -> Codex B writes final architecture review
   -> Codex A writes PM acceptance report
   -> merge gate decides automatic or manual main merge
@@ -66,9 +66,10 @@ If any condition fails, the gate fails closed and requires human approval.
 
 ## Agent Command Integration
 
-The workflows call external agents through repository secrets or variables. The
-commands are intentionally configurable because different environments may use
-Codex, Claude Code, DeepSeek through a proxy, or another local runner.
+Codex stages continue to call external commands through repository secrets or
+variables. Team stages use repository-owned runners so the selected model,
+effort/variant, workflow, and superpowers contract cannot be silently replaced
+by a repository variable.
 
 Expected command variables/secrets:
 
@@ -76,17 +77,19 @@ Expected command variables/secrets:
 |---|---|
 | `CODEX_A_PM_AGENT_COMMAND` | Codex A requirements generation |
 | `CODEX_B_ARCHITECT_AGENT_COMMAND` | Codex B architecture generation |
-| `CLAUDE_LEAD_AGENT_COMMAND` | Claude Code A team plan, lead review, and postmortem |
-| `CLAUDE_DEVELOPER_AGENT_COMMAND` | Claude Code B phase implementation |
-| `CLAUDE_TESTER_AGENT_COMMAND` | Claude Code C phase verification |
-| `BUGFIX_AGENT_COMMAND` | bugfix loop |
 | `CODEX_B_REVIEW_AGENT_COMMAND` | Codex B final architecture review |
 | `CODEX_A_ACCEPTANCE_AGENT_COMMAND` | Codex A PM acceptance |
 
-Legacy aliases remain available during migration:
-`PM_ARCHITECT_AGENT_COMMAND`, `DEVELOPER_AGENT_COMMAND`,
-`TEST_AGENT_COMMAND`, `REVIEW_AGENT_COMMAND`, and
-`ACCEPTANCE_AGENT_COMMAND`.
+Team-stage execution is fixed:
+
+| Compatibility stage ID | Repository runner | Runtime |
+|---|---|---|
+| `claude_lead_plan`, `claude_lead_review`, `postmortem` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/glm-5.2` + superpowers |
+| `claude_developer`, `bugfix` | `scripts/run-pipeline-team-agent.sh` | Claude Code `ultracode-xhigh`, `effort=xhigh`, feature-dev + superpowers |
+| `claude_tester` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-pro`, `variant=max`, superpowers |
+
+The `claude_*` stage IDs remain only for workflow, label, and gate compatibility.
+They no longer identify the actual Lead or Test Engineer implementation.
 
 Each command must read the relevant `.agent/handoff/<stage>.md`, repository
 policy documents, and current branch. It must write the required report before

@@ -200,29 +200,22 @@ jobs:
             exit 2
           }
 
-      - name: Prepare Claude Code A team-plan handoff
+      - name: Prepare OpenCode Team Leader team-plan handoff
         run: |
           python scripts/agent_pipeline.py write-handoff --stage claude_lead_plan
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run Claude Code A team-plan command or generate handoff-only dry run
+      - name: Run OpenCode GLM 5.2 team-plan or generate handoff-only dry run
         env:
           STAGE: claude_lead_plan
-          CLAUDE_LEAD_AGENT_COMMAND: ${{ secrets.CLAUDE_LEAD_AGENT_COMMAND || vars.CLAUDE_LEAD_AGENT_COMMAND }}
-          AGENT_REAL_CLAUDE_LEAD_PLAN: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN || '' }}
-          AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT: ${{ vars.AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT || '' }}
           DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
         run: |
           $ErrorActionPreference = "Stop"
-          Write-Host "AGENT_REAL_CLAUDE_LEAD_PLAN=$env:AGENT_REAL_CLAUDE_LEAD_PLAN AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT=$env:AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT"
           if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") {
             Write-Host "Dry run: handoff generated at .agent/handoff/claude_lead_plan.md"
-          } elseif ($env:CLAUDE_LEAD_AGENT_COMMAND) {
-            Invoke-Expression $env:CLAUDE_LEAD_AGENT_COMMAND
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } else {
-            Write-Error "CLAUDE_LEAD_AGENT_COMMAND is not configured. Add agent:dry-run for handoff-only mode."
-            exit 2
+            & .\scripts\run-team-stage.ps1 -Stage claude_lead_plan
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
       - name: Commit pipeline bootstrap artifacts
