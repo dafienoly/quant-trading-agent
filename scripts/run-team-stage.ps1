@@ -38,7 +38,7 @@ if ($repo.Contains("'")) {
 }
 
 $wslRepo = "/mnt/$drive/$rest"
-$command = "cd '$wslRepo' && bash scripts/run-pipeline-team-agent.sh '$Stage'"
+$command = "cd `"$wslRepo`" && bash scripts/run-pipeline-team-agent.sh `"$Stage`""
 
 $wslArgs = @()
 if ($env:AGENT_WSL_DISTRO) {
