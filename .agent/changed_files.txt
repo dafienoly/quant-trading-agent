@@ -1,5 +1,6 @@
 ﻿.agent/artifact_manifest_codex_acceptance.json
 .agent/artifact_manifest_codex_reviewer.json
+.agent/changed_files.txt
 .agent/current_task.yaml
 .agent/gates/acceptance_gate.json
 .agent/gates/auto_merge_gate.json
