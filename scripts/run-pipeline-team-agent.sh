@@ -445,9 +445,11 @@ EOF
         "Bash(./.venv/bin/python *)" \
         "Bash(python scripts/agent_pipeline.py *)" \
       <"${prompt_file}.claude" >"$stdout_file" 2>"$stderr_file"; then
+      echo "Claude Code exited non-zero. stderr:" >&2
       cat "$stderr_file" >&2
       exit 2
     fi
+    echo "Claude Code completed. stdout lines: $(wc -l < "$stdout_file"), stderr lines: $(wc -l < "$stderr_file")"
     verify_branch_restored
     write_execution_metadata \
       "claude-code" "$CLAUDE_DEVELOPER_MODEL" "$CLAUDE_DEVELOPER_EFFORT" \
