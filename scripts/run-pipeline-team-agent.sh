@@ -227,13 +227,15 @@ write_stage_prompt >"$prompt_file"
 case "$stage" in
   claude_lead_plan|claude_lead_review|postmortem)
     require_opencode_runtime "$OPENCODE_LEAD_MODEL"
-    if ! opencode run \
-      --model "$OPENCODE_LEAD_MODEL" \
-      --variant "$OPENCODE_LEAD_VARIANT" \
-      --agent build \
-      --dir "$repo_root" \
-      --title "pipeline-${stage}" \
-      "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
+     if ! opencode run \
+       --model "$OPENCODE_LEAD_MODEL" \
+       --variant "$OPENCODE_LEAD_VARIANT" \
+       --agent build \
+       --dir "$repo_root" \
+       --title "pipeline-${stage}" \
+       --permission-mode allow \
+       --dangerously-skip-permissions \
+       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
       cat "$stderr_file" >&2
       exit 2
     fi
@@ -248,6 +250,8 @@ case "$stage" in
       --agent build \
       --dir "$repo_root" \
       --title "pipeline-${stage}" \
+      --permission-mode allow \
+      --dangerously-skip-permissions \
       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
       cat "$stderr_file" >&2
       exit 2
