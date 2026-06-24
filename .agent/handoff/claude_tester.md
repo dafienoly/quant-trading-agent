@@ -14,10 +14,11 @@ Required read order:
 
 Task:
 - Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.
-- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and superpowers.
+- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, build Agent permissions, and superpowers.
 - Create a temporary local `test/agentops-control-tower-foundationpipeline-api-re/phase-<n>-tester-<timestamp>` branch from the phase branch under test.
-- Verify the requirements, architecture, team plan, phase dev report, and diff.
+- Verify the requirements, architecture, team plan, phase dev report, actual diff, and claimed changed paths.
 - Use verification-before-completion; use systematic-debugging for failures.
 - Return to the original branch, delete the temporary test branch, and produce `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-<n>-test-report.md` without changing business code on the original branch.
-- If the phase passes, route back to Claude Code Developer for the next phase unless all phases are complete.
-- Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.
+- The final decision must be exactly PASS, PASS_WITH_NOTES, or REJECTED; REJECTED routes back to OpenCode Developer.
+- If the phase passes, route back to OpenCode Developer for the next phase unless all phases are complete.
+- Generate and actually persist `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.
