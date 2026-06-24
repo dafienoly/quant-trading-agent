@@ -746,6 +746,30 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         else "workflow 仍存在可替换的 Team Lead/Tester 路由",
     ))
 
+    compatibility_preflight_markers = (
+        "- runtime_preflight",
+        "runtime_role:",
+        "inputs.stage != 'runtime_preflight'",
+        "inputs.stage == 'runtime_preflight'",
+        "-Stage claude_lead_plan -PreflightOnly",
+        "-Stage claude_tester -PreflightOnly",
+        "-Stage claude_developer -PreflightOnly",
+        ".agent/tmp/runtime-preflight-*",
+    )
+    compatibility_preflight_missing = [
+        marker
+        for marker in compatibility_preflight_markers
+        if workflow is None or marker not in workflow
+    ]
+    checks.append(CheckResult(
+        "stage_runner_runtime_preflight",
+        "critical",
+        not compatibility_preflight_missing,
+        "Stage Runner 已提供不推进 Pipeline 的 Runtime Preflight"
+        if not compatibility_preflight_missing
+        else f"Stage Runner Runtime Preflight 缺少标记：{compatibility_preflight_missing}",
+    ))
+
     preflight = _read(repo_root / RUNTIME_PREFLIGHT_WORKFLOW_PATH.relative_to(REPO_ROOT))
     preflight_markers = (
         "workflow_dispatch:",

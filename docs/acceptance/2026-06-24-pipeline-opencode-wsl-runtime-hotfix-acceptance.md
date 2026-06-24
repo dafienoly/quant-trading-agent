@@ -8,6 +8,7 @@
 - OpenCode 默认安装目录进入 PATH；
 - 删除无效和危险权限参数；
 - 新增三角色真实 Runtime Preflight；
+- 通过 Stage Runner 隔离入口支持合并前验证 PR 分支；
 - 更新 Issue 模板角色和人工合并文案。
 
 ## 测试命令
@@ -26,7 +27,7 @@
 
 ## 测试结果
 
-- 聚焦测试：`81 passed in 3.01s`。
+- 聚焦测试：`82 passed in 3.06s`。
 - Strict regression：`PASS`。
 - 全量测试：`990 passed, 6 skipped, 2 warnings in 60.41s`。
 - 本地 GLM 5.2、DeepSeek V4 Pro max、Claude ultracode-xhigh 真实探针通过。

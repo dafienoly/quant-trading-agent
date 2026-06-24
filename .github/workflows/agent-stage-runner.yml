@@ -14,6 +14,7 @@ on:
         required: true
         type: choice
         options:
+          - runtime_preflight
           - claude_lead_plan
           - claude_developer
           - claude_tester
@@ -24,6 +25,16 @@ on:
           - codex_architect
           - codex_acceptance
           - postmortem
+      runtime_role:
+        description: Runtime role to probe when stage is runtime_preflight
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - lead
+          - tester
+          - developer
       pr_number:
         description: Pull request number for label advancement when dispatched by another workflow
         required: false
@@ -49,7 +60,10 @@ defaults:
 jobs:
   run-stage:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.stage != 'runtime_preflight'
+      ) ||
       (
         github.event_name == 'pull_request' &&
         github.event.action == 'labeled' &&
@@ -423,3 +437,33 @@ jobs:
             .agent/gates/*.json
           if-no-files-found: error
           retention-days: 14
+
+  runtime-preflight:
+    if: github.event_name == 'workflow_dispatch' && inputs.stage == 'runtime_preflight'
+    runs-on: [self-hosted, Windows, X64, local-windows-codex]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref_name }}
+
+      - name: Probe OpenCode GLM 5.2 Team Lead
+        if: inputs.runtime_role == 'all' || inputs.runtime_role == 'lead'
+        run: .\scripts\run-team-stage.ps1 -Stage claude_lead_plan -PreflightOnly
+
+      - name: Probe OpenCode DeepSeek V4 Pro max Test Engineer
+        if: inputs.runtime_role == 'all' || inputs.runtime_role == 'tester'
+        run: .\scripts\run-team-stage.ps1 -Stage claude_tester -PreflightOnly
+
+      - name: Probe Claude ultracode-xhigh Developer
+        if: inputs.runtime_role == 'all' || inputs.runtime_role == 'developer'
+        run: .\scripts\run-team-stage.ps1 -Stage claude_developer -PreflightOnly
+
+      - name: Upload Runtime Preflight diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-preflight-${{ inputs.runtime_role }}-${{ github.run_id }}
+          path: .agent/tmp/runtime-preflight-*
+          if-no-files-found: warn
+          retention-days: 7

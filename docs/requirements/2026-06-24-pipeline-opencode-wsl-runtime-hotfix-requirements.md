@@ -23,8 +23,9 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 2. Team runner 在调用 OpenCode/Claude 前输出可诊断但不泄露凭据的运行时
    信息。
 3. OpenCode Lead/Tester 不使用无效参数或危险权限跳过。
-4. 新增可在任意 PR 分支手动触发的 Runtime Preflight，真实验证三个模型、
-   认证、effort/variant 和插件可用性，不修改仓库。
+4. 新增 Runtime Preflight，真实验证三个模型、认证、effort/variant 和插件
+   可用性，不修改仓库；在新 workflow 合并到默认分支前，现有 Stage Runner
+   必须提供兼容入口以验证 PR 分支。
 5. Issue 模板使用当前 OpenCode Lead、Claude Developer、OpenCode Tester
    角色，并明确 main 只允许人工合并。
 6. 缺少 CLI、模型、插件、认证或预期探针输出时 fail closed。
@@ -61,6 +62,8 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 - 响应必须包含 `PIPELINE_RUNTIME_OK`；
 - stdout、stderr 和 metadata 仅保存到 `.agent/tmp/**` 并上传 artifact；
 - 任一角色失败则 workflow 失败。
+- 现有 `agent-stage-runner.yml` 必须支持隔离的 `runtime_preflight` stage，
+  且不得执行 handoff、gate、commit、label 或后续 stage dispatch。
 
 ### R-004 Issue 模板
 
@@ -78,6 +81,7 @@ Issue 模板必须：
 - `bash -lc` 和显式 OpenCode PATH；
 - 不存在危险权限跳过；
 - Runtime Preflight workflow 存在且覆盖三个角色；
+- Stage Runner 的兼容 preflight 不推进正式 Pipeline；
 - Issue 模板角色与手动合并文案正确。
 
 ## 非目标

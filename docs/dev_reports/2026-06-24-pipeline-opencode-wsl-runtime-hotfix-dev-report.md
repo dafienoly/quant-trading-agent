@@ -23,11 +23,14 @@
    - 支持 `all`、`lead`、`tester`、`developer`。
    - 使用 Windows self-hosted runner 真实验证三个角色。
    - 上传 `.agent/tmp/runtime-preflight-*` 诊断 artifact。
-4. 更新 `.github/ISSUE_TEMPLATE/agent_feature_request.yml`
+4. 更新 `.github/workflows/agent-stage-runner.yml`
+   - 增加 `runtime_preflight` 兼容入口，用于新 workflow 合并前验证 PR 分支。
+   - 使用独立 job，明确跳过 handoff、gate、commit、label 和 stage 推进。
+5. 更新 `.github/ISSUE_TEMPLATE/agent_feature_request.yml`
    - 使用当前 OpenCode Lead、Claude Code Developer、OpenCode Test Engineer。
    - 明确 main 只允许人工审阅和手动合并。
-5. 扩展 Pipeline 自动化测试和 strict regression。
-6. 更新本地 Runtime 文档、Team Pipeline 文档、用户指南和开发日志。
+6. 扩展 Pipeline 自动化测试和 strict regression。
+7. 更新本地 Runtime 文档、Team Pipeline 文档、用户指南和开发日志。
 
 本次未修改任何交易、行情、策略、风控、订单、账户、Broker 或真实执行模块。
 
@@ -37,7 +40,7 @@
 |---|---|
 | R-001 WSL 登录环境 | `run-team-stage.ps1` 使用 `bash -lc` 和显式 PATH |
 | R-002 安全 OpenCode 调用 | 移除无效和危险权限参数 |
-| R-003 Runtime Preflight | runner preflight 模式和独立 GitHub workflow |
+| R-003 Runtime Preflight | runner preflight 模式、独立 workflow 和 Stage Runner 兼容入口 |
 | R-004 Issue 模板 | 当前角色与 manual main merge 文案 |
 | R-005 回归门禁 | automation tests 和 strict regression |
 
@@ -74,7 +77,7 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 ## 测试结果
 
-- Pipeline 聚焦测试：`81 passed in 3.01s`。
+- Pipeline 聚焦测试：`82 passed in 3.06s`。
 - Pipeline strict regression：`PASS`，严重失败 `0`，警告 `0`。
 - 全量测试：`990 passed, 6 skipped, 2 warnings in 60.41s`。
 - Ruff：`All checks passed!`。

@@ -16,6 +16,7 @@
 | `scripts/run-team-stage.ps1` | `bash -lc`、显式 PATH、`-PreflightOnly` |
 | `scripts/run-pipeline-team-agent.sh` | 安全权限、preflight 探针、metadata |
 | `.github/workflows/agent-runtime-preflight.yml` | 三角色真实运行时探针与 artifact |
+| `.github/workflows/agent-stage-runner.yml` | 合并前可调度的隔离 preflight 兼容入口 |
 | `.github/ISSUE_TEMPLATE/agent_feature_request.yml` | 当前角色与人工合并文案 |
 | `tests/test_agent_pipeline_automation.py` | runner、workflow、模板契约测试 |
 | `scripts/agent_pipeline_regression.py` | strict runtime/模板检查 |
@@ -77,6 +78,12 @@ claude --print --model ultracode-xhigh --effort xhigh \
 - 上传 `.agent/tmp/runtime-preflight-*`；
 - 不写 stage report、不提交、不打 label、不创建 PR。
 
+GitHub 只允许调度默认分支已经存在的 workflow 文件。为了让新增 workflow
+在首次合并前也能取得真实 Actions 证据，现有 `agent-stage-runner.yml` 同时
+提供 `stage=runtime_preflight` 兼容入口。该入口使用独立 job，并通过 job
+条件确保正式 `run-stage` 不执行，因此不会生成 handoff、检查 gate、提交
+代码、操作标签或推进后续 stage。
+
 ### 5. 回归规则
 
 strict regression 对运行时修复做静态 fail-closed 检查，真实模型/认证由
@@ -87,6 +94,7 @@ Runtime Preflight Actions 形成动态证据。两者缺一不可。
 ```text
 workflow_dispatch
   -> agent-runtime-preflight.yml
+     或 agent-stage-runner.yml stage=runtime_preflight
   -> scripts/run-team-stage.ps1 -PreflightOnly
   -> wsl.exe bash -lc + explicit PATH
   -> run-pipeline-team-agent.sh <stage> --preflight-only

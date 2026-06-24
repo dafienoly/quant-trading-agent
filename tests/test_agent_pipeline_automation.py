@@ -219,6 +219,19 @@ def test_runtime_preflight_workflow_probes_all_fixed_team_roles():
     assert "gh pr merge" not in text
 
 
+def test_existing_stage_runner_can_preflight_a_pr_branch_without_advancing_pipeline():
+    text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
+
+    assert "- runtime_preflight" in text
+    assert "runtime_role:" in text
+    assert "inputs.stage != 'runtime_preflight'" in text
+    assert "inputs.stage == 'runtime_preflight'" in text
+    assert "-Stage claude_lead_plan -PreflightOnly" in text
+    assert "-Stage claude_tester -PreflightOnly" in text
+    assert "-Stage claude_developer -PreflightOnly" in text
+    assert ".agent/tmp/runtime-preflight-*" in text
+
+
 def test_agent_issue_template_uses_current_roles_and_manual_merge():
     text = AGENT_ISSUE_TEMPLATE.read_text(encoding="utf-8")
 
