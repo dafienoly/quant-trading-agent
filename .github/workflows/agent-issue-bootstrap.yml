@@ -115,7 +115,7 @@ jobs:
           $branch = "${{ steps.init.outputs.epic_branch }}"
           $reuseRemoteBranch = $false
 
-          $existingPrRaw = gh pr view $branch --json number,state,merged,headRefName,url 2>$null
+          $existingPrRaw = gh pr view $branch --json number,state,headRefName,url 2>$null
           if ($LASTEXITCODE -eq 0 -and $existingPrRaw) {
             $existingPr = $existingPrRaw | ConvertFrom-Json
             if ($existingPr.headRefName -ne $branch) {
@@ -125,11 +125,10 @@ jobs:
             if ($existingPr.state -eq "OPEN") {
               Write-Host "Open PR #$($existingPr.number) already exists for branch '$branch'; reusing branch."
               $reuseRemoteBranch = $true
+            } elseif ($existingPr.state -eq "MERGED") {
+              Write-Error "Branch '$branch' belongs to merged PR #$($existingPr.number); refusing to reuse it."
+              exit 2
             } elseif ($existingPr.state -eq "CLOSED") {
-              if ($existingPr.merged -eq $true) {
-                Write-Error "Branch '$branch' belongs to merged PR #$($existingPr.number); refusing to reuse it."
-                exit 2
-              }
               $branch = "$branch-restart-${{ github.run_id }}-${{ github.run_attempt }}"
               Write-Host "Closed unmerged PR #$($existingPr.number) exists for the requested branch. Using new branch '$branch'."
               python scripts/agent_pipeline.py set-pr-metadata --pr-number 0 --pr-url "pending" --epic-branch $branch
@@ -252,7 +251,7 @@ jobs:
           git push -u origin $branch
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          $prRaw = gh pr view $branch --json number,state,merged,headRefName,url 2>$null
+          $prRaw = gh pr view $branch --json number,state,headRefName,url 2>$null
           if ($LASTEXITCODE -eq 0 -and $prRaw) {
             $existingPr = $prRaw | ConvertFrom-Json
             if ($existingPr.headRefName -ne $branch) {
@@ -261,8 +260,8 @@ jobs:
             }
             if ($existingPr.state -eq "OPEN") {
               Write-Host "Reusing open PR #$($existingPr.number) for branch '$branch'."
-            } elseif ($existingPr.state -eq "CLOSED") {
-              Write-Error "Refusing to update closed PR #$($existingPr.number) for branch '$branch'."
+            } elseif ($existingPr.state -eq "MERGED" -or $existingPr.state -eq "CLOSED") {
+              Write-Error "Refusing to update $($existingPr.state.ToLower()) PR #$($existingPr.number) for branch '$branch'."
               exit 2
             } else {
               Write-Error "Unexpected PR state '$($existingPr.state)' for branch '$branch'."
@@ -273,7 +272,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-          $confirmed = gh pr view $branch --json number,state,merged,headRefName,url | ConvertFrom-Json
+          $confirmed = gh pr view $branch --json number,state,headRefName,url | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or -not $confirmed) { exit 2 }
           if ($confirmed.state -ne "OPEN" -or $confirmed.headRefName -ne $branch) {
             Write-Error "Confirmed PR is not reusable: state=$($confirmed.state), head=$($confirmed.headRefName), branch=$branch"
