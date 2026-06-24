@@ -24,7 +24,7 @@ API/UI/自选股/去重反馈/定时调度/信号链路计划移至 V16.0b。
 ## 测试命令
 
 ```
-./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
+./.venv/bin/python -m pytest tests/test_live_data_service.py tests/test_product_market_data.py tests/test_product_realtime_api.py tests/test_product_service_manager_quotes.py tests/test_phase4_realtime_health.py tests/test_live_signal.py tests/test_product_dashboard_source.py tests/test_quote_health.py -q
 ruff check src/product_app/live_data_service.py src/product_app/data_health_gate.py src/product_app/service_manager.py tests/test_quote_health.py
 ```
 

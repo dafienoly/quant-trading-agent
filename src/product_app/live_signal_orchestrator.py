@@ -23,6 +23,7 @@ from loguru import logger
 from src.product_app.data_health_gate import DataHealthGate
 
 
+
 # ---------------------------------------------------------------------------
 # 信号 ID 计数器（进程内，按日期重置）
 # ---------------------------------------------------------------------------
@@ -582,6 +583,61 @@ class LiveSignalOrchestrator:
 # 模块级单例
 # ---------------------------------------------------------------------------
 
+
+
+    def observe(self) -> list[dict]:
+        """Generate deterministic signal observations based on current data.
+        
+        Only HEALTHY quotes produce formal signals.
+        STALE/UNAVAILABLE/DEMO return fail-closed with Chinese reasons.
+        """
+        gate = DataHealthGate()
+        results = []
+        try:
+            from src.product_app.market_data import fetch_product_quotes
+            result = fetch_product_quotes([])
+        except Exception:
+            return [{"status": "SKIP", "reason": "无可用行情数据"}]
+        items = []
+        if isinstance(result, dict):
+            qlist = result.get("quotes", [])
+            for q in qlist:
+                if isinstance(q, dict):
+                    sym = q.get("symbol", "unknown")
+                    items.append((sym, q))
+                elif isinstance(q, str):
+                    items.append((q, {"symbol": q}))
+        elif isinstance(result, list):
+            for q in result:
+                if isinstance(q, dict):
+                    items.append((q.get("symbol", "unknown"), q))
+        if not items:
+            return [{"status": "SKIP", "reason": "无可用行情数据"}]
+        
+        for sym, data in items:
+            quote = data if isinstance(data, dict) else {"symbol": str(data)}
+            health = gate.get_quote_health(quote)
+            if health == gate.QUOTE_HEALTHY:
+                results.append({
+                    "symbol": sym,
+                    "status": "HEALTHY",
+                    "signal": "可生成观测信号",
+                    "health": health,
+                })
+            else:
+                reasons = {
+                    gate.QUOTE_STALE: "行情已过期（STALE），禁止生成信号",
+                    gate.QUOTE_UNAVAILABLE: "行情不可用（UNAVAILABLE），禁止生成信号",
+                    gate.QUOTE_DEMO: "演示数据（DEMO），禁止用于实盘信号",
+                }
+                results.append({
+                    "symbol": sym,
+                    "status": "BLOCKED",
+                    "signal": "无信号",
+                    "health": health,
+                    "reason": reasons.get(health, "未知健康状态"),
+                })
+        return results
 _live_signal_orchestrator: LiveSignalOrchestrator | None = None
 
 
@@ -591,3 +647,4 @@ def get_live_signal_orchestrator() -> LiveSignalOrchestrator:
     if _live_signal_orchestrator is None:
         _live_signal_orchestrator = LiveSignalOrchestrator()
     return _live_signal_orchestrator
+

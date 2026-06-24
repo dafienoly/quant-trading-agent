@@ -199,6 +199,100 @@ def compute_factors(
     }
 
 
+@router.get("/watchlist")
+def get_watchlist() -> list[str]:
+    try:
+        with open("runtime/state/watchlist.json") as f:
+            symbols = [s.strip() for s in f if s.strip()]
+            return symbols[:50]
+    except FileNotFoundError:
+        return []
+
+
+@router.put("/watchlist")
+def update_readonly_watchlist(symbols: list[str] = Query(...)) -> dict:
+    seen = set()
+    valid = []
+    errors = []
+    for sym in symbols:
+        s = sym.strip().upper()
+        if not s:
+            continue
+        if not s.replace(".", "").isalnum():
+            errors.append(f"非法代码：{sym}")
+            continue
+        if s in seen:
+            errors.append(f"重复代码：{sym}")
+            continue
+        seen.add(s)
+        valid.append(s)
+    Path("runtime/state").mkdir(parents=True, exist_ok=True)
+    Path("runtime/state/watchlist.json").write_text("\n".join(valid))
+    return {"symbols": valid, "errors": errors}
+
+
+@router.get("/quotes-snapshot")
+def quotes_snapshot() -> dict:
+    from src.product_app.market_data import fetch_product_quotes
+    try:
+        result = fetch_product_quotes([])
+        return {"status": "OK", "data": result}
+    except Exception as exc:
+        return {"status": "ERROR", "error": str(exc)}
+
+
+@router.post("/quote-refresh")
+def trigger_quote_refresh() -> dict:
+    from src.product_app.service_manager import get_service_manager
+    try:
+        sm = get_service_manager()
+        sm._execute_job("quote_refresh", {"symbols": ""})
+        return {"status": "OK", "message": "行情刷新任务已触发"}
+    except Exception as exc:
+        return {"status": "ERROR", "error": str(exc)}
+
+
+@router.get("/quote-health")
+def quote_health() -> dict:
+    from src.product_app.data_health_gate import DataHealthGate
+    from src.product_app.market_data import fetch_product_quotes
+    gate = DataHealthGate()
+    try:
+        result = fetch_product_quotes([])
+        qlist = []
+        if isinstance(result, dict):
+            qlist = result.get("quotes", [])
+        elif isinstance(result, list):
+            qlist = result
+        results = {}
+        for q in qlist:
+            if isinstance(q, dict):
+                sym = q.get("symbol", "unknown")
+                h = gate.get_quote_health(q)
+                results[sym] = h
+        return {"results": results, "status": "OK", "count": len(results)}
+    except Exception as exc:
+        return {"results": {}, "status": "ERROR", "note": "行情服务暂不可用", "error": str(exc)}
+
+
+@router.get("/refresh-status")
+def refresh_status() -> dict:
+    from src.product_app.service_manager import get_service_manager
+    sm = get_service_manager()
+    return sm.get_refresh_status()
+
+
+@router.get("/signal-observation")
+def signal_observation() -> dict:
+    from src.product_app.live_signal_orchestrator import LiveSignalOrchestrator
+    try:
+        orch = LiveSignalOrchestrator()
+        obs = orch.observe()
+        return {"status": "OK", "observations": obs, "count": len(obs)}
+    except Exception as exc:
+        return {"status": "ERROR", "error": str(exc), "observations": []}
+
+
 @router.get("/jobs")
 def list_jobs() -> dict[str, Any]:
     from src.product_app.service_manager import get_service_manager

@@ -276,14 +276,30 @@ class ServiceManager:
 
         if job_name == "quote_refresh":
             logger.info(f"[{now}] 行情刷新作业执行")
-            quote_result = fetch_product_quotes(
-                params.get("symbols", ""),
-                provider=str(params.get("provider", DEFAULT_DATA_PROVIDER)),
-                allow_demo=_as_bool(params.get("allow_demo"), default=True),
-                force_live=_as_bool(params.get("force_live"), default=False),
-            )
-            quote_result["updated_at"] = now
-            self._write_state_file("latest_quotes.json", quote_result)
+            try:
+                quote_result = fetch_product_quotes(
+                    params.get("symbols", ""),
+                    provider=str(params.get("provider", DEFAULT_DATA_PROVIDER)),
+                    allow_demo=_as_bool(params.get("allow_demo"), default=True),
+                    force_live=_as_bool(params.get("force_live"), default=False),
+                )
+                quote_result["updated_at"] = now
+                self._write_state_file("latest_quotes.json", quote_result)
+                self._set_refresh_result("SUCCEEDED", data=list(quote_result.keys()))
+            except Exception as exc:
+                self._set_refresh_result("FAILED", error=str(exc))
+                try:
+                    from src.product_app.feedback_service import get_feedback_service
+                    fb = get_feedback_service()
+                    fb.write_bug_report(
+                        title="行情刷新失败",
+                        description=f"quote_refresh 执行失败：{exc}",
+                        category="market_data",
+                        severity="warning",
+                    )
+                except Exception:
+                    pass
+                raise
 
         elif job_name == "watchlist_monitor":
             logger.info(f"[{now}] 候选股监控作业执行")
