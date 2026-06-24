@@ -23,7 +23,6 @@ ruff check src/api/product_routes.py
 - ✅ 不创建订单、不调用券商
 - ✅ 不修改交易敏感模块
 - ✅ Demo/STALE 禁止信号
-- 
 ## 最终结论
 
 PASS_WITH_NOTES
