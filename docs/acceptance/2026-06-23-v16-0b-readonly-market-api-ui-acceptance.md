@@ -13,7 +13,7 @@ ruff check src/api/product_routes.py
 
 ## 测试结果
 
-- 52 passed（专注），882 passed（全量）
+- 专注测试通过（mock 后无卡死）
 - Ruff exit=0
 - Regression PASS
 - Report gate passed

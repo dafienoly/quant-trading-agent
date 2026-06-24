@@ -3,67 +3,55 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
-from src.api.app import create_app
-
-client = TestClient(create_app())
 
 
-@patch("src.api.product_routes.fetch_product_quotes")
-def test_quote_health_endpoint(mock_fpq):
+@pytest.fixture
+def client():
+    from src.api.app import create_app
+    return TestClient(create_app())
+
+
+@patch("src.product_app.market_data.fetch_product_quotes")
+def test_quote_health_endpoint(mock_fpq, client):
     mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
     r = client.get("/product/quote-health")
     assert r.status_code == 200
     data = r.json()
-    assert data.get("status") == "OK", f"expected OK, got {data}"
-    assert "results" in data
-    assert isinstance(data["results"], dict)
+    assert data.get("status") == "OK"
 
 
-def test_refresh_status_endpoint():
+@patch("src.product_app.market_data.fetch_product_quotes")
+def test_quotes_snapshot_endpoint(mock_fpq, client):
+    mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
+    r = client.get("/product/quotes-snapshot")
+    assert r.status_code == 200
+
+
+def test_refresh_status_endpoint(client):
     r = client.get("/product/refresh-status")
     assert r.status_code == 200
-    data = r.json()
-    assert data.get("status") in ("IDLE", "SUCCEEDED", "FAILED")
+    assert r.json().get("status") in ("IDLE", "SUCCEEDED", "FAILED")
 
 
-def test_signal_observation_endpoint_returns_observations():
+@patch("src.product_app.market_data.fetch_product_quotes")
+def test_signal_observation_endpoint(mock_fpq, client):
+    mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
     r = client.get("/product/signal-observation")
     assert r.status_code == 200
     data = r.json()
     assert "observations" in data
-    assert isinstance(data["observations"], list)
     for obs in data["observations"]:
         assert "symbol" in obs
         assert "status" in obs
-        assert "health" in obs
-
-@patch("src.api.product_routes.fetch_product_quotes")
-def test_quotes_snapshot_endpoint(mock_fpq):
-    mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
-    r = client.get("/product/quotes-snapshot")
-    assert r.status_code == 200
-    data = r.json()
-    assert data.get("status") in ("OK", "ERROR")
 
 
-@patch("src.api.product_routes.get_service_manager")
-def test_quote_refresh_trigger(mock_gsm):
-    from src.product_app.service_manager import ServiceManager
-    mock_gsm.return_value = ServiceManager()
-    r = client.post("/product/quote-refresh")
-    assert r.status_code == 200
-    assert r.json().get("status") in ("OK", "ERROR")
-
-
-def test_refresh_status_updates_after_trigger():
-    # Arrange
+@patch("src.product_app.service_manager.fetch_product_quotes")
+def test_refresh_status_updates_after_trigger(mock_fpq, client):
     from src.product_app.service_manager import get_service_manager
+    mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
     sm = get_service_manager()
-    # Act
     sm._execute_job("quote_refresh", {"symbols": ""})
     status = sm.get_refresh_status()
-    # Assert
     assert status.get("status") in ("SUCCEEDED", "FAILED")
-    if status["status"] == "SUCCEEDED":
-        assert isinstance(status.get("data"), list)

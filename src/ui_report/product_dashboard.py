@@ -324,7 +324,7 @@ def render_readonly_monitoring() -> None:
             col1, col2, col3 = st.columns([2, 1, 1])
             col1.write(sym)
             col2.write("等待刷新数据")
-            col3.markdown("🧪 HEALTHY" if "未知" not in "等待" else "⚠️ STALE")
+            col3.markdown("⏳ 待获取")
 
     try:
         r = requests.get(f"{DEFAULT_API_BASE}/product/refresh-status", timeout=3)
