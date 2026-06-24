@@ -24,6 +24,8 @@ RUNNER_REFERENCE = Path("docs/ops/agent-runners/run-codex-stage.ps1.reference")
 PR_VALIDATION_WORKFLOW = Path(".github/workflows/agent-pr-validation.yml")
 TEAM_STAGE_RUNNER = Path("scripts/run-pipeline-team-agent.sh")
 WINDOWS_TEAM_STAGE_RUNNER = Path("scripts/run-team-stage.ps1")
+RUNTIME_PREFLIGHT_WORKFLOW = Path(".github/workflows/agent-runtime-preflight.yml")
+AGENT_ISSUE_TEMPLATE = Path(".github/ISSUE_TEMPLATE/agent_feature_request.yml")
 
 
 def _valid_requirements(feature_id: str = "agent-pipeline") -> str:
@@ -185,7 +187,13 @@ def test_team_stage_runner_forces_requested_models_effort_and_skills():
     assert "superpowers:using-superpowers" in text
     assert "--permission-mode dontAsk" in text
     assert "--allowedTools" in text
-    assert "--dangerously-skip-permissions" in text
+    assert "--permission-mode allow" not in text
+    assert "--dangerously-skip-permissions" not in text
+    assert "PIPELINE_RUNTIME_OK" in text
+    assert "--preflight-only" in text
+    assert "PREFLIGHT_TIMEOUT_SECONDS" in text
+    assert "timeout --signal=TERM --kill-after=10s" in text
+    assert text.count("--format json") == 3
 
 
 def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
@@ -193,8 +201,61 @@ def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
 
     assert "scripts/run-pipeline-team-agent.sh" in text
     assert "wsl.exe" in text
+    assert '"--cd", $wslRoot' in text
+    assert '"bash", "-i", "scripts/run-pipeline-team-agent.sh"' in text
+    assert '"-lc"' not in text
+    assert "$bashCommand" not in text
+    assert "PreflightOnly" in text
+    assert "Remove-Item -Force -ErrorAction SilentlyContinue $metadataPath" in text
+    assert "runtime-preflight-$preflightRole.execution.json" in text
     assert "CLAUDE_LEAD_AGENT_COMMAND" not in text
     assert "CLAUDE_TESTER_AGENT_COMMAND" not in text
+
+
+def test_runtime_preflight_workflow_probes_all_fixed_team_roles():
+    text = RUNTIME_PREFLIGHT_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "workflow_dispatch:" in text
+    assert "runs-on: [self-hosted, Windows, X64, local-windows-codex]" in text
+    assert "-Stage claude_lead_plan -PreflightOnly" in text
+    assert "-Stage claude_tester -PreflightOnly" in text
+    assert "-Stage claude_developer -PreflightOnly" in text
+    assert "actions/upload-artifact@v4" in text
+    assert ".agent/tmp/runtime-preflight-*" in text
+    assert "if-no-files-found: error" in text
+    assert "include-hidden-files: true" in text
+    assert "git push" not in text
+    assert "gh pr merge" not in text
+
+
+def test_existing_stage_runner_can_preflight_a_pr_branch_without_advancing_pipeline():
+    text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
+
+    assert "- runtime_preflight" in text
+    assert "runtime_role:" in text
+    assert "inputs.stage != 'runtime_preflight'" in text
+    assert "inputs.stage == 'runtime_preflight'" in text
+    assert "-Stage claude_lead_plan -PreflightOnly" in text
+    assert "-Stage claude_tester -PreflightOnly" in text
+    assert "-Stage claude_developer -PreflightOnly" in text
+    assert ".agent/tmp/runtime-preflight-*" in text
+    assert "if-no-files-found: error" in text
+    assert "include-hidden-files: true" in text
+
+
+def test_agent_issue_template_uses_current_roles_and_manual_merge():
+    text = AGENT_ISSUE_TEMPLATE.read_text(encoding="utf-8")
+
+    assert "agent:pipeline" in text
+    assert "stage:pm-pending" in text
+    assert "OpenCode Lead" in text
+    assert "Claude Code Developer" in text
+    assert "OpenCode Test Engineer" in text
+    assert "manual main merge" in text
+    assert "Claude Code A" not in text
+    assert "Claude Code B" not in text
+    assert "Claude Code C" not in text
+    assert "automatic main merge" not in text
 
 
 def test_github_workflows_use_repository_owned_team_runner():

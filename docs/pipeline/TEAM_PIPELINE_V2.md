@@ -108,6 +108,11 @@ Local execution rule:
 - Team stages must use `scripts/run-team-stage.ps1` and
   `scripts/run-pipeline-team-agent.sh`. The repository runner pins the model,
   effort/variant, workflow, and superpowers requirements.
+- Before merging runner changes, execute `agent-runtime-preflight.yml` with
+  `role=all` on the candidate branch. Static checks cannot replace this runtime
+  evidence.
+- OpenCode stages must not use `--dangerously-skip-permissions`; missing
+  permission, CLI, model, plugin, or authentication fails closed.
 
 ## Codex B Review Attempts
 

@@ -8,7 +8,9 @@ param(
     "bugfix",
     "postmortem"
   )]
-  [string]$Stage
+  [string]$Stage,
+
+  [switch]$PreflightOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,15 +36,41 @@ if ($repoRoot -match '^([A-Za-z]):') {
 $scriptPath = "$wslRoot/scripts/run-pipeline-team-agent.sh"
 Write-Host "WSL script path: $scriptPath"
 
+$metadataPath = $null
+if ($PreflightOnly) {
+  $preflightRole = switch ($Stage) {
+    "claude_lead_plan" { "lead" }
+    "claude_lead_review" { "lead" }
+    "postmortem" { "lead" }
+    "claude_tester" { "tester" }
+    "claude_developer" { "developer" }
+    "bugfix" { "developer" }
+  }
+  $metadataPath = Join-Path $repoRoot ".agent\tmp\runtime-preflight-$preflightRole.execution.json"
+  Remove-Item -Force -ErrorAction SilentlyContinue $metadataPath
+}
+
 $wslArgs = @()
 if ($env:AGENT_WSL_DISTRO) {
   $wslArgs += @("-d", $env:AGENT_WSL_DISTRO)
 }
-$wslArgs += @("--", "bash", "-c", "cd `"$wslRoot`" && bash scripts/run-pipeline-team-agent.sh `"$Stage`"")
+$wslArgs += @("--cd", $wslRoot, "--", "bash", "-i", "scripts/run-pipeline-team-agent.sh", $Stage)
+if ($PreflightOnly) {
+  $wslArgs += "--preflight-only"
+}
 
 & wsl.exe @wslArgs
 
-if ($LASTEXITCODE -ne 0) {
-  Write-Error "Team pipeline runner exited with code $LASTEXITCODE"
-  exit $LASTEXITCODE
+$runnerExitCode = $LASTEXITCODE
+if ($runnerExitCode -ne 0) {
+  Write-Error "Team pipeline runner exited with code $runnerExitCode" -ErrorAction Continue
+  exit $runnerExitCode
+}
+
+if ($PreflightOnly) {
+  if (-not (Test-Path $metadataPath)) {
+    Write-Error "Runtime preflight returned without required metadata: $metadataPath"
+    exit 2
+  }
+  Write-Host "Runtime preflight metadata: $metadataPath"
 }

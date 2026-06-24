@@ -2,10 +2,21 @@
 set -euo pipefail
 
 stage="${1:?stage is required}"
+mode="${2:-}"
 repo_root="."
 handoff=".agent/handoff/${stage}.md"
 state_path=".agent/state.json"
 tmp_dir=".agent/tmp"
+preflight_only="false"
+
+export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
+
+if [[ "$mode" == "--preflight-only" ]]; then
+  preflight_only="true"
+elif [[ -n "$mode" ]]; then
+  echo "Unsupported Team Pipeline runner option: $mode" >&2
+  exit 2
+fi
 
 OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"
 OPENCODE_LEAD_VARIANT="max"
@@ -13,6 +24,12 @@ OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"
 OPENCODE_TESTER_VARIANT="max"
 CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"
 CLAUDE_DEVELOPER_EFFORT="xhigh"
+PREFLIGHT_TIMEOUT_SECONDS="${AGENT_PREFLIGHT_TIMEOUT_SECONDS:-180}"
+
+if ! [[ "$PREFLIGHT_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "AGENT_PREFLIGHT_TIMEOUT_SECONDS must be a positive integer." >&2
+  exit 2
+fi
 
 case "$stage" in
   claude_lead_plan|claude_lead_review|postmortem|claude_developer|bugfix|claude_tester)
@@ -23,22 +40,24 @@ case "$stage" in
     ;;
 esac
 
-if [[ ! -f "$handoff" ]]; then
-  echo "Missing handoff: $handoff" >&2
-  exit 2
-fi
-
-if [[ ! -f "$state_path" ]]; then
-  echo "Missing pipeline state: $state_path" >&2
-  exit 2
-fi
-
 mkdir -p "$tmp_dir"
 prompt_file="${tmp_dir}/${stage}.prompt.md"
 stdout_file="${tmp_dir}/${stage}.stdout.log"
 stderr_file="${tmp_dir}/${stage}.stderr.log"
 metadata_file="${tmp_dir}/${stage}.execution.json"
 starting_branch="$(git branch --show-current)"
+
+if [[ "$preflight_only" != "true" ]]; then
+  if [[ ! -f "$handoff" ]]; then
+    echo "Missing handoff: $handoff" >&2
+    exit 2
+  fi
+
+  if [[ ! -f "$state_path" ]]; then
+    echo "Missing pipeline state: $state_path" >&2
+    exit 2
+  fi
+fi
 
 write_common_prompt() {
   cat <<EOF
@@ -129,7 +148,9 @@ require_opencode_runtime() {
   local model="$1"
   require_command opencode
 
-  if ! opencode debug skill >"${tmp_dir}/opencode-skills.json" 2>"${tmp_dir}/opencode-skills.stderr"; then
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode debug skill >"${tmp_dir}/opencode-skills.json" \
+    2>"${tmp_dir}/opencode-skills.stderr"; then
     echo "OpenCode skill discovery failed." >&2
     exit 2
   fi
@@ -138,12 +159,21 @@ require_opencode_runtime() {
     exit 2
   fi
 
-  if ! opencode models >"${tmp_dir}/opencode-models.txt" 2>"${tmp_dir}/opencode-models.stderr"; then
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode models >"${tmp_dir}/opencode-models.txt" \
+    2>"${tmp_dir}/opencode-models.stderr"; then
     echo "OpenCode model discovery failed." >&2
     exit 2
   fi
   if ! grep -Fxq "$model" "${tmp_dir}/opencode-models.txt"; then
     echo "Required OpenCode model is unavailable: $model" >&2
+    exit 2
+  fi
+
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode debug agent build >"${tmp_dir}/opencode-build-agent.txt" \
+    2>"${tmp_dir}/opencode-build-agent.stderr"; then
+    echo "OpenCode build agent configuration is unavailable." >&2
     exit 2
   fi
 }
@@ -160,7 +190,9 @@ require_claude_runtime() {
     exit 2
   fi
 
-  if ! $CLAUDE_BIN plugin list >"${tmp_dir}/claude-plugins.txt" 2>"${tmp_dir}/claude-plugins.stderr"; then
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    "$CLAUDE_BIN" plugin list >"${tmp_dir}/claude-plugins.txt" \
+    2>"${tmp_dir}/claude-plugins.stderr"; then
     echo "Claude Code plugin discovery failed." >&2
     exit 2
   fi
@@ -202,6 +234,96 @@ Path(path).write_text(
 PY
 }
 
+verify_probe_output() {
+  local path="$1"
+  local role="$2"
+  if ! grep -q "PIPELINE_RUNTIME_OK" "$path"; then
+    echo "Runtime preflight for '$role' did not return PIPELINE_RUNTIME_OK." >&2
+    exit 2
+  fi
+}
+
+verify_git_state_unchanged() {
+  local before="$1"
+  local after
+  after="$(git status --porcelain=v1 --untracked-files=all)"
+  if [[ "$after" != "$before" ]]; then
+    echo "Runtime preflight modified the repository; failing closed." >&2
+    diff -u <(printf '%s\n' "$before") <(printf '%s\n' "$after") >&2 || true
+    exit 2
+  fi
+}
+
+run_opencode_preflight() {
+  local role="$1"
+  local model="$2"
+  local variant="$3"
+  local before
+  before="$(git status --porcelain=v1 --untracked-files=all)"
+  stdout_file="${tmp_dir}/runtime-preflight-${role}.stdout.log"
+  stderr_file="${tmp_dir}/runtime-preflight-${role}.stderr.log"
+  metadata_file="${tmp_dir}/runtime-preflight-${role}.execution.json"
+
+  require_opencode_runtime "$model"
+  set +e
+  timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode run \
+    --model "$model" \
+    --variant "$variant" \
+    --agent plan \
+    --format json \
+    --dir "$repo_root" \
+    --title "pipeline-runtime-preflight-${role}" \
+    "这是只读运行时探针。不要调用任何工具，不要读取或修改文件，只输出 PIPELINE_RUNTIME_OK。" \
+    >"$stdout_file" 2>"$stderr_file"
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    cat "$stderr_file" >&2
+    if [[ $status -eq 124 || $status -eq 137 ]]; then
+      echo "Runtime preflight for '$role' timed out after ${PREFLIGHT_TIMEOUT_SECONDS}s." >&2
+    fi
+    exit "$status"
+  fi
+  verify_probe_output "$stdout_file" "$role"
+  verify_git_state_unchanged "$before"
+  write_execution_metadata "opencode" "$model" "$variant" "runtime-preflight+superpowers"
+}
+
+run_claude_preflight() {
+  local before
+  before="$(git status --porcelain=v1 --untracked-files=all)"
+  stdout_file="${tmp_dir}/runtime-preflight-developer.stdout.log"
+  stderr_file="${tmp_dir}/runtime-preflight-developer.stderr.log"
+  metadata_file="${tmp_dir}/runtime-preflight-developer.execution.json"
+
+  require_claude_runtime
+  set +e
+  timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    "$CLAUDE_BIN" \
+    --print \
+    --model "$CLAUDE_DEVELOPER_MODEL" \
+    --effort "$CLAUDE_DEVELOPER_EFFORT" \
+    --tools "" \
+    --no-session-persistence \
+    "这是只读运行时探针。不要调用任何工具，不要读取或修改文件，只输出 PIPELINE_RUNTIME_OK。" \
+    >"$stdout_file" 2>"$stderr_file"
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    cat "$stderr_file" >&2
+    if [[ $status -eq 124 || $status -eq 137 ]]; then
+      echo "Runtime preflight for 'developer' timed out after ${PREFLIGHT_TIMEOUT_SECONDS}s." >&2
+    fi
+    exit "$status"
+  fi
+  verify_probe_output "$stdout_file" "developer"
+  verify_git_state_unchanged "$before"
+  write_execution_metadata \
+    "claude-code" "$CLAUDE_DEVELOPER_MODEL" "$CLAUDE_DEVELOPER_EFFORT" \
+    "runtime-preflight+feature-dev+superpowers"
+}
+
 verify_branch_restored() {
   local ending_branch
   ending_branch="$(git branch --show-current)"
@@ -231,19 +353,35 @@ verify_tester_did_not_modify_business_code() {
   )
 }
 
+if [[ "$preflight_only" == "true" ]]; then
+  case "$stage" in
+    claude_lead_plan|claude_lead_review|postmortem)
+      run_opencode_preflight "lead" "$OPENCODE_LEAD_MODEL" "$OPENCODE_LEAD_VARIANT"
+      ;;
+    claude_tester)
+      run_opencode_preflight \
+        "tester" "$OPENCODE_TESTER_MODEL" "$OPENCODE_TESTER_VARIANT"
+      ;;
+    claude_developer|bugfix)
+      run_claude_preflight
+      ;;
+  esac
+  echo "Team Pipeline runtime preflight completed: $stage"
+  exit 0
+fi
+
 write_stage_prompt >"$prompt_file"
 
 case "$stage" in
   claude_lead_plan|claude_lead_review|postmortem)
     require_opencode_runtime "$OPENCODE_LEAD_MODEL"
-     if ! opencode run \
+    if ! opencode run \
        --model "$OPENCODE_LEAD_MODEL" \
        --variant "$OPENCODE_LEAD_VARIANT" \
        --agent build \
+       --format json \
        --dir "$repo_root" \
        --title "pipeline-${stage}" \
-       --permission-mode allow \
-       --dangerously-skip-permissions \
        "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
       cat "$stderr_file" >&2
       exit 2
@@ -257,10 +395,9 @@ case "$stage" in
       --model "$OPENCODE_TESTER_MODEL" \
       --variant "$OPENCODE_TESTER_VARIANT" \
       --agent build \
+      --format json \
       --dir "$repo_root" \
       --title "pipeline-${stage}" \
-      --permission-mode allow \
-      --dangerously-skip-permissions \
       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
       cat "$stderr_file" >&2
       exit 2

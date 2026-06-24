@@ -40,11 +40,11 @@ body:
     attributes:
       label: Automation Mode
       options:
-        - label: Run Codex A PM -> Codex B Architect -> Claude Team -> Codex B Review -> Codex A Acceptance automatically when agent commands are configured.
+        - label: Run Codex A PM -> Codex B Architect -> OpenCode Lead -> Claude Code Developer -> OpenCode Test Engineer -> Codex B Review -> Codex A Acceptance automatically.
           required: true
-        - label: Route every passed Claude C phase back to Claude B until all planned phases are tested, then run Claude A lead review.
+        - label: Route every passed OpenCode Test Engineer phase back to Claude Code Developer until all planned phases are tested, then run OpenCode Lead review.
           required: true
-        - label: Allow automatic main merge only when the deterministic auto-merge gate classifies the change as safe.
+        - label: Require human review and manual main merge after all deterministic gates pass.
           required: true
         - label: Require manual approval for trading-sensitive modules even if full automation is requested.
           required: true

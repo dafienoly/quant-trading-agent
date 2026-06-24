@@ -84,11 +84,44 @@ GitHub workflow directly calls:
 The PowerShell bridge converts the current checkout path to WSL and executes:
 
 ```bash
-bash scripts/run-pipeline-team-agent.sh claude_developer
+bash -lc 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; \
+  bash scripts/run-pipeline-team-agent.sh claude_developer'
 ```
 
 Runner 会检查 CLI、固定模型、superpowers/feature-dev，并写入
 `.agent/tmp/<stage>.execution.json`。阶段报告仍由现有 gate 校验。
+
+Windows self-hosted runner 必须使用登录 shell。OpenCode 默认安装在
+`~/.opencode/bin`，非登录 `bash -c` 可能无法继承交互终端 PATH。
+
+## Runtime Preflight
+
+合并 Pipeline runner 变更前，在目标分支手动运行：
+
+```bash
+gh workflow run agent-runtime-preflight.yml \
+  --ref <branch> \
+  -f role=all
+```
+
+查看结果：
+
+```bash
+gh run list --workflow agent-runtime-preflight.yml --limit 1
+gh run watch <run-id>
+```
+
+Preflight 会真实验证：
+
+- OpenCode `opencode-go/glm-5.2`；
+- OpenCode `opencode-go/deepseek-v4-pro`、`variant=max`；
+- Claude Code `ultracode-xhigh`、`effort=xhigh`；
+- OpenCode `using-superpowers`；
+- Claude `feature-dev` 和 `superpowers`。
+
+探针禁止 Claude 工具，OpenCode 使用只读 prompt，并在调用前后比较 git
+状态。缺少 CLI、模型、插件、认证或 `PIPELINE_RUNTIME_OK` 时 fail closed。
+探针不会创建报告、推进 label、提交或合并代码。
 
 ## Parallel Local Workspace Layout
 

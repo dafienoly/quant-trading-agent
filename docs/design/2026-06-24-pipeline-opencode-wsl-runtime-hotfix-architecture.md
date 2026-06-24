@@ -1,0 +1,151 @@
+# Pipeline OpenCode WSL Runtime Hotfix 架构
+
+## 架构摘要
+
+修复采用三层防护：
+
+1. PowerShell bridge 使用 WSL 登录 shell，并显式设置用户 CLI PATH。
+2. Team runner 移除危险权限参数，增加只读 Runtime Preflight 模式。
+3. 独立 GitHub workflow 在 PR 分支上真实探测三个模型和插件，不触发 stage
+   状态迁移。
+
+## 模块计划
+
+| 文件 | 变更 |
+|---|---|
+| `scripts/run-team-stage.ps1` | `bash -i` 独立参数、metadata 后置校验、`-PreflightOnly` |
+| `scripts/run-pipeline-team-agent.sh` | 安全权限、preflight 探针、metadata |
+| `.github/workflows/agent-runtime-preflight.yml` | 三角色真实运行时探针与 artifact |
+| `.github/workflows/agent-stage-runner.yml` | 合并前可调度的隔离 preflight 兼容入口 |
+| `.github/ISSUE_TEMPLATE/agent_feature_request.yml` | 当前角色与人工合并文案 |
+| `tests/test_agent_pipeline_automation.py` | runner、workflow、模板契约测试 |
+| `scripts/agent_pipeline_regression.py` | strict runtime/模板检查 |
+| Pipeline 文档 | 运维命令、preflight 和故障诊断 |
+
+## 技术决策
+
+### 1. 登录 shell 加独立参数
+
+PowerShell 使用：
+
+```text
+wsl.exe ... --cd <repo> -- bash -i scripts/run-pipeline-team-agent.sh <stage> <mode>
+```
+
+避免使用 `bash -lc '<复合命令>'`。Windows PowerShell 到 `wsl.exe` 的参数
+重组可能使复合命令仅返回 0 而未执行 runner。Stage、mode 和脚本路径必须
+作为独立参数传递。
+
+Bash runner 前置：
+
+```bash
+export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
+```
+
+交互式 shell 负责加载 runner 用户的 `.bashrc` 配置，包括 self-hosted WSL
+已配置的代理环境；不使用 login 模式，避免 `.bash_logout` 的终端清理命令
+覆盖 runner 真实退出码。显式 PATH 为 OpenCode 默认安装目录提供确定性保障。
+代理、认证和凭据不写入仓库。PowerShell 在 preflight 返回后检查角色
+metadata；即使桥接错误返回 0，也会因缺少执行证据而 fail closed。
+
+### 2. 不使用危险权限跳过
+
+OpenCode 保留 `--agent build`，使用已解析的项目/用户 permission policy。
+删除 CLI 不支持的 `--permission-mode allow` 和
+`--dangerously-skip-permissions`。所需 superpowers 外部目录由 OpenCode
+配置预检确认。
+
+所有将 stdout 重定向到日志文件的 OpenCode 调用固定使用
+`--format json`。默认 renderer 面向交互终端，在 Windows runner 经 WSL
+重定向时可能已收到模型响应却不退出；JSON event stream 是稳定的无人值守
+输出契约。
+
+### 3. 真实但只读的探针
+
+`--preflight-only` 不读取 handoff/state，不运行 gate，不修改 git 状态。
+
+OpenCode 探针：
+
+```text
+opencode run --model <fixed> --variant <fixed> --agent build \
+  "不要使用工具，只输出 PIPELINE_RUNTIME_OK"
+```
+
+Claude 探针：
+
+```text
+claude --print --model ultracode-xhigh --effort xhigh \
+  --tools "" --no-session-persistence \
+  "不要使用工具，只输出 PIPELINE_RUNTIME_OK"
+```
+
+探针输出不包含预期标记时返回 2。
+
+### 4. 独立 Preflight workflow
+
+该 workflow 仅支持 `workflow_dispatch`，可以选择 `all` 或单个角色。它：
+
+- checkout 被指定的 ref；
+- 调用仓库 PowerShell bridge；
+- 上传 `.agent/tmp/runtime-preflight-*`；
+- 使用 `include-hidden-files: true` 上传隐藏目录；
+- 诊断文件缺失时 artifact step 失败；
+- 不写 stage report、不提交、不打 label、不创建 PR。
+
+GitHub 只允许调度默认分支已经存在的 workflow 文件。为了让新增 workflow
+在首次合并前也能取得真实 Actions 证据，现有 `agent-stage-runner.yml` 同时
+提供 `stage=runtime_preflight` 兼容入口。该入口使用独立 job，并通过 job
+条件确保正式 `run-stage` 不执行，因此不会生成 handoff、检查 gate、提交
+代码、操作标签或推进后续 stage。
+
+### 5. 回归规则
+
+strict regression 对运行时修复做静态 fail-closed 检查，真实模型/认证由
+Runtime Preflight Actions 形成动态证据。两者缺一不可。
+
+## 数据流
+
+```text
+workflow_dispatch
+  -> agent-runtime-preflight.yml
+     或 agent-stage-runner.yml stage=runtime_preflight
+  -> scripts/run-team-stage.ps1 -PreflightOnly
+  -> wsl.exe --cd + bash -i + 独立参数
+  -> run-pipeline-team-agent.sh <stage> --preflight-only
+  -> CLI/plugin/model precheck
+  -> no-tool model probe
+  -> PIPELINE_RUNTIME_OK
+  -> .agent/tmp metadata/log artifact
+```
+
+正式 Issue Pipeline 沿用同一 bridge 和 Team runner，因此 preflight 与正式
+stage 共享 PATH、CLI 和模型解析逻辑。
+
+## 失败处理
+
+- OpenCode/Claude 命令不可见：fail closed。
+- model catalog 不包含固定模型：fail closed。
+- superpowers/feature-dev 不可见：fail closed。
+- API 认证、额度、代理或模型调用失败：fail closed。
+- Windows service 未继承 WSL 用户代理环境：通过交互式 shell 加载。
+- Login shell 的 `.bash_logout` 覆盖退出码：不启用 login 模式。
+- 默认 renderer 在非交互重定向中挂起：通过固定 JSON event stream 避免。
+- CLI discovery 或模型请求超过硬超时：fail closed。
+- 探针未返回 `PIPELINE_RUNTIME_OK`：fail closed。
+- metadata 或 artifact 缺失：fail closed。
+- Preflight 不允许自动 fallback 到其他模型。
+
+## 安全影响
+
+本次仅修改 Pipeline runner、workflow、Issue 模板、测试和文档。Preflight
+禁用 Claude 工具，并明确要求 OpenCode 不调用工具；不读取交易账户，不连接
+Broker，不提交订单。Main merge 仍保持人工审阅和手动合并。
+
+## 测试策略
+
+1. 先写失败测试复现 `bash -c`、危险权限参数和旧 Issue 文案。
+2. 运行聚焦测试确认失败。
+3. 修复 bridge、runner、workflow 和模板。
+4. 运行 Bash、PowerShell parser、YAML、Ruff、py_compile。
+5. 运行 Pipeline 聚焦测试、strict regression、全量测试。
+6. 发布 Draft PR 后在 PR 分支运行 Runtime Preflight，记录 Actions URL。

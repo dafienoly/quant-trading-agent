@@ -950,3 +950,29 @@ Feedback 基础提交能力可用：`POST /product/feedback` 能生成结构化 
 | Ruff / py_compile / Bash / YAML | passed |
 | Restricted modules | 无改动 |
 | Main merge | 继续人工审阅和手动合并 |
+
+---
+
+## 十六、2026-06-24 Pipeline OpenCode WSL Runtime Hotfix
+
+### 16.1 修复内容
+
+1. Windows self-hosted runner 改用 WSL 登录 shell，并显式加入 OpenCode
+   默认安装目录。
+2. 删除 OpenCode 无效 `--permission-mode allow` 和危险
+   `--dangerously-skip-permissions`。
+3. 新增三角色真实 Runtime Preflight workflow。
+4. 更新 Issue 模板为 OpenCode Lead、Claude Code Developer、OpenCode
+   Test Engineer，并明确 main 人工合并。
+5. Strict regression 新增 PATH、权限、preflight 和 Issue 模板门禁。
+
+### 16.2 验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| Pipeline 聚焦测试 | 81 passed in 3.01s |
+| Pipeline strict regression | PASS |
+| 全量测试 | 990 passed, 6 skipped, 2 warnings in 60.41s |
+| 本地三角色真实 Runtime 探针 | 全部通过 |
+| Restricted modules | 无改动 |
+| Windows self-hosted Runtime Preflight | 待 Draft PR Actions |
