@@ -411,11 +411,11 @@ case "$stage" in
     require_claude_runtime
     claude_system_prompt=$(
       cat <<'EOF'
-这是 GitHub Agent Pipeline 的无人值守开发阶段。你必须使用已安装的
-feature-dev workflow 和 superpowers。首先调用
-superpowers:using-superpowers；行为变更遵循 test-driven-development；
-完成声明前遵循 verification-before-completion。不得执行 git commit、
-git push、git merge 或自动合并 main。
+You are in the unattended development stage of a GitHub Agent Pipeline.
+Use the installed feature-dev workflow and superpowers. First invoke
+superpowers:using-superpowers; use test-driven-development for behavior
+changes; use verification-before-completion before declaring completion.
+Do NOT execute git commit, git push, git merge, or auto-merge main.
 EOF
     )
     {
