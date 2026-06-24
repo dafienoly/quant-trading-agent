@@ -31,6 +31,9 @@ git diff --check
 - OpenCode Developer runtime preflight：通过，实际模型
   `opencode-go/deepseek-v4-flash`，`variant=max`，返回 `PIPELINE_RUNTIME_OK`，
   stderr 为空，工作区状态未改变。
+- GitHub PR 轻量验证：`SUCCESS`。
+- GitHub Windows self-hosted runtime preflight `28102865765`：Lead、Tester、
+  Developer 三个固定角色全部通过，诊断 artifact 上传成功。
 - 6 个 skip 为既有可选 E2E/浏览器条件；2 个 warning 为第三方弃用提示。
 
 ## 安全确认
@@ -43,5 +46,5 @@ git diff --check
 
 ## 最终结论
 
-PASS。实现、聚焦回归、strict regression、全量测试和真实 runtime preflight 均通过。
-PR 合并前仍需取得 GitHub Actions 自托管 runner 的远端验证证据。
+PASS。实现、聚焦回归、strict regression、全量测试、本地与远端真实 runtime
+preflight 均通过。PR 保持 Draft，等待人工代码审阅和手动合并。

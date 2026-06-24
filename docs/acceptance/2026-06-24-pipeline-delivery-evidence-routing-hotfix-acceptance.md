@@ -24,6 +24,12 @@ git diff --check
 - OpenCode Developer runtime preflight：实际使用
   `opencode-go/deepseek-v4-flash`、`variant=max`、superpowers，返回
   `PIPELINE_RUNTIME_OK`，stderr 为空。
+- GitHub PR 轻量验证：`SUCCESS`。
+- GitHub Windows self-hosted runtime preflight `28102865765`：
+  - OpenCode GLM 5.2 Team Leader：通过。
+  - OpenCode DeepSeek V4 Pro max Test Engineer：通过。
+  - OpenCode DeepSeek V4 Flash max Developer：通过。
+  - Runtime diagnostics artifact：上传成功。
 - PR #77 已恢复为 Draft，并移除错误的 `stage:merge-ready`。
 
 ## 安全确认
@@ -36,5 +42,5 @@ git diff --check
 
 ## 最终结论
 
-PASS_WITH_NOTES。本地功能、回归和真实模型 preflight 均通过；Hotfix PR 仍应保持 Draft，
-等待 GitHub Actions 自托管 runner 远端验证后再人工合并。
+PASS。本地功能、全量回归、PR validation 和 Windows self-hosted 三角色 runtime
+preflight 均通过。Hotfix PR 保持 Draft，等待人工代码审阅后手动合并。
