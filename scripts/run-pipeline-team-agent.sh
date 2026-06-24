@@ -148,10 +148,19 @@ require_opencode_runtime() {
   fi
 }
 
-require_claude_runtime() {
-  require_command claude
+CLAUDE_BIN=""
 
-  if ! claude plugin list >"${tmp_dir}/claude-plugins.txt" 2>"${tmp_dir}/claude-plugins.stderr"; then
+require_claude_runtime() {
+  if command -v claude >/dev/null 2>&1; then
+    CLAUDE_BIN="claude"
+  elif command -v claude-code >/dev/null 2>&1; then
+    CLAUDE_BIN="claude-code"
+  else
+    echo "Neither claude nor claude-code is available in PATH." >&2
+    exit 2
+  fi
+
+  if ! $CLAUDE_BIN plugin list >"${tmp_dir}/claude-plugins.txt" 2>"${tmp_dir}/claude-plugins.stderr"; then
     echo "Claude Code plugin discovery failed." >&2
     exit 2
   fi
@@ -276,7 +285,7 @@ EOF
       printf '%s\n\n' "/feature-dev"
       cat "$prompt_file"
     } >"${prompt_file}.claude"
-    if ! claude \
+    if ! $CLAUDE_BIN \
       --print \
       --model "$CLAUDE_DEVELOPER_MODEL" \
       --effort "$CLAUDE_DEVELOPER_EFFORT" \
