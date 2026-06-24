@@ -8,7 +8,9 @@ param(
     "bugfix",
     "postmortem"
   )]
-  [string]$Stage
+  [string]$Stage,
+
+  [switch]$PreflightOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,11 +36,14 @@ if ($repoRoot -match '^([A-Za-z]):') {
 $scriptPath = "$wslRoot/scripts/run-pipeline-team-agent.sh"
 Write-Host "WSL script path: $scriptPath"
 
+$preflightArg = if ($PreflightOnly) { " --preflight-only" } else { "" }
+$bashCommand = "export PATH=`"`$HOME/.opencode/bin:`$HOME/.local/bin:`$PATH`"; cd `"$wslRoot`" && exec bash scripts/run-pipeline-team-agent.sh `"$Stage`"$preflightArg"
+
 $wslArgs = @()
 if ($env:AGENT_WSL_DISTRO) {
   $wslArgs += @("-d", $env:AGENT_WSL_DISTRO)
 }
-$wslArgs += @("--", "bash", "-c", "cd `"$wslRoot`" && bash scripts/run-pipeline-team-agent.sh `"$Stage`"")
+$wslArgs += @("--", "bash", "-lc", $bashCommand)
 
 & wsl.exe @wslArgs
 

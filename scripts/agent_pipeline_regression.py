@@ -34,6 +34,12 @@ GITIGNORE_PATH = REPO_ROOT / ".gitignore"
 PR_VALIDATION_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "agent-pr-validation.yml"
 TEAM_RUNNER_PATH = REPO_ROOT / "scripts" / "run-pipeline-team-agent.sh"
 WINDOWS_TEAM_RUNNER_PATH = REPO_ROOT / "scripts" / "run-team-stage.ps1"
+RUNTIME_PREFLIGHT_WORKFLOW_PATH = (
+    REPO_ROOT / ".github" / "workflows" / "agent-runtime-preflight.yml"
+)
+AGENT_ISSUE_TEMPLATE_PATH = (
+    REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "agent_feature_request.yml"
+)
 
 CANONICAL_STAGES = (
     "codex_pm",
@@ -689,18 +695,33 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         "superpowers:using-superpowers",
         "--permission-mode dontAsk",
         "--allowedTools",
+        "--preflight-only",
+        "PIPELINE_RUNTIME_OK",
     )
     missing = [marker for marker in required_runner_markers if marker not in runner]
+    forbidden_runner_markers = (
+        "--permission-mode allow",
+        "--dangerously-skip-permissions",
+    )
+    found_forbidden = [marker for marker in forbidden_runner_markers if marker in runner]
     checks.append(CheckResult(
         "team_runner_fixed_runtime_contract",
         "critical",
-        not missing,
+        not missing and not found_forbidden,
         "Team runner 已固定模型、effort、workflow 与 superpowers"
-        if not missing
-        else f"Team runner 缺少标记：{missing}",
+        if not missing and not found_forbidden
+        else f"Team runner 缺少标记 {missing} 或包含危险标记 {found_forbidden}",
     ))
 
-    bridge_ok = windows_runner is not None and "scripts/run-pipeline-team-agent.sh" in windows_runner
+    bridge_markers = (
+        "scripts/run-pipeline-team-agent.sh",
+        '"-lc"',
+        "$HOME/.opencode/bin",
+        "PreflightOnly",
+    )
+    bridge_ok = windows_runner is not None and all(
+        marker in windows_runner for marker in bridge_markers
+    )
     checks.append(CheckResult(
         "team_runner_windows_wsl_bridge",
         "critical",
@@ -723,6 +744,57 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         "workflow 不再允许替换 Team Lead/Tester 执行器"
         if workflow_ok
         else "workflow 仍存在可替换的 Team Lead/Tester 路由",
+    ))
+
+    preflight = _read(repo_root / RUNTIME_PREFLIGHT_WORKFLOW_PATH.relative_to(REPO_ROOT))
+    preflight_markers = (
+        "workflow_dispatch:",
+        "-Stage claude_lead_plan -PreflightOnly",
+        "-Stage claude_tester -PreflightOnly",
+        "-Stage claude_developer -PreflightOnly",
+        "actions/upload-artifact@v4",
+        ".agent/tmp/runtime-preflight-*",
+    )
+    preflight_missing = [
+        marker for marker in preflight_markers if preflight is None or marker not in preflight
+    ]
+    checks.append(CheckResult(
+        "team_runtime_preflight_workflow",
+        "critical",
+        not preflight_missing,
+        "Runtime Preflight workflow 已覆盖三个固定角色"
+        if not preflight_missing
+        else f"Runtime Preflight workflow 缺少标记：{preflight_missing}",
+    ))
+
+    issue_template = _read(repo_root / AGENT_ISSUE_TEMPLATE_PATH.relative_to(REPO_ROOT))
+    issue_required = (
+        "OpenCode Lead",
+        "Claude Code Developer",
+        "OpenCode Test Engineer",
+        "manual main merge",
+    )
+    issue_forbidden = (
+        "Claude Code A",
+        "Claude Code B",
+        "Claude Code C",
+        "automatic main merge",
+    )
+    issue_missing = [
+        marker for marker in issue_required
+        if issue_template is None or marker not in issue_template
+    ]
+    issue_stale = [
+        marker for marker in issue_forbidden
+        if issue_template is not None and marker in issue_template
+    ]
+    checks.append(CheckResult(
+        "agent_issue_template_current_team",
+        "critical",
+        not issue_missing and not issue_stale,
+        "Issue 模板使用当前角色并要求人工合并"
+        if not issue_missing and not issue_stale
+        else f"Issue 模板缺少 {issue_missing} 或包含旧文案 {issue_stale}",
     ))
     return checks
 

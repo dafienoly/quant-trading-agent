@@ -1,0 +1,57 @@
+name: Agent Runtime Preflight
+
+run-name: Agent Runtime Preflight / ${{ inputs.role }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      role:
+        description: Runtime role to probe
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - lead
+          - tester
+          - developer
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-runtime-preflight-${{ github.ref }}-${{ inputs.role }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: powershell
+
+jobs:
+  runtime-preflight:
+    runs-on: [self-hosted, Windows, X64, local-windows-codex]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Probe OpenCode GLM 5.2 Team Leader
+        if: inputs.role == 'all' || inputs.role == 'lead'
+        run: .\scripts\run-team-stage.ps1 -Stage claude_lead_plan -PreflightOnly
+
+      - name: Probe OpenCode DeepSeek V4 Pro max Test Engineer
+        if: inputs.role == 'all' || inputs.role == 'tester'
+        run: .\scripts\run-team-stage.ps1 -Stage claude_tester -PreflightOnly
+
+      - name: Probe Claude ultracode-xhigh Developer
+        if: inputs.role == 'all' || inputs.role == 'developer'
+        run: .\scripts\run-team-stage.ps1 -Stage claude_developer -PreflightOnly
+
+      - name: Upload runtime preflight diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-runtime-preflight-${{ inputs.role }}-${{ github.run_id }}
+          path: .agent/tmp/runtime-preflight-*
+          if-no-files-found: error
+          retention-days: 7

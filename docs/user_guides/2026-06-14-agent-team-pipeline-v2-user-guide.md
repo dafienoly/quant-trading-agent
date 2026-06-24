@@ -39,6 +39,10 @@ quality and safety control positions.
 3. Choose the risk level.
 4. Submit the Issue.
 
+提交前建议先确认最近一次 `Agent Runtime Preflight` 的 `role=all` 运行成功。
+如果 preflight 失败，不要创建正式功能 Issue；先修复 self-hosted runner 的
+WSL PATH、CLI、模型认证或插件配置。
+
 The bootstrap workflow creates:
 
 - `.agent/state.json`
@@ -104,6 +108,17 @@ Generate later-stage handoffs:
 .\.venv\Scripts\python.exe scripts\agent_pipeline.py write-handoff --stage claude_tester
 .\.venv\Scripts\python.exe scripts\agent_pipeline.py write-handoff --stage codex_reviewer
 ```
+
+## Runtime Preflight
+
+Pipeline runner 或本机 Agent 环境变更后，运行：
+
+```bash
+gh workflow run agent-runtime-preflight.yml --ref main -f role=all
+```
+
+该 workflow 会真实验证 OpenCode Lead、OpenCode Test Engineer 和 Claude
+Code Developer，但不会创建报告、提交代码、推进 stage 或合并 main。
 
 ## Parallel Local Workspaces
 
