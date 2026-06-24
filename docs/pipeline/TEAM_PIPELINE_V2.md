@@ -9,11 +9,11 @@ It extends the Issue-driven pipeline without weakening any trading-safety rule.
 - `Codex B` 是架构师和最终架构 Review 角色。
 - `OpenCode Lead` 使用 `opencode-go/glm-5.2`，负责阶段拆分、组内总
   Review 和失败复盘。
-- `Claude Code Developer` 使用 `ultracode-xhigh`、`effort=xhigh`、
-  `feature-dev` workflow 和 `superpowers`，负责阶段开发和 BugFix。
+- `OpenCode Developer` 使用 `opencode-go/deepseek-v4-flash`、
+  `variant=max`、build Agent 完整开发权限和 `superpowers`，负责阶段开发和 BugFix。
 - `OpenCode Test Engineer` 使用 `opencode-go/deepseek-v4-pro`、
   `variant=max` 和 `superpowers`，负责阶段测试。
-- 阶段测试通过后，如果还有后续阶段，必须回到 `Claude Code Developer` 继续开发
+- 阶段测试通过后，如果还有后续阶段，必须回到 `OpenCode Developer` 继续开发
   下一阶段。
 - 所有阶段测试都通过后，才能交给 `OpenCode Lead` 做组内总 Review。
 - `OpenCode Lead` Review 通过后，才允许交给 `Codex B` 做最终 Review。
@@ -28,10 +28,10 @@ It extends the Issue-driven pipeline without weakening any trading-safety rule.
 | Codex A | Product Manager / PM Acceptance | Requirements, user-facing acceptance, final delivery notes |
 | Codex B | Architect / Final Reviewer | Architecture, module boundaries, final code review, safety review |
 | OpenCode Lead | Small-team Lead | GLM 5.2 phase breakdown, coordination, internal review, postmortem |
-| Claude Code Developer | Phase Developer / BugFix | ultracode-xhigh implementation with feature-dev and superpowers |
+| OpenCode Developer | Phase Developer / BugFix | DeepSeek V4 Flash max implementation with build Agent and superpowers |
 | OpenCode Test Engineer | Phase Tester | DeepSeek V4 Pro max verification from a temporary test branch |
 
-Codex A and Codex B are judgment gates. The hybrid OpenCode/Claude Code team
+Codex A and Codex B are judgment gates. The OpenCode team
 handles the high-frequency implementation loop.
 
 ## Required Flow
@@ -41,10 +41,10 @@ User Issue
   -> Codex A requirements
   -> Codex B architecture
   -> OpenCode GLM 5.2 team phase plan
-  -> Claude Code ultracode-xhigh phase development
+  -> OpenCode DeepSeek V4 Flash max phase development
   -> OpenCode DeepSeek V4 Pro max phase testing
-  -> if current phase fails: Claude Code fixes current phase
-  -> if current phase passes and more phases remain: Claude Code starts next phase
+  -> if current phase fails: OpenCode Developer fixes current phase
+  -> if current phase passes and more phases remain: OpenCode Developer starts next phase
   -> if all phases pass: OpenCode Lead review
   -> Codex B final architecture review
   -> Codex A PM acceptance
@@ -75,7 +75,7 @@ Each phase in `docs/dev_plans/*team-plan.md` must include:
 | Codex A PM | `docs/requirements/*requirements.md` |
 | Codex B Architecture | `docs/design/*architecture.md` |
 | OpenCode Lead Team Plan | `docs/dev_plans/*team-plan.md` |
-| Claude Code Phase Dev | `docs/dev_reports/*phase-*dev-report.md` |
+| OpenCode Phase Dev | `docs/dev_reports/*phase-*dev-report.md` plus `.agent/gates/phase_dev_delivery_gate.json` |
 | OpenCode Phase Test | `docs/test_reports/*phase-*test-report.md` |
 | OpenCode Lead Review | `docs/review/*opencode-lead-review.md` |
 | Codex B Review | `docs/review/*codex-review*.md` |
@@ -87,7 +87,7 @@ No stage is complete if its evidence exists only in chat.
 
 ## Parallel Team Rules
 
-Multiple Claude teams may work in parallel only when their branch and report
+Multiple OpenCode teams may work in parallel only when their branch and report
 paths are isolated:
 
 ```text
@@ -113,10 +113,16 @@ Local execution rule:
   evidence.
 - OpenCode stages must not use `--dangerously-skip-permissions`; missing
   permission, CLI, model, plugin, or authentication fails closed.
+- Developer 阶段必须由 `validate-stage-delivery` 核对实际 diff、测试文件和
+  开发报告声称路径；仅提交报告不得通过。
+- Test/Review/Acceptance 报告必须包含明确最终结论。`REJECTED`、
+  `CHANGES_REQUESTED`、`BLOCKED` 会提交诊断证据并退回责任阶段，不能继续升级。
+- `team_pipeline.total_phases` 来自 team plan 的 `Phase N` 标题；仅当
+  `completed_phases` 覆盖全部阶段时才允许进入 OpenCode Lead Review。
 
 ## Codex B Review Attempts
 
-Codex B review failures are quality signals against the Claude team lead:
+Codex B review failures are quality signals against the OpenCode team lead:
 
 | Attempt | Action |
 |---|---|

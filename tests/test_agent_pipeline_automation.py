@@ -5,15 +5,19 @@ from pathlib import Path
 
 from src.product_app.agent_pipeline_automation import (
     STAGES_WITH_GATES,
+    advance_after_phase_test,
     build_feature_state,
     check_required_reports,
     check_state_gate_consistency,
     classify_changed_files,
+    extract_report_decision,
     normalize_gate_decision,
     read_state,
     set_pr_metadata,
     slugify_feature,
     sync_state_from_gates,
+    sync_team_plan_metadata,
+    validate_stage_delivery,
     write_feature_state,
     write_handoff,
     write_json,
@@ -146,8 +150,8 @@ def test_feature_state_writes_current_task_and_handoff(tmp_path: Path):
     assert (tmp_path / ".agent" / "current_task.yaml").exists()
     text = handoff.read_text(encoding="utf-8")
     assert "Feature: agent-pipeline" in text
-    assert "Claude Code Developer" in text
-    assert "ultracode-xhigh" in text
+    assert "OpenCode Developer" in text
+    assert "opencode-go/deepseek-v4-flash" in text
 
 
 def test_feature_state_contains_team_pipeline_defaults():
@@ -158,7 +162,9 @@ def test_feature_state_contains_team_pipeline_defaults():
         issue_number=12,
     )
 
-    assert state["team_pipeline"]["mode"] == "opencode_lead_claude_dev_opencode_test"
+    assert state["team_pipeline"]["mode"] == "opencode_lead_deepseek_dev_test"
+    assert state["team_pipeline"]["total_phases"] == 1
+    assert state["team_pipeline"]["completed_phases"] == []
     assert state["team_pipeline"]["all_phases_tested"] is False
     assert state["team_pipeline"]["max_codex_review_attempts"] == 3
     assert state["agent_roles"]["codex_a"] == ["pm", "acceptance"]
@@ -167,7 +173,7 @@ def test_feature_state_contains_team_pipeline_defaults():
         "team_lead_review",
         "team_performance",
     ]
-    assert state["agent_roles"]["claude_developer"] == ["phase_dev", "bugfix"]
+    assert state["agent_roles"]["opencode_developer"] == ["phase_dev", "bugfix"]
     assert state["agent_roles"]["opencode_tester"] == ["phase_test"]
 
 
@@ -177,25 +183,21 @@ def test_team_stage_runner_forces_requested_models_effort_and_skills():
     assert 'OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"' in text
     assert 'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"' in text
     assert 'OPENCODE_TESTER_VARIANT="max"' in text
-    assert 'CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"' in text
-    assert 'CLAUDE_DEVELOPER_EFFORT="xhigh"' in text
+    assert 'OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"' in text
+    assert 'OPENCODE_DEVELOPER_VARIANT="max"' in text
     assert "--variant" in text
     assert "--model" in text
-    assert "--effort" in text
     assert "using-superpowers" in text
     assert "verification-before-completion" in text
     assert "systematic-debugging" in text
-    assert "/feature-dev" in text
-    assert "superpowers:using-superpowers" in text
-    assert "--permission-mode dontAsk" in text
-    assert "--allowedTools" in text
+    assert "--agent build" in text
     assert "--permission-mode allow" not in text
     assert "--dangerously-skip-permissions" not in text
     assert "PIPELINE_RUNTIME_OK" in text
     assert "--preflight-only" in text
     assert "PREFLIGHT_TIMEOUT_SECONDS" in text
     assert "timeout --signal=TERM --kill-after=10s" in text
-    assert text.count("--format json") == 3
+    assert text.count("--format json") == 4
 
 
 def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
@@ -251,7 +253,7 @@ def test_agent_issue_template_uses_current_roles_and_manual_merge():
     assert "agent:pipeline" in text
     assert "stage:pm-pending" in text
     assert "OpenCode Lead" in text
-    assert "Claude Code Developer" in text
+    assert "OpenCode Developer" in text
     assert "OpenCode Test Engineer" in text
     assert "manual main merge" in text
     assert "Claude Code A" not in text
@@ -275,6 +277,12 @@ def test_github_workflows_use_repository_owned_team_runner():
     assert "CLAUDE_LEAD_AGENT_COMMAND" not in stage_runner
     assert '".github",' in stage_runner
     assert '"scripts",' in stage_runner
+    assert '"feedback",' in stage_runner
+    assert "validate-stage-delivery" in stage_runner
+    assert "steps.stage-gate.outputs.gate_passed" in stage_runner
+    assert "route_back_to" in stage_runner
+    assert "advance-phase" in stage_runner
+    assert "Stage gate failed" in stage_runner
 
 
 def test_feature_state_branch_includes_issue_number_for_restart_isolation():
@@ -363,7 +371,7 @@ def test_main_merge_gate_never_auto_merges():
     text = Path(".github/workflows/agent-main-merge-gate.yml").read_text(encoding="utf-8")
 
     assert "gh pr merge" not in text
-    assert "需要人工审阅和手动合并" in text
+    assert "requires manual review and merge" in text
 
 
 def test_pr_validation_runs_required_lightweight_checks():
@@ -455,7 +463,7 @@ def test_claude_tester_handoff_routes_back_to_developer_until_all_phases_pass(tm
     assert "opencode-go/deepseek-v4-pro" in handoff
     assert "variant=max" in handoff
     assert "superpowers" in handoff
-    assert "route back to Claude Code Developer for the next phase unless all phases are complete" in handoff
+    assert "route back to OpenCode Developer for the next phase unless all phases are complete" in handoff
 
 
 def test_team_lead_and_developer_handoffs_pin_runtime_contract(tmp_path: Path):
@@ -473,10 +481,10 @@ def test_team_lead_and_developer_handoffs_pin_runtime_contract(tmp_path: Path):
 
     assert "OpenCode Team Leader" in lead
     assert "opencode-go/glm-5.2" in lead
-    assert "Claude Code Developer" in developer
-    assert "ultracode-xhigh" in developer
-    assert "effort=xhigh" in developer
-    assert "feature-dev workflow" in developer
+    assert "OpenCode Developer" in developer
+    assert "opencode-go/deepseek-v4-flash" in developer
+    assert "variant=max" in developer
+    assert "build Agent permissions" in developer
     assert "superpowers" in developer
     assert "OpenCode Team Leader" in review
 
@@ -487,12 +495,22 @@ def test_required_report_gate_finds_feature_reports(tmp_path: Path):
         "docs/requirements/2026-06-12-agent-pipeline-requirements.md": _valid_requirements(feature_id),
         "docs/design/2026-06-12-agent-pipeline-architecture.md": _valid_architecture(feature_id),
         "docs/dev_plans/2026-06-12-agent-pipeline-team-plan.md": "ok",
-        "docs/dev_reports/2026-06-12-agent-pipeline-phase-1-dev-report.md": "ok",
+        "docs/dev_reports/2026-06-12-agent-pipeline-phase-1-dev-report.md": (
+            "## 变更范围\n\n`src/example.py`\n\n## 最终结论\n\nPASS\n"
+        ),
     }
     for path, content in files.items():
         full_path = tmp_path / path
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_text(content, encoding="utf-8")
+    write_json(
+        tmp_path / ".agent/gates/phase_dev_delivery_gate.json",
+        {
+            "passed": True,
+            "feature_id": feature_id,
+            "invalid": [],
+        },
+    )
 
     result = check_required_reports(tmp_path, feature_id=feature_id, through_stage="phase_dev")
 
@@ -500,6 +518,208 @@ def test_required_report_gate_finds_feature_reports(tmp_path: Path):
     assert result.missing == {}
     assert result.invalid == {}
     assert set(result.found) == {"pm", "architecture", "team_plan", "phase_dev"}
+
+
+def test_developer_delivery_rejects_report_only_claims(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] AgentOps",
+        feature_id="agentops",
+        risk_level="product",
+    )
+    write_feature_state(tmp_path, state)
+    report = tmp_path / "docs/dev_reports/2026-06-24-agentops-phase-1-dev-report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        """# 开发报告
+
+## 变更范围
+
+| 文件 | 说明 |
+|---|---|
+| src/product_app/agentops/observation.py | 新增模型 |
+| tests/test_agentops_observation.py | 新增测试 |
+
+## 最终结论
+
+PASS
+""",
+        encoding="utf-8",
+    )
+
+    result = validate_stage_delivery(
+        tmp_path,
+        stage="claude_developer",
+        changed_files=[str(report.relative_to(tmp_path))],
+    )
+
+    assert result.passed is False
+    assert "report_only_delivery" in result.invalid
+    assert "claimed_path_missing:src/product_app/agentops/observation.py" in result.invalid
+    assert "claimed_path_missing:tests/test_agentops_observation.py" in result.invalid
+
+
+def test_developer_delivery_accepts_real_implementation_and_test_diff(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] AgentOps",
+        feature_id="agentops",
+        risk_level="product",
+    )
+    write_feature_state(tmp_path, state)
+    paths = {
+        "src/product_app/agentops/observation.py": "VALUE = 1\n",
+        "tests/test_agentops_observation.py": "def test_value():\n    assert True\n",
+    }
+    for rel_path, content in paths.items():
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    report = tmp_path / "docs/dev_reports/2026-06-24-agentops-phase-1-dev-report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        """## 变更范围
+
+- `src/product_app/agentops/observation.py`
+- `tests/test_agentops_observation.py`
+
+## 最终结论
+
+PASS
+""",
+        encoding="utf-8",
+    )
+    changed = [*paths, str(report.relative_to(tmp_path))]
+
+    result = validate_stage_delivery(
+        tmp_path,
+        stage="claude_developer",
+        changed_files=changed,
+    )
+
+    assert result.passed is True
+    assert result.claimed_files == sorted(paths)
+
+
+def test_phase_test_rejected_decision_fails_gate(tmp_path: Path):
+    feature_id = "agentops"
+    files = {
+        "docs/requirements/2026-06-24-agentops-requirements.md": _valid_requirements(feature_id),
+        "docs/design/2026-06-24-agentops-architecture.md": _valid_architecture(feature_id),
+        "docs/dev_plans/2026-06-24-agentops-team-plan.md": "### Phase 1\n",
+        "docs/dev_reports/2026-06-24-agentops-phase-1-dev-report.md": "## 最终结论\n\nPASS\n",
+        "docs/test_reports/2026-06-24-agentops-phase-1-test-report.md": (
+            "## 最终结论\n\n**REJECTED**\n"
+        ),
+    }
+    for rel_path, content in files.items():
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    write_json(
+        tmp_path / ".agent/gates/phase_dev_delivery_gate.json",
+        {"passed": True, "feature_id": feature_id, "invalid": []},
+    )
+
+    result = check_required_reports(
+        tmp_path,
+        feature_id=feature_id,
+        through_stage="phase_test",
+    )
+
+    assert result.passed is False
+    assert result.decisions["phase_test"] == "REJECTED"
+    assert any("blocking_decision:REJECTED" in item for item in result.invalid["phase_test"])
+
+
+def test_latest_phase_test_report_can_close_older_rejection(tmp_path: Path):
+    feature_id = "agentops"
+    files = {
+        "docs/requirements/2026-06-24-agentops-requirements.md": _valid_requirements(feature_id),
+        "docs/design/2026-06-24-agentops-architecture.md": _valid_architecture(feature_id),
+        "docs/dev_plans/2026-06-24-agentops-team-plan.md": "### Phase 1\n",
+        "docs/dev_reports/2026-06-24-agentops-phase-1-dev-report.md": "## 最终结论\n\nPASS\n",
+        "docs/test_reports/2026-06-24-agentops-phase-1-test-report-r1.md": (
+            "## Feedback Bug 文件\n\n"
+            "`feedback/bugs/open/BUG_OLD.md`\n\n"
+            "## 最终结论\n\nREJECTED\n"
+        ),
+        "docs/test_reports/2026-06-24-agentops-phase-1-test-report-r2.md": (
+            "## 最终结论\n\nPASS\n"
+        ),
+    }
+    for rel_path, content in files.items():
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    write_json(
+        tmp_path / ".agent/gates/phase_dev_delivery_gate.json",
+        {"passed": True, "feature_id": feature_id, "invalid": []},
+    )
+
+    result = check_required_reports(
+        tmp_path,
+        feature_id=feature_id,
+        through_stage="phase_test",
+    )
+
+    assert result.passed is True
+    assert result.decisions["phase_test"] == "PASS"
+
+
+def test_lead_changes_requested_decision_fails_gate(tmp_path: Path):
+    assert extract_report_decision("## 最终结论\n\n**CHANGES_REQUESTED**") == "CHANGES_REQUESTED"
+
+
+def test_team_plan_phase_count_and_intermediate_phase_advance(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Multi", feature_id="multi")
+    write_feature_state(tmp_path, state)
+    plan = tmp_path / "docs/dev_plans/2026-06-24-multi-team-plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text("### Phase 1\n\n### Phase 2\n\n### Phase 3\n", encoding="utf-8")
+
+    metadata = sync_team_plan_metadata(tmp_path, feature_id="multi")
+    assert metadata["total_phases"] == 3
+
+    write_json(
+        tmp_path / ".agent/gates/phase_test_gate.json",
+        {
+            "passed": True,
+            "feature_id": "multi",
+            "found": {"phase_test": ["docs/test_reports/phase-1.md"]},
+        },
+    )
+    result = advance_after_phase_test(tmp_path)
+
+    assert result["next_stage"] == "claude_developer"
+    assert result["current_phase"] == 2
+    assert result["all_phases_tested"] is False
+    updated = read_state(tmp_path)
+    assert updated["team_pipeline"]["completed_phases"] == [1]
+    assert updated["current_stage"] == "phase_dev_pending"
+    reset_gate = (
+        tmp_path / ".agent/gates/phase_test_gate.json"
+    ).read_text(encoding="utf-8")
+    assert '"passed": false' in reset_gate
+    synced = sync_state_from_gates(tmp_path)
+    assert synced["updated"] is False
+    assert read_state(tmp_path)["current_stage"] == "phase_dev_pending"
+
+
+def test_stale_feature_gate_does_not_pollute_current_state(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Current", feature_id="current-feature")
+    write_feature_state(tmp_path, state)
+    write_json(
+        tmp_path / ".agent/gates/phase_test_gate.json",
+        {
+            "passed": True,
+            "feature_id": "old-feature",
+            "found": {"phase_test": ["docs/test_reports/old.md"]},
+        },
+    )
+
+    result = check_state_gate_consistency(tmp_path)
+
+    assert result["passed_stages"]["phase_test"] is False
+    assert read_state(tmp_path)["current_stage"] == "pm_pending"
 
 
 def test_required_report_gate_fails_closed_when_missing(tmp_path: Path):
@@ -615,7 +835,13 @@ def _write_gate(tmp_path: Path, gate_name: str, *, passed: bool, found_keys: lis
     found = {}
     if found_keys:
         found = {k: [f"docs/{k}/dummy.md"] for k in found_keys}
-    gate = {"passed": passed, "feature_id": "test-feature", "found": found, "missing": {}}
+    state = read_state(tmp_path)
+    gate = {
+        "passed": passed,
+        "feature_id": state.get("feature_id", "test-feature"),
+        "found": found,
+        "missing": {},
+    }
     write_json(tmp_path / ".agent" / "gates" / gate_name, gate)
 
 
@@ -843,4 +1069,4 @@ def test_normalize_unknown_returns_none():
     assert normalize_gate_decision(None) is None
     assert normalize_gate_decision("") is None
     assert normalize_gate_decision("foobar") is None
-    assert normalize_gate_decision("rejected") is None
+    assert normalize_gate_decision("rejected") == "REJECTED"

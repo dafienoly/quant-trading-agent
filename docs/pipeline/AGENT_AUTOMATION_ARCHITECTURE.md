@@ -3,7 +3,7 @@
 This document defines the Issue-driven Agent automation layer for Level 2 +
 controlled Level 3 development.
 
-The goal is to remove manual copy/paste between Codex, Claude Code/DeepSeek,
+The goal is to remove manual copy/paste between Codex, OpenCode,
 test agents, bugfix agents, and GitHub while preserving the repository's
 trading-safety gates.
 
@@ -28,7 +28,7 @@ handoff must be written to the repository under `.agent/`, `docs/`, or
 |---|---|---|
 | Pipeline state | `.agent/state.json` | Machine-readable current feature metadata |
 | Current task | `.agent/current_task.yaml` | Agent-readable task state |
-| Handoff prompts | `.agent/handoff/*.md` | Stage-specific prompts for Codex A/B, OpenCode Lead, Claude Developer, OpenCode Tester, acceptance, bugfix, and postmortem |
+| Handoff prompts | `.agent/handoff/*.md` | Stage-specific prompts for Codex A/B, OpenCode Lead, OpenCode Developer, OpenCode Tester, acceptance, bugfix, and postmortem |
 | Gate outputs | `.agent/gates/*.json` | Deterministic pass/fail evidence for stage gates |
 | CLI | `scripts/agent_pipeline.py` | Creates state, handoff prompts, report gates, and auto-merge decisions |
 | GitHub workflows | `.github/workflows/` | Trigger issue-driven stages, CI, bugfix loop, review, acceptance, and merge gate |
@@ -42,9 +42,9 @@ GitHub Issue with agent:pipeline
   -> Codex B creates architecture
   -> epic/<date-feature> branch is created
   -> OpenCode GLM 5.2 Lead creates phase plan
-  -> Claude Code ultracode-xhigh implements one phase
+  -> OpenCode DeepSeek V4 Flash max implements one phase
   -> OpenCode DeepSeek V4 Pro max verifies that phase
-  -> if more phases remain, route back to Claude Code Developer
+  -> if more phases remain, route back to OpenCode Developer
   -> OpenCode Lead reviews the completed team delivery
   -> Codex B writes final architecture review
   -> Codex A writes PM acceptance report
@@ -85,11 +85,11 @@ Team-stage execution is fixed:
 | Compatibility stage ID | Repository runner | Runtime |
 |---|---|---|
 | `claude_lead_plan`, `claude_lead_review`, `postmortem` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/glm-5.2` + superpowers |
-| `claude_developer`, `bugfix` | `scripts/run-pipeline-team-agent.sh` | Claude Code `ultracode-xhigh`, `effort=xhigh`, feature-dev + superpowers |
+| `claude_developer`, `bugfix` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent + superpowers |
 | `claude_tester` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-pro`, `variant=max`, superpowers |
 
 The `claude_*` stage IDs remain only for workflow, label, and gate compatibility.
-They no longer identify the actual Lead or Test Engineer implementation.
+They no longer identify the actual Lead, Developer, or Test Engineer implementation.
 
 Each command must read the relevant `.agent/handoff/<stage>.md`, repository
 policy documents, and current branch. It must write the required report before
@@ -101,6 +101,11 @@ The automation must fail closed when:
 
 - pipeline state is missing;
 - required reports are missing;
+- a Developer report has no matching implementation/test diff;
+- a report claims changed or feedback files that do not exist;
+- a Test Engineer report concludes `REJECTED`;
+- a review concludes `CHANGES_REQUESTED` or `BLOCKED`;
+- a gate belongs to a different `feature_id`;
 - CI fails;
 - changed files include restricted trading paths;
 - changed files include unknown business code outside the auto-merge allowlist;

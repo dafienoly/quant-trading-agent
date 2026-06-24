@@ -3,13 +3,13 @@
 ## 中文说明
 
 这份文档说明如何把 GitHub workflow、Windows 下的 Codex、本地 WSL
-中的 OpenCode 与 Claude Code 接入 Team Pipeline V2。
+中的 OpenCode 接入 Team Pipeline V2。
 
 Team stages 由仓库内 runner 固定执行：
 
 1. OpenCode Lead：`opencode-go/glm-5.2`。
-2. Claude Code Developer/BugFix：`ultracode-xhigh`、`effort=xhigh`、
-   `feature-dev` workflow、`superpowers`。
+2. OpenCode Developer/BugFix：`opencode-go/deepseek-v4-flash`、
+   `variant=max`、build Agent、`superpowers`。
 3. OpenCode Test Engineer：`opencode-go/deepseek-v4-pro`、
    `variant=max`、`superpowers`。
 
@@ -17,7 +17,7 @@ GitHub Variables/Secrets 不再决定 Team stages 的模型。模型或插件不
 runner fail closed，不允许 fallback 到其他执行器。
 
 This guide explains how to connect the Team Pipeline V2 GitHub workflows with a
-local Windows Codex installation, WSL VS Code Claude Code Agent, and Codex API
+local Windows Codex installation, WSL OpenCode, and Codex API
 access.
 
 ## Recommended Topology
@@ -29,7 +29,7 @@ GitHub Issue / PR labels
   -> Windows Codex command for Codex A/B stages
   -> scripts/run-team-stage.ps1
   -> WSL scripts/run-pipeline-team-agent.sh
-  -> OpenCode Lead / Claude Developer / OpenCode Tester
+  -> OpenCode Lead / OpenCode Developer / OpenCode Tester
   -> repository reports and gate files
 ```
 
@@ -88,7 +88,7 @@ bash -lc 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; \
   bash scripts/run-pipeline-team-agent.sh claude_developer'
 ```
 
-Runner 会检查 CLI、固定模型、superpowers/feature-dev，并写入
+Runner 会检查 CLI、固定模型、build Agent 和 superpowers，并写入
 `.agent/tmp/<stage>.execution.json`。阶段报告仍由现有 gate 校验。
 
 Windows self-hosted runner 必须使用登录 shell。OpenCode 默认安装在
@@ -115,17 +115,17 @@ Preflight 会真实验证：
 
 - OpenCode `opencode-go/glm-5.2`；
 - OpenCode `opencode-go/deepseek-v4-pro`、`variant=max`；
-- Claude Code `ultracode-xhigh`、`effort=xhigh`；
+- OpenCode `opencode-go/deepseek-v4-flash`、`variant=max`；
 - OpenCode `using-superpowers`；
-- Claude `feature-dev` 和 `superpowers`。
+- OpenCode build Agent 和 `using-superpowers`。
 
-探针禁止 Claude 工具，OpenCode 使用只读 prompt，并在调用前后比较 git
+探针统一使用 OpenCode 只读 prompt，并在调用前后比较 git
 状态。缺少 CLI、模型、插件、认证或 `PIPELINE_RUNTIME_OK` 时 fail closed。
 探针不会创建报告、推进 label、提交或合并代码。
 
 ## Parallel Local Workspace Layout
 
-When multiple Claude teams run in parallel, do not let them share one working
+When multiple OpenCode teams run in parallel, do not let them share one working
 directory. Use git worktrees or separate clones.
 
 Recommended layout:
@@ -133,8 +133,8 @@ Recommended layout:
 ```text
 /mnt/d/repo/work/signalGPTV2/quant-trading-agent/                 # control workspace
 /mnt/d/repo/work/signalGPTV2/worktrees/team-a/<feature>/           # team A integration
-/mnt/d/repo/work/signalGPTV2/worktrees/team-a/<feature>/phase-1/   # Claude B phase 1
-/mnt/d/repo/work/signalGPTV2/worktrees/team-a/<feature>/test-1/    # Claude C phase 1
+/mnt/d/repo/work/signalGPTV2/worktrees/team-a/<feature>/phase-1/   # OpenCode Developer phase 1
+/mnt/d/repo/work/signalGPTV2/worktrees/team-a/<feature>/test-1/    # OpenCode Tester phase 1
 /mnt/d/repo/work/signalGPTV2/worktrees/team-b/<feature>/           # team B integration
 ```
 
@@ -149,7 +149,7 @@ git worktree add /mnt/d/repo/work/signalGPTV2/worktrees/team-a/my-feature-phase-
 Each active Agent terminal should use one worktree:
 
 - `OpenCode Lead`: team integration worktree.
-- `Claude Code Developer`: current phase development worktree.
+- `OpenCode Developer`: current phase development worktree.
 - `OpenCode Test Engineer`: temporary test worktree.
 - `Codex A/B`: control workspace or epic worktree.
 
@@ -197,7 +197,7 @@ Use Windows paths only when the active workspace is Windows-only:
 
 ## Security Rules
 
-- Never store Codex API keys or Claude credentials in this repository.
+- Never store Codex API keys or OpenCode provider credentials in this repository.
 - Use environment variables or GitHub Secrets only.
 - Do not echo secrets in workflow logs.
 - Sensitive changed paths still require manual approval even if every Agent

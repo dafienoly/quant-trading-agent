@@ -230,10 +230,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run stage gate
+        id: stage-gate
         env:
           STAGE: ${{ steps.stage.outputs.stage }}
         run: |
-          $ErrorActionPreference = "Stop"
+          $ErrorActionPreference = "Continue"
           switch ($env:STAGE) {
             "codex_pm" { $gate = "pm" }
             "codex_architect" { $gate = "architecture" }
@@ -246,14 +247,48 @@ jobs:
             "bugfix" { $gate = "phase_test" }
             "postmortem" {
               Write-Host "Postmortem stage has no standard report gate."
+              "gate_passed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               exit 0
             }
             default { $gate = "team_plan" }
           }
+
+          $deliveryStatus = 0
+          if ($env:STAGE -eq "claude_developer" -or $env:STAGE -eq "bugfix") {
+            python scripts/agent_pipeline.py validate-stage-delivery --stage $env:STAGE
+            $deliveryStatus = $LASTEXITCODE
+          }
+
           python scripts/agent_pipeline.py check-gates --through-stage $gate
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $gateStatus = $LASTEXITCODE
+          $gateFile = ".agent/gates/${gate}_gate.json"
+          $gatePassed = $false
+          if (Test-Path $gateFile) {
+            $gateData = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
+            $gatePassed = $gateData.passed -eq $true -and $deliveryStatus -eq 0
+          }
+
           python scripts/agent_pipeline.py sync-state-from-gates
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $syncStatus = $LASTEXITCODE
+
+          $nextStage = ""
+          if ($gatePassed -and $env:STAGE -eq "claude_tester") {
+            $phaseJson = python scripts/agent_pipeline.py advance-phase | Out-String
+            $phaseStatus = $LASTEXITCODE
+            if ($phaseStatus -ne 0) {
+              $gatePassed = $false
+            } else {
+              $phaseResult = $phaseJson | ConvertFrom-Json
+              $nextStage = $phaseResult.next_stage
+            }
+          }
+
+          "gate_name=$gate" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "gate_passed=$($gatePassed.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "next_stage=$nextStage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "gate_status=$gateStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sync_status=$syncStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          exit 0
 
       - name: Commit stage artifacts
         run: |
@@ -264,6 +299,7 @@ jobs:
             ".agent",
             ".github",
             "docs",
+            "feedback",
             "scripts",
             "tests",
             "src",
@@ -308,6 +344,55 @@ jobs:
           }
 
           $nextStage = ""
+          $gatePassed = "${{ steps.stage-gate.outputs.gate_passed }}" -eq "true"
+          $gateName = "${{ steps.stage-gate.outputs.gate_name }}"
+
+          function Remove-StageLabels {
+            foreach ($label in @(
+              "stage:team-dev-pending",
+              "stage:team-test-pending",
+              "stage:claude-lead-review-pending",
+              "stage:codex-review-pending",
+              "stage:pm-acceptance-pending",
+              "stage:merge-ready"
+            )) {
+              Remove-CurrentLabel $label
+            }
+          }
+
+          if (-not $gatePassed) {
+            $gateFile = ".agent/gates/${gateName}_gate.json"
+            $routeBack = ""
+            if (Test-Path $gateFile) {
+              $failedGate = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
+              $routeBack = $failedGate.route_back_to
+              Write-Host "Stage gate failed: gate=$gateName decision=$($failedGate.decision) route_back_to=$routeBack"
+            }
+
+            Remove-StageLabels
+            switch ($routeBack) {
+              "claude_developer" {
+                Add-NextLabel "stage:team-dev-pending"
+                if ($env:STAGE -ne "claude_developer" -and $env:STAGE -ne "bugfix") {
+                  $nextStage = "claude_developer"
+                }
+              }
+              "claude_lead_review" {
+                Add-NextLabel "stage:claude-lead-review-pending"
+                $nextStage = "claude_lead_review"
+              }
+              default {
+                Add-NextLabel "stage:manual-approval-required"
+              }
+            }
+
+            if ($nextStage) {
+              gh workflow run agent-stage-runner.yml --ref $branch -f stage=$nextStage -f pr_number=$pr
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+            Write-Error "Stage '$env:STAGE' failed gate '$gateName'; evidence was committed and routing stopped or returned safely."
+            exit 2
+          }
 
           # Sync state from gates before auto-advance decisions so
           # downstream labels are based on current gate truth.
@@ -343,33 +428,17 @@ jobs:
             }
             "claude_tester" {
               Remove-CurrentLabel "stage:team-test-pending"
-              $allDone = python scripts/agent_pipeline.py print-state --key team_pipeline.all_phases_tested
-              if ($LASTEXITCODE -ne 0) { $allDone = "false" }
-              if ($allDone -eq "true" -or $allDone -eq "True") {
+              $phaseNextStage = "${{ steps.stage-gate.outputs.next_stage }}"
+              if ($phaseNextStage -eq "claude_lead_review") {
                 Add-NextLabel "stage:claude-lead-review-pending"
                 $nextStage = "claude_lead_review"
-              } else {
-                # Anti-infinite-loop guard: only relevant during phase iteration
-                # (claude_tester / claude_developer).  After claude_lead_review,
-                # codex_reviewer, or codex_acceptance the pipeline must not
-                # dispatch back into the dev/test loop — even if the state
-                # metadata is still stale.
-                if ($env:STAGE -ne "claude_tester" -and $env:STAGE -ne "claude_developer") {
-                  Write-Host "WARNING: phase-loop guard triggered outside phase-iteration stage ($env:STAGE). Failing safely."
-                  Add-NextLabel "stage:manual-approval-required"
-                  exit 2
-                }
-                $gateFile = ".agent/gates/phase_test_gate.json"
-                if (Test-Path $gateFile) {
-                  $gate = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
-                  if ($gate.passed -eq $true) {
-                    Write-Host "ERROR: phase_test gate passed but team_pipeline.all_phases_tested is false. State update bug — not dispatching to prevent infinite loop."
-                    Add-NextLabel "stage:manual-approval-required"
-                    exit 2
-                  }
-                }
+              } elseif ($phaseNextStage -eq "claude_developer") {
                 Add-NextLabel "stage:team-dev-pending"
                 $nextStage = "claude_developer"
+              } else {
+                Write-Host "ERROR: passing phase_test did not produce a deterministic next stage."
+                Add-NextLabel "stage:manual-approval-required"
+                exit 2
               }
             }
             "claude_lead_review" {
@@ -466,7 +535,7 @@ jobs:
         if: inputs.runtime_role == 'all' || inputs.runtime_role == 'tester'
         run: .\scripts\run-team-stage.ps1 -Stage claude_tester -PreflightOnly
 
-      - name: Probe Claude ultracode-xhigh Developer
+      - name: Probe OpenCode DeepSeek V4 Flash max Developer
         if: inputs.runtime_role == 'all' || inputs.runtime_role == 'developer'
         run: .\scripts\run-team-stage.ps1 -Stage claude_developer -PreflightOnly
 

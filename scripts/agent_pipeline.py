@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.product_app.agent_pipeline_automation import (  # noqa: E402
     AUTO_MERGE_GATE_PATH,
+    advance_after_phase_test,
     build_feature_state,
     check_required_reports,
     check_state_gate_consistency,
@@ -21,7 +22,9 @@ from src.product_app.agent_pipeline_automation import (  # noqa: E402
     normalize_gate_decision,
     read_state,
     set_pr_metadata,
+    sync_team_plan_metadata,
     sync_state_from_gates,
+    validate_stage_delivery,
     write_feature_state,
     write_handoff,
     write_json,
@@ -80,6 +83,18 @@ def cmd_check_gates(args: argparse.Namespace) -> int:
         return 2
     result = check_required_reports(root, feature_id=feature_id, through_stage=args.through_stage)
     payload = result.__dict__
+    stage_decision = result.decisions.get(args.through_stage)
+    if stage_decision:
+        payload["decision"] = stage_decision
+    route_back = {
+        "phase_dev": "claude_developer",
+        "phase_test": "claude_developer",
+        "claude_lead_review": "claude_developer",
+        "codex_review": "claude_lead_review",
+        "acceptance": "claude_developer",
+    }
+    if not result.passed and args.through_stage in route_back:
+        payload["route_back_to"] = route_back[args.through_stage]
     # Preserve decision / acceptance_artifact from an existing gate file
     # (written by the real Codex acceptance wrapper) so the gate metadata
     # is not overwritten by the glob-based check.
@@ -88,7 +103,7 @@ def cmd_check_gates(args: argparse.Namespace) -> int:
         try:
             existing = json.loads(gate_path.read_text(encoding="utf-8"))
             raw_decision = existing.get("decision")
-            if raw_decision:
+            if raw_decision and not stage_decision:
                 normalized = normalize_gate_decision(raw_decision)
                 payload["decision"] = normalized if normalized else raw_decision
             if existing.get("acceptance_artifact"):
@@ -96,8 +111,33 @@ def cmd_check_gates(args: argparse.Namespace) -> int:
         except (json.JSONDecodeError, OSError):
             pass
     write_json(gate_path, payload)
+    if result.passed and args.through_stage == "team_plan":
+        sync_team_plan_metadata(root, feature_id=feature_id)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if result.passed else 2
+
+
+def cmd_validate_stage_delivery(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = validate_stage_delivery(
+        root,
+        stage=args.stage,
+        changed_files=_read_lines(args.changed_files_file)
+        if args.changed_files_file
+        else None,
+    )
+    payload = result.__dict__
+    gate_path = root / ".agent" / "gates" / "phase_dev_delivery_gate.json"
+    write_json(gate_path, payload)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if result.passed else 2
+
+
+def cmd_advance_phase(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = advance_after_phase_test(root)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("advanced") else 2
 
 
 def cmd_write_handoff(args: argparse.Namespace) -> int:
@@ -204,6 +244,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--feature-id")
     p.add_argument("--through-stage", default="acceptance")
     p.set_defaults(func=cmd_check_gates)
+
+    p = init.add_parser("validate-stage-delivery", parents=[common_root])
+    p.add_argument("--stage", required=True, choices=["claude_developer", "bugfix"])
+    p.add_argument("--changed-files-file")
+    p.set_defaults(func=cmd_validate_stage_delivery)
+
+    p = init.add_parser("advance-phase", parents=[common_root])
+    p.set_defaults(func=cmd_advance_phase)
 
     p = init.add_parser("write-handoff", parents=[common_root])
     p.add_argument(

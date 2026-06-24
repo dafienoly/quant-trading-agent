@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,8 +69,8 @@ REPORT_GLOBS_BY_STAGE: dict[str, list[str]] = {
     "pm": ["docs/requirements/*-{feature_id}-requirements.md"],
     "architecture": ["docs/design/*-{feature_id}-architecture.md"],
     "team_plan": ["docs/dev_plans/*-{feature_id}*team-plan.md"],
-    "phase_dev": ["docs/dev_reports/*-{feature_id}*phase-*dev-report.md"],
-    "phase_test": ["docs/test_reports/*-{feature_id}*phase-*test-report.md"],
+    "phase_dev": ["docs/dev_reports/*-{feature_id}*phase-*dev-report*.md"],
+    "phase_test": ["docs/test_reports/*-{feature_id}*phase-*test-report*.md"],
     "claude_lead_review": [
         "docs/review/*-{feature_id}*opencode-lead-review.md",
         "docs/review/*-{feature_id}*claude-lead-review.md",
@@ -169,6 +170,22 @@ class GateCheckResult:
     found: dict[str, list[str]]
     reasons: list[str]
     invalid: dict[str, list[str]] = field(default_factory=dict)
+    decisions: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StageDeliveryResult:
+    """Deterministic evidence that a development stage changed real files."""
+
+    passed: bool
+    feature_id: str
+    stage: str
+    changed_files: list[str]
+    substantive_files: list[str]
+    test_files: list[str]
+    claimed_files: list[str]
+    invalid: list[str]
+    reasons: list[str]
 
 
 def today_slug() -> str:
@@ -186,6 +203,10 @@ def normalize_path(path: str) -> str:
 # Codex review gate : APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED
 # Acceptance gate    : ACCEPTED, ACCEPTED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED
 _GATE_DECISION_MAP: dict[str, str] = {
+    "pass": "PASS",
+    "pass_with_notes": "PASS_WITH_NOTES",
+    "pass-with-notes": "PASS_WITH_NOTES",
+    "rejected": "REJECTED",
     "accepted": "ACCEPTED",
     "accepted_with_notes": "ACCEPTED_WITH_NOTES",
     "accepted-with-notes": "ACCEPTED_WITH_NOTES",
@@ -196,6 +217,40 @@ _GATE_DECISION_MAP: dict[str, str] = {
     "approved_with_notes": "APPROVED_WITH_NOTES",
     "approved-with-notes": "APPROVED_WITH_NOTES",
 }
+
+_STAGE_POSITIVE_DECISIONS: dict[str, set[str]] = {
+    "phase_dev": {"PASS", "PASS_WITH_NOTES"},
+    "phase_test": {"PASS", "PASS_WITH_NOTES"},
+    "claude_lead_review": {"APPROVED", "APPROVED_WITH_NOTES"},
+    "codex_review": {"APPROVED", "APPROVED_WITH_NOTES"},
+    "acceptance": {"ACCEPTED", "ACCEPTED_WITH_NOTES"},
+}
+
+_DELIVERY_REPORT_PREFIXES: tuple[str, ...] = (
+    "docs/dev_reports/",
+    "docs/test_reports/",
+    "docs/review/",
+    "docs/acceptance/",
+)
+
+_SUBSTANTIVE_PATH_PREFIXES: tuple[str, ...] = (
+    ".github/",
+    "scripts/",
+    "src/",
+    "tests/",
+    "frontend/",
+    "web/",
+)
+
+_SUBSTANTIVE_ROOT_FILES: frozenset[str] = frozenset(
+    {
+        "package.json",
+        "pyproject.toml",
+        "tsconfig.json",
+        "vite.config.ts",
+        "vitest.config.ts",
+    }
+)
 
 
 def normalize_gate_decision(value: str | None) -> str | None:
@@ -208,6 +263,165 @@ def normalize_gate_decision(value: str | None) -> str | None:
         return None
     key = value.strip().replace(" ", "_").lower()
     return _GATE_DECISION_MAP.get(key, None)
+
+
+def extract_report_decision(text: str) -> str | None:
+    """Extract an explicit final decision from a stage report."""
+    lines = text.splitlines()
+    decision_tokens = sorted(set(_GATE_DECISION_MAP.values()), key=len, reverse=True)
+    decision_pattern = re.compile(
+        r"\b(" + "|".join(re.escape(token) for token in decision_tokens) + r")\b",
+        re.IGNORECASE,
+    )
+    heading_pattern = re.compile(
+        r"(最终结论|最终结果|测试结论|验收结论|审查结论|"
+        r"final\s+(result|conclusion|decision)|approval\s+decision|"
+        r"acceptance\s+decision|review\s+decision|conclusion|decision)",
+        re.IGNORECASE,
+    )
+
+    for index in range(len(lines) - 1, -1, -1):
+        if not heading_pattern.search(lines[index]):
+            continue
+        block = "\n".join(lines[index : index + 5])
+        match = decision_pattern.search(block)
+        if match:
+            return normalize_gate_decision(match.group(1))
+    return None
+
+
+def _extract_changed_files_from_git(root: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "git status failed")
+
+    changed: list[str] = []
+    for raw_line in result.stdout.splitlines():
+        if len(raw_line) < 4:
+            continue
+        value = raw_line[3:]
+        if " -> " in value:
+            value = value.split(" -> ", 1)[1]
+        path = normalize_path(value.strip().strip('"'))
+        if path:
+            changed.append(path)
+    return sorted(set(changed))
+
+
+def _extract_claimed_change_paths(text: str) -> list[str]:
+    section_match = re.search(
+        r"(?ims)^#{2,4}\s*(变更范围|变更文件|修改文件|changed files?)\s*$"
+        r"(?P<body>.*?)(?=^#{2,4}\s+\S|\Z)",
+        text,
+    )
+    if not section_match:
+        return []
+
+    body = section_match.group("body")
+    candidates = re.findall(
+        r"(?<![\w.-])((?:(?:\.github|src|tests|scripts|frontend|web|docs|feedback)/"
+        r"[A-Za-z0-9_./*?{}<>\[\]-]+)|(?:package\.json|pyproject\.toml|"
+        r"tsconfig\.json|vite\.config\.ts|vitest\.config\.ts))",
+        body,
+    )
+    return sorted(
+        {
+            normalize_path(candidate).rstrip(".,;:|)")
+            for candidate in candidates
+            if "*" not in candidate and "<" not in candidate and ">" not in candidate
+        }
+    )
+
+
+def validate_stage_delivery(
+    root: Path,
+    *,
+    stage: str,
+    changed_files: Iterable[str] | None = None,
+) -> StageDeliveryResult:
+    """Verify a development Agent produced real, report-consistent changes."""
+    if stage not in {"claude_developer", "bugfix"}:
+        raise ValueError(f"unsupported delivery stage: {stage}")
+
+    state = read_state(root)
+    feature_id = str(state.get("feature_id") or "")
+    risk_level = str(state.get("risk_level") or "unknown").lower()
+    current_phase = int(state.get("team_pipeline", {}).get("current_phase", 1))
+    report_pattern = REPORT_GLOBS_BY_STAGE["phase_dev"][0].format(feature_id=feature_id)
+    reports = sorted(root.glob(report_pattern))
+    changed = sorted(
+        {
+            normalize_path(path)
+            for path in (
+                changed_files if changed_files is not None else _extract_changed_files_from_git(root)
+            )
+            if normalize_path(path)
+        }
+    )
+    invalid: list[str] = []
+    claimed: list[str] = []
+
+    if not feature_id:
+        invalid.append("missing_feature_id")
+    if not reports:
+        invalid.append("missing_phase_dev_report")
+    else:
+        phase_marker = f"phase-{current_phase}"
+        phase_reports = [path for path in reports if phase_marker in path.name]
+        report_path = phase_reports[-1] if phase_reports else reports[-1]
+        report_text = report_path.read_text(encoding="utf-8")
+        claimed = _extract_claimed_change_paths(report_text)
+        for path in claimed:
+            if not (root / path).exists():
+                invalid.append(f"claimed_path_missing:{path}")
+            if path not in changed:
+                invalid.append(f"claimed_path_not_changed:{path}")
+
+    substantive = [
+        path
+        for path in changed
+        if (
+            path.startswith(_SUBSTANTIVE_PATH_PREFIXES)
+            or path in _SUBSTANTIVE_ROOT_FILES
+            or (
+                risk_level in {"docs-only", "documentation", "docs"}
+                and path.startswith("docs/")
+            )
+        )
+        and not path.startswith(_DELIVERY_REPORT_PREFIXES)
+        and not path.startswith(".agent/")
+    ]
+    tests = [path for path in substantive if path.startswith("tests/")]
+    implementation = [path for path in substantive if not path.startswith("tests/")]
+
+    if not substantive:
+        invalid.append("report_only_delivery")
+    if risk_level not in {"docs-only", "documentation", "docs"}:
+        if not implementation:
+            invalid.append("missing_implementation_change")
+        if not tests:
+            invalid.append("missing_test_change")
+    if claimed and not any(path in substantive for path in claimed):
+        invalid.append("claimed_changes_have_no_substantive_diff")
+
+    passed = not invalid
+    return StageDeliveryResult(
+        passed=passed,
+        feature_id=feature_id,
+        stage=stage,
+        changed_files=changed,
+        substantive_files=substantive,
+        test_files=tests,
+        claimed_files=claimed,
+        invalid=invalid,
+        reasons=["stage_delivery_verified"] if passed else ["stage_delivery_invalid"],
+    )
 
 
 def slugify_feature(text: str, *, max_length: int = 48) -> str:
@@ -307,11 +521,13 @@ def build_feature_state(
         "postmortem": f"docs/postmortems/{today_slug()}-{feature.feature_id}-r3-failure.md",
     }
     state["team_pipeline"] = {
-        "mode": "opencode_lead_claude_dev_opencode_test",
+        "mode": "opencode_lead_deepseek_dev_test",
         "default_team_id": "hybrid-team-a",
         "max_parallel_teams": 3,
         "max_codex_review_attempts": 3,
         "current_phase": 1,
+        "total_phases": 1,
+        "completed_phases": [],
         "all_phases_tested": False,
         "codex_review_attempts": 0,
     }
@@ -319,7 +535,7 @@ def build_feature_state(
         "codex_a": ["pm", "acceptance"],
         "codex_b": ["architecture", "codex_review"],
         "opencode_lead": ["team_plan", "team_lead_review", "team_performance"],
-        "claude_developer": ["phase_dev", "bugfix"],
+        "opencode_developer": ["phase_dev", "bugfix"],
         "opencode_tester": ["phase_test"],
     }
     state["manual_approval_required_for"] = [
@@ -398,6 +614,7 @@ def check_required_reports(
     missing: dict[str, list[str]] = {}
     found: dict[str, list[str]] = {}
     invalid: dict[str, list[str]] = {}
+    decisions: dict[str, str] = {}
 
     for stage in stages:
         patterns = REPORT_GLOBS_BY_STAGE[stage]
@@ -411,6 +628,9 @@ def check_required_reports(
             stage_invalid = _validate_stage_reports(root, stage=stage, paths=stage_found, feature_id=feature_id)
             if stage_invalid:
                 invalid[stage] = stage_invalid
+            stage_decision = _read_stage_decision(root, stage=stage, paths=stage_found)
+            if stage_decision:
+                decisions[stage] = stage_decision
         else:
             missing[stage] = [pattern.format(feature_id=feature_id) for pattern in patterns]
 
@@ -430,6 +650,7 @@ def check_required_reports(
         found=found,
         invalid=invalid,
         reasons=reasons,
+        decisions=decisions,
     )
 
 
@@ -440,21 +661,192 @@ def _validate_stage_reports(
     paths: list[str],
     feature_id: str,
 ) -> list[str]:
-    """Validate content-sensitive gate artifacts for early Codex stages."""
-    if stage not in {"pm", "architecture"}:
-        return []
-
     invalid: list[str] = []
-    for rel_path in paths:
+    if stage == "phase_dev":
+        delivery_gate = _read_gate(root, "phase_dev_delivery_gate.json")
+        if delivery_gate is None:
+            invalid.append("phase_dev_delivery_gate_missing")
+        elif delivery_gate.get("feature_id") != feature_id:
+            invalid.append("phase_dev_delivery_gate_feature_mismatch")
+        elif delivery_gate.get("passed") is not True:
+            invalid.extend(
+                f"phase_dev_delivery:{item}"
+                for item in delivery_gate.get("invalid", ["delivery_not_verified"])
+            )
+
+    for rel_path in _select_reports_for_validation(stage, paths):
         path = root / rel_path
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
             invalid.append(f"{rel_path}:unreadable:{exc.__class__.__name__}")
             continue
-        errors = _validate_pm_report(text, feature_id) if stage == "pm" else _validate_architecture_report(text, feature_id)
+        if stage == "pm":
+            errors = _validate_pm_report(text, feature_id)
+        elif stage == "architecture":
+            errors = _validate_architecture_report(text, feature_id)
+        else:
+            errors = _validate_report_decision(text, stage)
+            if stage == "phase_test":
+                errors.extend(_validate_feedback_bug_evidence(root, text))
         invalid.extend(f"{rel_path}:{error}" for error in errors)
     return invalid
+
+
+def _read_stage_decision(root: Path, *, stage: str, paths: list[str]) -> str | None:
+    if stage not in _STAGE_POSITIVE_DECISIONS:
+        return None
+    decisions: list[str] = []
+    for rel_path in _select_reports_for_validation(stage, paths):
+        try:
+            decision = extract_report_decision((root / rel_path).read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        if decision:
+            decisions.append(decision)
+    blocking = [item for item in decisions if item not in _STAGE_POSITIVE_DECISIONS[stage]]
+    return blocking[-1] if blocking else (decisions[-1] if decisions else None)
+
+
+def _select_reports_for_validation(stage: str, paths: list[str]) -> list[str]:
+    """Validate current evidence while retaining older rejected reports."""
+    if stage in {"phase_dev", "phase_test"}:
+        latest_by_phase: dict[int, str] = {}
+        unnumbered: list[str] = []
+        for path in sorted(paths):
+            match = re.search(r"phase-(\d+)", Path(path).name, re.IGNORECASE)
+            if match:
+                latest_by_phase[int(match.group(1))] = path
+            else:
+                unnumbered.append(path)
+        return [*unnumbered[-1:], *[latest_by_phase[key] for key in sorted(latest_by_phase)]]
+    if stage in {"claude_lead_review", "codex_review", "acceptance"}:
+        return sorted(paths)[-1:]
+    return paths
+
+
+def _validate_report_decision(text: str, stage: str) -> list[str]:
+    if stage not in _STAGE_POSITIVE_DECISIONS:
+        return []
+    decision = extract_report_decision(text)
+    if decision is None:
+        return ["missing_explicit_final_decision"]
+    if decision not in _STAGE_POSITIVE_DECISIONS[stage]:
+        return [f"blocking_decision:{decision}"]
+    return []
+
+
+def _validate_feedback_bug_evidence(root: Path, text: str) -> list[str]:
+    paths = sorted(
+        set(
+            re.findall(
+                r"feedback/bugs/open/BUG_[A-Za-z0-9_.-]+\.(?:md|json)",
+                text,
+            )
+        )
+    )
+    return [f"claimed_feedback_missing:{path}" for path in paths if not (root / path).exists()]
+
+
+def sync_team_plan_metadata(root: Path, *, feature_id: str) -> dict[str, Any]:
+    """Persist the deterministic number of implementation phases."""
+    pattern = REPORT_GLOBS_BY_STAGE["team_plan"][0].format(feature_id=feature_id)
+    plans = sorted(root.glob(pattern))
+    if not plans:
+        return {"updated": False, "total_phases": None, "reason": "team_plan_missing"}
+
+    text = plans[-1].read_text(encoding="utf-8")
+    phase_numbers = {
+        int(value)
+        for value in re.findall(
+            r"(?mi)^#{2,4}\s*(?:Phase|阶段)\s*(\d+)\b",
+            text,
+        )
+    }
+    total_phases = max(phase_numbers) if phase_numbers else 1
+    state = read_state(root)
+    team = dict(state.get("team_pipeline", {}))
+    old_value = int(team.get("total_phases", 1))
+    team["total_phases"] = total_phases
+    team.setdefault("completed_phases", [])
+    state["team_pipeline"] = team
+    if old_value == total_phases and "completed_phases" in state.get("team_pipeline", {}):
+        return {"updated": False, "total_phases": total_phases, "reason": "unchanged"}
+    write_feature_state(root, state)
+    return {"updated": True, "total_phases": total_phases, "reason": "team_plan_parsed"}
+
+
+def advance_after_phase_test(root: Path) -> dict[str, Any]:
+    """Record a passing phase test and choose the next deterministic stage."""
+    state = read_state(root)
+    feature_id = str(state.get("feature_id") or "")
+    gate = _read_gate(root, "phase_test_gate.json")
+    if (
+        gate is None
+        or gate.get("feature_id") != feature_id
+        or gate.get("passed") is not True
+    ):
+        return {
+            "advanced": False,
+            "next_stage": "claude_developer",
+            "all_phases_tested": False,
+            "reason": "phase_test_gate_not_passed",
+        }
+
+    team = dict(state.get("team_pipeline", {}))
+    current_phase = int(team.get("current_phase", 1))
+    total_phases = max(int(team.get("total_phases", 1)), 1)
+    completed = sorted(
+        set(int(value) for value in team.get("completed_phases", []) if int(value) > 0)
+        | {current_phase}
+    )
+    team["completed_phases"] = completed
+
+    if current_phase < total_phases:
+        next_phase = current_phase + 1
+        team["current_phase"] = next_phase
+        team["all_phases_tested"] = False
+        state["current_stage"] = "phase_dev_pending"
+        stage_status = dict(state.get("stage_status", {}))
+        stage_status["phase_dev"] = "pending"
+        stage_status["phase_test"] = "pending"
+        state["stage_status"] = stage_status
+        state["team_pipeline"] = team
+        write_feature_state(root, state)
+        for gate_name in ("phase_dev_gate.json", "phase_test_gate.json"):
+            write_json(
+                root / GATES_DIR / gate_name,
+                {
+                    "passed": False,
+                    "feature_id": feature_id,
+                    "current_phase": next_phase,
+                    "found": {},
+                    "missing": {},
+                    "invalid": {},
+                    "reasons": ["awaiting_next_phase"],
+                },
+            )
+        return {
+            "advanced": True,
+            "next_stage": "claude_developer",
+            "current_phase": next_phase,
+            "total_phases": total_phases,
+            "all_phases_tested": False,
+            "reason": "next_phase_required",
+        }
+
+    team["all_phases_tested"] = True
+    state["team_pipeline"] = team
+    state["current_stage"] = "claude_lead_review_pending"
+    write_feature_state(root, state)
+    return {
+        "advanced": True,
+        "next_stage": "claude_lead_review",
+        "current_phase": current_phase,
+        "total_phases": total_phases,
+        "all_phases_tested": True,
+        "reason": "all_phases_tested",
+    }
 
 
 def _validate_pm_report(text: str, feature_id: str) -> list[str]:
@@ -572,12 +964,18 @@ def _infer_passed_stages_from_gates(root: Path) -> dict[str, bool]:
       key → True  when the stage has passed (explicitly or implicitly)
       key → False when the stage has NOT passed
     """
+    feature_id = str(read_state(root).get("feature_id") or "")
     # Check explicit gate files
     explicit: dict[str, bool] = {}
     for stage_key, gate_names in GATE_FILES_BY_STAGE.items():
         for gname in gate_names:
             gate = _read_gate(root, gname)
-            if gate is not None and gate.get("passed") is True and gate.get("found"):
+            if (
+                gate is not None
+                and gate.get("feature_id") == feature_id
+                and gate.get("passed") is True
+                and gate.get("found")
+            ):
                 explicit[stage_key] = True
                 break
         else:
@@ -589,6 +987,9 @@ def _infer_passed_stages_from_gates(root: Path) -> dict[str, bool]:
         if explicit.get(stage_key):
             last_passed_idx = max(last_passed_idx, FULL_STAGE_ORDER.index(stage_key))
 
+    completed_phases = read_state(root).get("team_pipeline", {}).get("completed_phases", [])
+    has_pipeline_progress = last_passed_idx >= 0 or bool(completed_phases)
+
     # Build result for ALL stages
     result: dict[str, bool] = {}
     for idx, stage in enumerate(FULL_STAGE_ORDER):
@@ -598,7 +999,7 @@ def _infer_passed_stages_from_gates(root: Path) -> dict[str, bool]:
         elif idx < FULL_STAGE_ORDER.index("phase_dev"):
             # Pre-gate stages (pm, architecture, team_plan):
             # passed if ANY downstream gated stage has passed
-            result[stage] = last_passed_idx >= 0
+            result[stage] = has_pipeline_progress
         else:
             # Post-acceptance stages (merge_gate, manual_approval_required) —
             # not inferred from pipeline gates; start as False here
@@ -625,6 +1026,10 @@ def _check_auto_merge_gate(root: Path) -> bool:
     gate = _read_gate(root, "auto_merge_gate.json")
     if gate is None:
         return False
+    feature_id = str(read_state(root).get("feature_id") or "")
+    gate_feature_id = gate.get("feature_id")
+    if gate_feature_id and gate_feature_id != feature_id:
+        return False
     return gate.get("requires_manual_approval", False)
 
 
@@ -649,9 +1054,16 @@ def check_state_gate_consistency(root: Path) -> dict[str, Any]:
         if stage_key not in STAGES_WITH_GATES:
             continue  # only check stages that have explicit gate files
         current = stage_status.get(stage_key, "unknown")
-        if is_passed and current != "passed":
-            issues.append(f"stage_status.{stage_key}: gate=passed but state={current!r}")
-            stale[f"stage_status.{stage_key}"] = {"current": current, "expected": "passed"}
+        expected_status = "passed" if is_passed else "pending"
+        if current != expected_status:
+            issues.append(
+                f"stage_status.{stage_key}: gate={'passed' if is_passed else 'not-passed'} "
+                f"but state={current!r}"
+            )
+            stale[f"stage_status.{stage_key}"] = {
+                "current": current,
+                "expected": expected_status,
+            }
 
     # 2. Compare current_stage
     expected_stage = _find_latest_active_stage(passed_stages)
@@ -675,12 +1087,15 @@ def check_state_gate_consistency(root: Path) -> dict[str, Any]:
     tp = state.get("team_pipeline", {})
     phases_tested = tp.get("all_phases_tested", False)
     pt_passed = passed_stages.get("phase_test", False)
-    if pt_passed and not phases_tested:
+    current_phase = int(tp.get("current_phase", 1))
+    total_phases = int(tp.get("total_phases", 1))
+    should_be_complete = pt_passed and current_phase >= total_phases
+    if should_be_complete and not phases_tested:
         issues.append(
             "team_pipeline.all_phases_tested: gate phase_test passed but state is false"
         )
         stale["team_pipeline.all_phases_tested"] = {"current": phases_tested, "expected": True}
-    if not pt_passed and phases_tested:
+    if not should_be_complete and phases_tested:
         issues.append(
             "team_pipeline.all_phases_tested: gate phase_test not passed but state is true"
         )
@@ -715,9 +1130,10 @@ def sync_state_from_gates(root: Path, *, dry_run: bool = False) -> dict[str, Any
     # 1. Update stage_status for gated stages only
     stage_status = dict(state.get("stage_status", {}))
     for stage_key in STAGES_WITH_GATES:
-        if passed_stages.get(stage_key) and stage_status.get(stage_key, "") != "passed":
-            stage_status[stage_key] = "passed"
-            changes.append(f"stage_status.{stage_key} \u2192 passed")
+        expected_status = "passed" if passed_stages.get(stage_key) else "pending"
+        if stage_status.get(stage_key, "") != expected_status:
+            stage_status[stage_key] = expected_status
+            changes.append(f"stage_status.{stage_key} \u2192 {expected_status}")
     state["stage_status"] = stage_status
 
     # 2. Update current_stage
@@ -732,12 +1148,18 @@ def sync_state_from_gates(root: Path, *, dry_run: bool = False) -> dict[str, Any
         state["current_stage"] = expected_pending
         changes.append(f"current_stage {old_display} \u2192 {expected_pending!r}")
 
-    # 3. Update team_pipeline.all_phases_tested
+    # 3. Keep phase completion explicit; a single phase_test gate is not proof
+    # that a multi-phase team plan has finished.
     tp = dict(state.get("team_pipeline", {}))
     pt_passed = passed_stages.get("phase_test", False)
-    if pt_passed and not tp.get("all_phases_tested", False):
-        tp["all_phases_tested"] = True
-        changes.append("team_pipeline.all_phases_tested \u2192 true")
+    current_phase = int(tp.get("current_phase", 1))
+    total_phases = int(tp.get("total_phases", 1))
+    should_be_complete = pt_passed and current_phase >= total_phases
+    if tp.get("all_phases_tested", False) != should_be_complete:
+        tp["all_phases_tested"] = should_be_complete
+        changes.append(
+            f"team_pipeline.all_phases_tested \u2192 {str(should_be_complete).lower()}"
+        )
     state["team_pipeline"] = tp
 
     if not changes:
@@ -776,17 +1198,17 @@ def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
     if stage == "codex_pm":
         return common + f"""\nTask:\n- Act as Codex A, the PM Agent.\n- Produce the PM requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Include goals, non-goals, feature list, acceptance criteria, safety constraints, and user-facing success criteria.\n- Do not write architecture or product code in this stage.\n"""
     if stage == "codex_architect":
-        return common + f"""\nTask:\n- Read the requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Produce the architecture design at `{docs.get('architecture', '<architecture-doc>')}`.\n- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / Claude Developer / OpenCode Tester.\n- Do not write product code in this stage.\n"""
+        return common + f"""\nTask:\n- Read the requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Produce the architecture design at `{docs.get('architecture', '<architecture-doc>')}`.\n- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / OpenCode Developer / OpenCode Tester.\n- Do not write product code in this stage.\n"""
     if stage == "claude_lead_plan":
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.\n- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to Claude Code Developer for the next phase until all phases are complete.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.\n- Runtime is fixed to `opencode-go/glm-5.2`, `variant=max`, and must use superpowers.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to OpenCode Developer for the next phase until all phases are complete.\n"""
     if stage == "claude_developer":
         phase = team.get("current_phase", 1)
         dev_report_name = str(docs.get('phase_dev_report_pattern', '<phase-dev-report>')).replace('<n>', str(phase))
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_developer`; actual role: Claude Code Developer.\n- Runtime is fixed to `ultracode-xhigh`, `effort=xhigh`, feature-dev workflow, and superpowers.\n- Implement only the current phase {phase} from `{docs.get('team_plan', '<team-plan>')}`.\n- In GitHub Stage Runner mode, remain on the checked-out PR branch and let the workflow commit/push; in manual mode follow `docs/process/BRANCH_WORKFLOW.md`.\n- Write focused failing tests first where practical.\n- Produce `{dev_report_name}` with exact self-test commands.\n- After OpenCode Test Engineer verifies the phase, continue with the next planned phase until all phases are tested.\n- Do not touch restricted trading modules unless the architecture document explicitly permits it.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_developer`; actual role: OpenCode Developer.\n- Runtime is fixed to `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent permissions, and superpowers.\n- Implement only the current phase {phase} from `{docs.get('team_plan', '<team-plan>')}`.\n- In GitHub Stage Runner mode, remain on the checked-out PR branch and let the workflow commit/push; in manual mode follow `docs/process/BRANCH_WORKFLOW.md`.\n- Write focused failing tests first where practical.\n- Produce `{dev_report_name}` with exact self-test commands and a truthful changed-file list.\n- Every claimed changed path must exist and appear in the current diff; non-documentation phases require implementation and test changes.\n- After OpenCode Test Engineer verifies the phase, continue with the next planned phase until all phases are tested.\n- Do not touch restricted trading modules unless the architecture document explicitly permits it.\n"""
     if stage == "claude_tester":
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.\n- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and superpowers.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, and diff.\n- Use verification-before-completion; use systematic-debugging for failures.\n- Return to the original branch, delete the temporary test branch, and produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}` without changing business code on the original branch.\n- If the phase passes, route back to Claude Code Developer for the next phase unless all phases are complete.\n- Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.\n- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, build Agent permissions, and superpowers.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, actual diff, and claimed changed paths.\n- Use verification-before-completion; use systematic-debugging for failures.\n- Return to the original branch, delete the temporary test branch, and produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}` without changing business code on the original branch.\n- The final decision must be exactly PASS, PASS_WITH_NOTES, or REJECTED; REJECTED routes back to OpenCode Developer.\n- If the phase passes, route back to OpenCode Developer for the next phase unless all phases are complete.\n- Generate and actually persist `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
     if stage == "claude_lead_review":
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.\n- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.\n- Review all phase development reports and test reports.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<opencode-lead-review>')}`.\n- If any phase is incomplete, route back to Claude Code Developer / OpenCode Test Engineer instead of escalating to Codex B.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.\n- Runtime is fixed to `opencode-go/glm-5.2`, `variant=max`, and must use superpowers.\n- Review all phase development reports, test reports, actual git diff, delivery gates, and phase metadata.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<opencode-lead-review>')}` with an explicit APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED decision.\n- If any phase is incomplete, route back to OpenCode Developer / OpenCode Test Engineer instead of escalating to Codex B.\n"""
     if stage == "codex_reviewer":
         return common + f"""\nTask:\n- Act as Codex B, the final Architect Reviewer.\n- Review code only after `{docs.get('claude_lead_review', '<opencode-lead-review>')}` confirms all phases passed.\n- Produce `{docs.get('codex_review', '<codex-review>')}`.\n- Conclusion must be APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED.\n- If review fails, return structured feedback to OpenCode Team Leader. After {max_attempts} failed Codex reviews, trigger the team incompetence alert and postmortem gate.\n"""
     if stage == "codex_acceptance":

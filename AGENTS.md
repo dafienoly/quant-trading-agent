@@ -26,7 +26,7 @@ Before starting any non-trivial task, read in this order:
 1. `docs/process/AGENT_DEVELOPMENT_PIPELINE.md`
 2. `docs/process/BRANCH_WORKFLOW.md`
 3. `docs/pipeline/AGENT_AUTOMATION_ARCHITECTURE.md` when using Issue-driven automation
-4. `docs/pipeline/TEAM_PIPELINE_V2.md` when using Claude-first team automation
+4. `docs/pipeline/TEAM_PIPELINE_V2.md` when using OpenCode team automation
 5. `docs/pipeline/LOCAL_AGENT_RUNTIME_SETUP.md` when configuring local Windows/WSL agent runners
 6. `docs/pipeline/AUTO_MERGE_POLICY.md` when a branch may be auto-merged
 7. `docs/pipeline/AGENT_HANDOFF_CONTRACT.md` when receiving an automated handoff
@@ -148,10 +148,10 @@ This repository uses a document-driven pipeline:
 User request
   -> PM requirement document
   -> Architect design document
-  -> Claude team phase plan when Team Pipeline V2 is active
-  -> Claude phase implementation + self-test + dev report
-  -> Claude phase verification + test report
-  -> Claude team lead review after all phases pass
+  -> OpenCode team phase plan when Team Pipeline V2 is active
+  -> OpenCode phase implementation + self-test + dev report
+  -> OpenCode phase verification + test report
+  -> OpenCode team lead review after all phases pass
   -> Architect code review
   -> PM acceptance
   -> log update + merge/release

@@ -43,7 +43,7 @@ jobs:
         if: inputs.role == 'all' || inputs.role == 'tester'
         run: .\scripts\run-team-stage.ps1 -Stage claude_tester -PreflightOnly
 
-      - name: Probe Claude ultracode-xhigh Developer
+      - name: Probe OpenCode DeepSeek V4 Flash max Developer
         if: inputs.role == 'all' || inputs.role == 'developer'
         run: .\scripts\run-team-stage.ps1 -Stage claude_developer -PreflightOnly
 

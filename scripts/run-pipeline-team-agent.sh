@@ -22,8 +22,8 @@ OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"
 OPENCODE_LEAD_VARIANT="max"
 OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"
 OPENCODE_TESTER_VARIANT="max"
-CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"
-CLAUDE_DEVELOPER_EFFORT="xhigh"
+OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"
+OPENCODE_DEVELOPER_VARIANT="max"
 PREFLIGHT_TIMEOUT_SECONDS="${AGENT_PREFLIGHT_TIMEOUT_SECONDS:-180}"
 
 if ! [[ "$PREFLIGHT_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -125,11 +125,12 @@ EOF
       ;;
     claude_developer|bugfix)
       cat <<'EOF'
-- 你是 Claude Code Developer。
-- 必须使用 feature-dev workflow。
-- 必须先加载 superpowers:using-superpowers；行为变更使用 test-driven-development；完成声明前使用 verification-before-completion。
+- 你是 OpenCode Developer，兼容 stage ID 仍为 claude_developer。
+- 必须先加载 using-superpowers；行为变更使用 test-driven-development；完成声明前使用 verification-before-completion。
+- 使用 build Agent 的完整开发权限完成当前阶段，但不得执行提交、推送、合并或读取密钥。
 - 按需求、架构和当前阶段计划实现最小必要变更，先写失败测试，再实现，再回归。
 - 写入 handoff 指定的开发或修复报告，记录精确命令和结果。
+- 报告中声称的每个变更文件必须真实存在，并出现在当前未提交 diff 中；非文档阶段必须同时包含实现和测试变更。
 - 不得擅自扩大需求，不得触碰未经架构授权的受限交易模块。
 EOF
       ;;
@@ -174,34 +175,6 @@ require_opencode_runtime() {
     opencode debug agent build >"${tmp_dir}/opencode-build-agent.txt" \
     2>"${tmp_dir}/opencode-build-agent.stderr"; then
     echo "OpenCode build agent configuration is unavailable." >&2
-    exit 2
-  fi
-}
-
-CLAUDE_BIN=""
-
-require_claude_runtime() {
-  if command -v claude >/dev/null 2>&1; then
-    CLAUDE_BIN="claude"
-  elif command -v claude-code >/dev/null 2>&1; then
-    CLAUDE_BIN="claude-code"
-  else
-    echo "Neither claude nor claude-code is available in PATH." >&2
-    exit 2
-  fi
-
-  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
-    "$CLAUDE_BIN" plugin list >"${tmp_dir}/claude-plugins.txt" \
-    2>"${tmp_dir}/claude-plugins.stderr"; then
-    echo "Claude Code plugin discovery failed." >&2
-    exit 2
-  fi
-  if ! grep -q 'superpowers@claude-plugins-official' "${tmp_dir}/claude-plugins.txt"; then
-    echo "Claude Code superpowers plugin is unavailable." >&2
-    exit 2
-  fi
-  if ! grep -q 'feature-dev@claude-plugins-official' "${tmp_dir}/claude-plugins.txt"; then
-    echo "Claude Code feature-dev workflow plugin is unavailable." >&2
     exit 2
   fi
 }
@@ -290,40 +263,6 @@ run_opencode_preflight() {
   write_execution_metadata "opencode" "$model" "$variant" "runtime-preflight+superpowers"
 }
 
-run_claude_preflight() {
-  local before
-  before="$(git status --porcelain=v1 --untracked-files=all)"
-  stdout_file="${tmp_dir}/runtime-preflight-developer.stdout.log"
-  stderr_file="${tmp_dir}/runtime-preflight-developer.stderr.log"
-  metadata_file="${tmp_dir}/runtime-preflight-developer.execution.json"
-
-  require_claude_runtime
-  set +e
-  timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
-    "$CLAUDE_BIN" \
-    --print \
-    --model "$CLAUDE_DEVELOPER_MODEL" \
-    --effort "$CLAUDE_DEVELOPER_EFFORT" \
-    --tools "" \
-    --no-session-persistence \
-    "这是只读运行时探针。不要调用任何工具，不要读取或修改文件，只输出 PIPELINE_RUNTIME_OK。" \
-    >"$stdout_file" 2>"$stderr_file"
-  local status=$?
-  set -e
-  if [[ $status -ne 0 ]]; then
-    cat "$stderr_file" >&2
-    if [[ $status -eq 124 || $status -eq 137 ]]; then
-      echo "Runtime preflight for 'developer' timed out after ${PREFLIGHT_TIMEOUT_SECONDS}s." >&2
-    fi
-    exit "$status"
-  fi
-  verify_probe_output "$stdout_file" "developer"
-  verify_git_state_unchanged "$before"
-  write_execution_metadata \
-    "claude-code" "$CLAUDE_DEVELOPER_MODEL" "$CLAUDE_DEVELOPER_EFFORT" \
-    "runtime-preflight+feature-dev+superpowers"
-}
-
 verify_branch_restored() {
   local ending_branch
   ending_branch="$(git branch --show-current)"
@@ -363,7 +302,8 @@ if [[ "$preflight_only" == "true" ]]; then
         "tester" "$OPENCODE_TESTER_MODEL" "$OPENCODE_TESTER_VARIANT"
       ;;
     claude_developer|bugfix)
-      run_claude_preflight
+      run_opencode_preflight \
+        "developer" "$OPENCODE_DEVELOPER_MODEL" "$OPENCODE_DEVELOPER_VARIANT"
       ;;
   esac
   echo "Team Pipeline runtime preflight completed: $stage"
@@ -408,81 +348,31 @@ case "$stage" in
       "opencode" "$OPENCODE_TESTER_MODEL" "$OPENCODE_TESTER_VARIANT" "superpowers"
     ;;
   claude_developer|bugfix)
-    require_claude_runtime
-    claude_system_prompt=$(
-      cat <<'EOF'
-You are in the unattended development stage of a GitHub Agent Pipeline.
-Use the installed feature-dev workflow and superpowers. First invoke
-superpowers:using-superpowers; use test-driven-development for behavior
-changes; use verification-before-completion before declaring completion.
-Do NOT execute git commit, git push, git merge, or auto-merge main.
-EOF
-    )
-    {
-      printf '%s\n\n' "/feature-dev"
-      cat "$prompt_file"
-    } >"${prompt_file}.claude"
-    echo "Prompt file size: $(wc -c < "${prompt_file}.claude") bytes"
+    require_opencode_runtime "$OPENCODE_DEVELOPER_MODEL"
+    echo "Prompt file size: $(wc -c < "$prompt_file") bytes"
     echo "Handoff file size: $(wc -c < "$handoff") bytes"
-    if ! $CLAUDE_BIN \
-      --print \
-      --model "$CLAUDE_DEVELOPER_MODEL" \
-      --effort "$CLAUDE_DEVELOPER_EFFORT" \
-      --permission-mode dontAsk \
-      --append-system-prompt "$claude_system_prompt" \
-      --allowedTools \
-        "Read" \
-        "Edit" \
-        "Write" \
-        "Glob" \
-        "Grep" \
-        "Bash(git status *)" \
-        "Bash(git diff *)" \
-        "Bash(git branch *)" \
-        "Bash(git switch *)" \
-        "Bash(git rev-parse *)" \
-        "Bash(git ls-files *)" \
-        "Bash(git show *)" \
-        "Bash(rg *)" \
-        "Bash(./.venv/bin/python *)" \
-        "Bash(python scripts/agent_pipeline.py *)" \
-      <"${prompt_file}.claude" >"$stdout_file" 2>"$stderr_file"; then
-      echo "Claude Code exited non-zero. stderr:" >&2
+    if ! opencode run \
+      --model "$OPENCODE_DEVELOPER_MODEL" \
+      --variant "$OPENCODE_DEVELOPER_VARIANT" \
+      --agent build \
+      --format json \
+      --dir "$repo_root" \
+      --title "pipeline-${stage}" \
+      "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
+      echo "OpenCode Developer exited non-zero. stderr:" >&2
       cat "$stderr_file" >&2
       exit 2
     fi
-    echo "Claude Code completed. stdout lines: $(wc -l < "$stdout_file"), stderr lines: $(wc -l < "$stderr_file")"
+    echo "OpenCode Developer completed. stdout lines: $(wc -l < "$stdout_file"), stderr lines: $(wc -l < "$stderr_file")"
     echo "stdout preview:" >&2
     head -5 "$stdout_file" >&2
     echo "stderr preview:" >&2
     head -5 "$stderr_file" >&2
     verify_branch_restored
     write_execution_metadata \
-      "claude-code" "$CLAUDE_DEVELOPER_MODEL" "$CLAUDE_DEVELOPER_EFFORT" \
-      "feature-dev+superpowers"
+      "opencode" "$OPENCODE_DEVELOPER_MODEL" "$OPENCODE_DEVELOPER_VARIANT" \
+      "build+superpowers"
     ;;
 esac
-
-case "$stage" in
-  claude_lead_plan)
-    gate="team_plan"
-    ;;
-  claude_developer)
-    gate="phase_dev"
-    ;;
-  claude_tester|bugfix)
-    gate="phase_test"
-    ;;
-  claude_lead_review)
-    gate="claude_lead_review"
-    ;;
-  postmortem)
-    gate=""
-    ;;
-esac
-
-if [[ -n "$gate" ]]; then
-  python3 scripts/agent_pipeline.py check-gates --through-stage "$gate"
-fi
 
 echo "Team Pipeline stage completed: $stage"
