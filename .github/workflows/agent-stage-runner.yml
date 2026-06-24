@@ -299,7 +299,6 @@ jobs:
             ".agent",
             ".github",
             "docs",
-            "feedback",
             "scripts",
             "tests",
             "src",
