@@ -699,6 +699,7 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         "PIPELINE_RUNTIME_OK",
         "PREFLIGHT_TIMEOUT_SECONDS",
         "timeout --signal=TERM --kill-after=10s",
+        "--format json",
     )
     missing = [marker for marker in required_runner_markers if marker not in runner]
     forbidden_runner_markers = (

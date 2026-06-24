@@ -17,6 +17,7 @@
    - 移除 OpenCode 的无效 `--permission-mode allow`。
    - 移除 `--dangerously-skip-permissions`。
    - 增加 OpenCode `build` agent 配置预检。
+   - 所有 OpenCode 非交互调用固定 `--format json`。
    - 增加 GLM 5.2、DeepSeek V4 Pro max、Claude ultracode-xhigh 真实只读探针。
    - 探针输出必须包含 `PIPELINE_RUNTIME_OK`，且运行前后 git 状态必须一致。
    - CLI discovery 与模型调用增加可配置硬超时。
@@ -79,9 +80,9 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 ## 测试结果
 
-- Pipeline 聚焦测试：`82 passed in 3.06s`。
+- Pipeline 聚焦测试：`82 passed in 3.27s`。
 - Pipeline strict regression：`PASS`，严重失败 `0`，警告 `0`。
-- 全量测试：`990 passed, 6 skipped, 2 warnings in 60.41s`。
+- 全量测试：`991 passed, 6 skipped, 2 warnings in 60.37s`。
 - Ruff：`All checks passed!`。
 - `py_compile`、Bash syntax、workflow YAML、`git diff --check`：通过。
 - 本地真实 GLM 5.2 Lead 探针：通过。
@@ -92,6 +93,9 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 - Actions run `28082310344` 发现旧复合命令未执行 runner 且 hidden artifact
   被忽略；该次绿色状态不作为通过证据，已增加后置证据校验和 artifact
   fail-closed。
+- Actions run `28082773049` 真实执行后发现 OpenCode 默认 renderer 在 stdout
+  重定向场景超时；同模型诊断使用 JSON event stream 均约 5 秒成功，已将
+  preflight 和正式 Lead/Tester 调用固定为 `--format json`。
 
 ## 安全确认
 

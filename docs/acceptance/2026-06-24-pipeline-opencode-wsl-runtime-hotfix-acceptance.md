@@ -27,9 +27,9 @@
 
 ## 测试结果
 
-- 聚焦测试：`82 passed in 3.06s`。
+- 聚焦测试：`82 passed in 3.27s`。
 - Strict regression：`PASS`。
-- 全量测试：`990 passed, 6 skipped, 2 warnings in 60.41s`。
+- 全量测试：`991 passed, 6 skipped, 2 warnings in 60.37s`。
 - 本地 GLM 5.2、DeepSeek V4 Pro max、Claude ultracode-xhigh 真实探针通过。
 - Windows self-hosted Runtime Preflight：待 Draft PR 运行。
 

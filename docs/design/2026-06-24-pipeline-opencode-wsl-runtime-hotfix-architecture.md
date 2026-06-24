@@ -53,6 +53,11 @@ OpenCode 保留 `--agent build`，使用已解析的项目/用户 permission pol
 `--dangerously-skip-permissions`。所需 superpowers 外部目录由 OpenCode
 配置预检确认。
 
+所有将 stdout 重定向到日志文件的 OpenCode 调用固定使用
+`--format json`。默认 renderer 面向交互终端，在 Windows runner 经 WSL
+重定向时可能已收到模型响应却不退出；JSON event stream 是稳定的无人值守
+输出契约。
+
 ### 3. 真实但只读的探针
 
 `--preflight-only` 不读取 handoff/state，不运行 gate，不修改 git 状态。
@@ -120,6 +125,7 @@ stage 共享 PATH、CLI 和模型解析逻辑。
 - model catalog 不包含固定模型：fail closed。
 - superpowers/feature-dev 不可见：fail closed。
 - API 认证、额度、代理或模型调用失败：fail closed。
+- 默认 renderer 在非交互重定向中挂起：通过固定 JSON event stream 避免。
 - CLI discovery 或模型请求超过硬超时：fail closed。
 - 探针未返回 `PIPELINE_RUNTIME_OK`：fail closed。
 - metadata 或 artifact 缺失：fail closed。

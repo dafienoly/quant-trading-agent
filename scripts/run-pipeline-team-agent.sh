@@ -271,6 +271,7 @@ run_opencode_preflight() {
     --model "$model" \
     --variant "$variant" \
     --agent plan \
+    --format json \
     --dir "$repo_root" \
     --title "pipeline-runtime-preflight-${role}" \
     "这是只读运行时探针。不要调用任何工具，不要读取或修改文件，只输出 PIPELINE_RUNTIME_OK。" \
@@ -378,6 +379,7 @@ case "$stage" in
        --model "$OPENCODE_LEAD_MODEL" \
        --variant "$OPENCODE_LEAD_VARIANT" \
        --agent build \
+       --format json \
        --dir "$repo_root" \
        --title "pipeline-${stage}" \
        "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
@@ -393,6 +395,7 @@ case "$stage" in
       --model "$OPENCODE_TESTER_MODEL" \
       --variant "$OPENCODE_TESTER_VARIANT" \
       --agent build \
+      --format json \
       --dir "$repo_root" \
       --title "pipeline-${stage}" \
       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then

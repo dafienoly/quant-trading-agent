@@ -193,6 +193,7 @@ def test_team_stage_runner_forces_requested_models_effort_and_skills():
     assert "--preflight-only" in text
     assert "PREFLIGHT_TIMEOUT_SECONDS" in text
     assert "timeout --signal=TERM --kill-after=10s" in text
+    assert text.count("--format json") == 3
 
 
 def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():

@@ -52,6 +52,8 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 - 移除 `--dangerously-skip-permissions`；
 - 依赖 OpenCode 已解析的 `build` agent 权限策略；
 - 保留模型、variant 和 superpowers 固定契约。
+- 所有重定向 stdout 的 OpenCode 非交互调用使用 `--format json`，避免默认
+  renderer 在无人值守管道中等待终端。
 
 ### R-003 Runtime Preflight
 
@@ -84,6 +86,7 @@ Issue 模板必须：
 
 - `bash -l` 独立参数桥接和显式 OpenCode PATH；
 - metadata 存在性、探针超时和 hidden artifact fail-closed；
+- OpenCode 非交互 JSON 输出格式；
 - 不存在危险权限跳过；
 - Runtime Preflight workflow 存在且覆盖三个角色；
 - Stage Runner 的兼容 preflight 不推进正式 Pipeline；
