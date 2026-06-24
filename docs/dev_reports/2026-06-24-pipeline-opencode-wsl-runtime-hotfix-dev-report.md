@@ -10,8 +10,8 @@
 
 1. `scripts/run-team-stage.ps1`
    - 增加 `-PreflightOnly`。
-   - 将 WSL 启动从非登录 `bash -c` 改为 `bash -lc`。
-   - 显式加入 `$HOME/.opencode/bin` 和 `$HOME/.local/bin`。
+   - 将 WSL 启动改为 `--cd` 与 `bash -l` 独立参数调用。
+   - Preflight 返回后强制校验本角色 metadata，防止空执行返回 0。
 2. `scripts/run-pipeline-team-agent.sh`
    - 增加 `--preflight-only`。
    - 移除 OpenCode 的无效 `--permission-mode allow`。
@@ -19,10 +19,12 @@
    - 增加 OpenCode `build` agent 配置预检。
    - 增加 GLM 5.2、DeepSeek V4 Pro max、Claude ultracode-xhigh 真实只读探针。
    - 探针输出必须包含 `PIPELINE_RUNTIME_OK`，且运行前后 git 状态必须一致。
+   - CLI discovery 与模型调用增加可配置硬超时。
 3. 新增 `.github/workflows/agent-runtime-preflight.yml`
    - 支持 `all`、`lead`、`tester`、`developer`。
    - 使用 Windows self-hosted runner 真实验证三个角色。
    - 上传 `.agent/tmp/runtime-preflight-*` 诊断 artifact。
+   - hidden artifact 显式启用，诊断文件缺失时 fail closed。
 4. 更新 `.github/workflows/agent-stage-runner.yml`
    - 增加 `runtime_preflight` 兼容入口，用于新 workflow 合并前验证 PR 分支。
    - 使用独立 job，明确跳过 handoff、gate、commit、label 和 stage 推进。
@@ -38,7 +40,7 @@
 
 | 需求 | 实现 |
 |---|---|
-| R-001 WSL 登录环境 | `run-team-stage.ps1` 使用 `bash -lc` 和显式 PATH |
+| R-001 WSL 登录环境 | `run-team-stage.ps1` 使用 `bash -l` 独立参数和 metadata 校验 |
 | R-002 安全 OpenCode 调用 | 移除无效和危险权限参数 |
 | R-003 Runtime Preflight | runner preflight 模式、独立 workflow 和 Stage Runner 兼容入口 |
 | R-004 Issue 模板 | 当前角色与 manual main merge 文案 |
@@ -87,6 +89,9 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 - 本地真实 Claude ultracode-xhigh Developer 探针：通过。
 - 2 个 warning 来自既有第三方依赖弃用提示。
 - Windows self-hosted Runtime Preflight：待 Draft PR 分支运行后补充。
+- Actions run `28082310344` 发现旧复合命令未执行 runner 且 hidden artifact
+  被忽略；该次绿色状态不作为通过证据，已增加后置证据校验和 artifact
+  fail-closed。
 
 ## 安全确认
 
@@ -101,7 +106,7 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 ## 剩余风险
 
-- 当前只完成 Linux/WSL 本地真实探针。Windows self-hosted
+- 当前只完成 Linux/WSL 本地真实探针。修复后的 Windows self-hosted
   PowerShell→WSL 路径必须在 Draft PR 上取得成功 Actions 证据。
 - 模型服务后续发生认证、配额或模型下线时会 fail closed，需要运维处理。
 

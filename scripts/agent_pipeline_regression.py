@@ -697,6 +697,8 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         "--allowedTools",
         "--preflight-only",
         "PIPELINE_RUNTIME_OK",
+        "PREFLIGHT_TIMEOUT_SECONDS",
+        "timeout --signal=TERM --kill-after=10s",
     )
     missing = [marker for marker in required_runner_markers if marker not in runner]
     forbidden_runner_markers = (
@@ -715,13 +717,14 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
 
     bridge_markers = (
         "scripts/run-pipeline-team-agent.sh",
-        '"-lc"',
-        "$HOME/.opencode/bin",
+        '"--cd", $wslRoot',
+        '"bash", "-l", "scripts/run-pipeline-team-agent.sh"',
         "PreflightOnly",
+        "runtime-preflight-$preflightRole.execution.json",
     )
     bridge_ok = windows_runner is not None and all(
         marker in windows_runner for marker in bridge_markers
-    )
+    ) and '"-lc"' not in windows_runner and "$bashCommand" not in windows_runner
     checks.append(CheckResult(
         "team_runner_windows_wsl_bridge",
         "critical",
@@ -755,6 +758,8 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         "-Stage claude_tester -PreflightOnly",
         "-Stage claude_developer -PreflightOnly",
         ".agent/tmp/runtime-preflight-*",
+        "if-no-files-found: error",
+        "include-hidden-files: true",
     )
     compatibility_preflight_missing = [
         marker
@@ -778,6 +783,8 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         "-Stage claude_developer -PreflightOnly",
         "actions/upload-artifact@v4",
         ".agent/tmp/runtime-preflight-*",
+        "if-no-files-found: error",
+        "include-hidden-files: true",
     )
     preflight_missing = [
         marker for marker in preflight_markers if preflight is None or marker not in preflight

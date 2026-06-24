@@ -465,5 +465,6 @@ jobs:
         with:
           name: runtime-preflight-${{ inputs.runtime_role }}-${{ github.run_id }}
           path: .agent/tmp/runtime-preflight-*
-          if-no-files-found: warn
+          if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7

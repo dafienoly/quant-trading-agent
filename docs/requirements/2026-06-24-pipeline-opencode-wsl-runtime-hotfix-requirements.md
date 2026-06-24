@@ -18,8 +18,8 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 
 ## 目标
 
-1. Windows 到 WSL 的桥接使用登录 shell，并显式补齐受支持的用户 CLI
-   目录。
+1. Windows 到 WSL 的桥接使用登录 shell和独立参数传递，并在 Bash runner
+   中显式补齐受支持的用户 CLI 目录。
 2. Team runner 在调用 OpenCode/Claude 前输出可诊断但不泄露凭据的运行时
    信息。
 3. OpenCode Lead/Tester 不使用无效参数或危险权限跳过。
@@ -36,11 +36,13 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 
 `scripts/run-team-stage.ps1` 必须：
 
-- 使用 `bash -lc`；
-- 在 WSL 命令中显式加入 `$HOME/.opencode/bin` 和 `$HOME/.local/bin`；
+- 使用 `wsl.exe --cd <repo> -- bash -l <script> <args>`，不得把复合 shell
+  命令作为单个 `-c` 参数交给 `wsl.exe`；
+- Bash runner 显式加入 `$HOME/.opencode/bin` 和 `$HOME/.local/bin`；
 - 支持现有 `AGENT_WSL_DISTRO`；
 - 保持相对仓库 runner 调用；
 - 正确透传非零退出码。
+- Preflight 返回 0 后仍必须检查本角色 metadata 文件，不允许无执行证据成功。
 
 ### R-002 安全的 OpenCode 调用
 
@@ -62,6 +64,8 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 - 响应必须包含 `PIPELINE_RUNTIME_OK`；
 - stdout、stderr 和 metadata 仅保存到 `.agent/tmp/**` 并上传 artifact；
 - 任一角色失败则 workflow 失败。
+- CLI discovery 和真实模型调用必须有硬超时。
+- artifact 必须包含隐藏目录，找不到诊断文件时 workflow 失败。
 - 现有 `agent-stage-runner.yml` 必须支持隔离的 `runtime_preflight` stage，
   且不得执行 handoff、gate、commit、label 或后续 stage dispatch。
 
@@ -78,7 +82,8 @@ Issue 模板必须：
 
 自动化测试和 strict regression 必须检查：
 
-- `bash -lc` 和显式 OpenCode PATH；
+- `bash -l` 独立参数桥接和显式 OpenCode PATH；
+- metadata 存在性、探针超时和 hidden artifact fail-closed；
 - 不存在危险权限跳过；
 - Runtime Preflight workflow 存在且覆盖三个角色；
 - Stage Runner 的兼容 preflight 不推进正式 Pipeline；

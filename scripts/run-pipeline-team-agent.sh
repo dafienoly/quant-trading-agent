@@ -24,6 +24,12 @@ OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"
 OPENCODE_TESTER_VARIANT="max"
 CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"
 CLAUDE_DEVELOPER_EFFORT="xhigh"
+PREFLIGHT_TIMEOUT_SECONDS="${AGENT_PREFLIGHT_TIMEOUT_SECONDS:-180}"
+
+if ! [[ "$PREFLIGHT_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "AGENT_PREFLIGHT_TIMEOUT_SECONDS must be a positive integer." >&2
+  exit 2
+fi
 
 case "$stage" in
   claude_lead_plan|claude_lead_review|postmortem|claude_developer|bugfix|claude_tester)
@@ -142,7 +148,9 @@ require_opencode_runtime() {
   local model="$1"
   require_command opencode
 
-  if ! opencode debug skill >"${tmp_dir}/opencode-skills.json" 2>"${tmp_dir}/opencode-skills.stderr"; then
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode debug skill >"${tmp_dir}/opencode-skills.json" \
+    2>"${tmp_dir}/opencode-skills.stderr"; then
     echo "OpenCode skill discovery failed." >&2
     exit 2
   fi
@@ -151,7 +159,9 @@ require_opencode_runtime() {
     exit 2
   fi
 
-  if ! opencode models >"${tmp_dir}/opencode-models.txt" 2>"${tmp_dir}/opencode-models.stderr"; then
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode models >"${tmp_dir}/opencode-models.txt" \
+    2>"${tmp_dir}/opencode-models.stderr"; then
     echo "OpenCode model discovery failed." >&2
     exit 2
   fi
@@ -160,7 +170,8 @@ require_opencode_runtime() {
     exit 2
   fi
 
-  if ! opencode debug agent build >"${tmp_dir}/opencode-build-agent.txt" \
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode debug agent build >"${tmp_dir}/opencode-build-agent.txt" \
     2>"${tmp_dir}/opencode-build-agent.stderr"; then
     echo "OpenCode build agent configuration is unavailable." >&2
     exit 2
@@ -179,7 +190,9 @@ require_claude_runtime() {
     exit 2
   fi
 
-  if ! $CLAUDE_BIN plugin list >"${tmp_dir}/claude-plugins.txt" 2>"${tmp_dir}/claude-plugins.stderr"; then
+  if ! timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    "$CLAUDE_BIN" plugin list >"${tmp_dir}/claude-plugins.txt" \
+    2>"${tmp_dir}/claude-plugins.stderr"; then
     echo "Claude Code plugin discovery failed." >&2
     exit 2
   fi
@@ -252,16 +265,24 @@ run_opencode_preflight() {
   metadata_file="${tmp_dir}/runtime-preflight-${role}.execution.json"
 
   require_opencode_runtime "$model"
-  if ! opencode run \
+  set +e
+  timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    opencode run \
     --model "$model" \
     --variant "$variant" \
     --agent plan \
     --dir "$repo_root" \
     --title "pipeline-runtime-preflight-${role}" \
     "这是只读运行时探针。不要调用任何工具，不要读取或修改文件，只输出 PIPELINE_RUNTIME_OK。" \
-    >"$stdout_file" 2>"$stderr_file"; then
+    >"$stdout_file" 2>"$stderr_file"
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
     cat "$stderr_file" >&2
-    exit 2
+    if [[ $status -eq 124 || $status -eq 137 ]]; then
+      echo "Runtime preflight for '$role' timed out after ${PREFLIGHT_TIMEOUT_SECONDS}s." >&2
+    fi
+    exit "$status"
   fi
   verify_probe_output "$stdout_file" "$role"
   verify_git_state_unchanged "$before"
@@ -276,16 +297,24 @@ run_claude_preflight() {
   metadata_file="${tmp_dir}/runtime-preflight-developer.execution.json"
 
   require_claude_runtime
-  if ! "$CLAUDE_BIN" \
+  set +e
+  timeout --signal=TERM --kill-after=10s "${PREFLIGHT_TIMEOUT_SECONDS}s" \
+    "$CLAUDE_BIN" \
     --print \
     --model "$CLAUDE_DEVELOPER_MODEL" \
     --effort "$CLAUDE_DEVELOPER_EFFORT" \
     --tools "" \
     --no-session-persistence \
     "这是只读运行时探针。不要调用任何工具，不要读取或修改文件，只输出 PIPELINE_RUNTIME_OK。" \
-    >"$stdout_file" 2>"$stderr_file"; then
+    >"$stdout_file" 2>"$stderr_file"
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
     cat "$stderr_file" >&2
-    exit 2
+    if [[ $status -eq 124 || $status -eq 137 ]]; then
+      echo "Runtime preflight for 'developer' timed out after ${PREFLIGHT_TIMEOUT_SECONDS}s." >&2
+    fi
+    exit "$status"
   fi
   verify_probe_output "$stdout_file" "developer"
   verify_git_state_unchanged "$before"

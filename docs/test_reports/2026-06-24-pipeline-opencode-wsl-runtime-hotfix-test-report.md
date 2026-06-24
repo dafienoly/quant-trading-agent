@@ -67,6 +67,8 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 - 探针未修改 git 状态。
 - 未出现新增 skip、xfail 或业务失败。
 - 2 个 warning 为既有第三方依赖弃用提示。
+- Actions run `28082310344` 虽显示 success，但日志没有 Bash 完成输出且
+  artifact 为空，判定为无效证据；已复现并修复 PowerShell→WSL 参数吞失。
 
 ## 缺陷列表
 
@@ -74,7 +76,10 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 | 严重度 | 缺陷 | 修复 |
 |---|---|---|
-| S1 | Windows runner 的非登录 WSL shell 找不到 OpenCode | `bash -lc` + 显式 PATH |
+| S1 | Windows runner 的非登录 WSL shell 找不到 OpenCode | `bash -l` + Bash runner 显式 PATH |
+| S1 | `bash -lc` 复合参数被 `wsl.exe` 吞失却返回 0 | `--cd` + `bash -l` 独立参数，metadata 后置校验 |
+| S1 | hidden artifact 缺失但 step 仅 warning | 启用 hidden files 并设为 missing=error |
+| S2 | Runtime discovery 或模型请求可能挂起 | 增加可配置硬超时 |
 | S1 | Tester/Lead 使用危险权限跳过 | 删除危险参数，使用配置权限 |
 | S2 | 合并前无法独立验证三个 Runtime | 新增 workflow 和 Stage Runner 隔离兼容入口 |
 | S3 | Issue 模板仍描述旧角色和自动合并 | 更新为当前角色与人工合并 |

@@ -191,6 +191,8 @@ def test_team_stage_runner_forces_requested_models_effort_and_skills():
     assert "--dangerously-skip-permissions" not in text
     assert "PIPELINE_RUNTIME_OK" in text
     assert "--preflight-only" in text
+    assert "PREFLIGHT_TIMEOUT_SECONDS" in text
+    assert "timeout --signal=TERM --kill-after=10s" in text
 
 
 def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
@@ -198,9 +200,13 @@ def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
 
     assert "scripts/run-pipeline-team-agent.sh" in text
     assert "wsl.exe" in text
-    assert '"-lc"' in text
-    assert '$HOME/.opencode/bin' in text
+    assert '"--cd", $wslRoot' in text
+    assert '"bash", "-l", "scripts/run-pipeline-team-agent.sh"' in text
+    assert '"-lc"' not in text
+    assert "$bashCommand" not in text
     assert "PreflightOnly" in text
+    assert "Remove-Item -Force -ErrorAction SilentlyContinue $metadataPath" in text
+    assert "runtime-preflight-$preflightRole.execution.json" in text
     assert "CLAUDE_LEAD_AGENT_COMMAND" not in text
     assert "CLAUDE_TESTER_AGENT_COMMAND" not in text
 
@@ -215,6 +221,8 @@ def test_runtime_preflight_workflow_probes_all_fixed_team_roles():
     assert "-Stage claude_developer -PreflightOnly" in text
     assert "actions/upload-artifact@v4" in text
     assert ".agent/tmp/runtime-preflight-*" in text
+    assert "if-no-files-found: error" in text
+    assert "include-hidden-files: true" in text
     assert "git push" not in text
     assert "gh pr merge" not in text
 
@@ -230,6 +238,8 @@ def test_existing_stage_runner_can_preflight_a_pr_branch_without_advancing_pipel
     assert "-Stage claude_tester -PreflightOnly" in text
     assert "-Stage claude_developer -PreflightOnly" in text
     assert ".agent/tmp/runtime-preflight-*" in text
+    assert "if-no-files-found: error" in text
+    assert "include-hidden-files: true" in text
 
 
 def test_agent_issue_template_uses_current_roles_and_manual_merge():

@@ -13,7 +13,7 @@
 
 | 文件 | 变更 |
 |---|---|
-| `scripts/run-team-stage.ps1` | `bash -lc`、显式 PATH、`-PreflightOnly` |
+| `scripts/run-team-stage.ps1` | `bash -l` 独立参数、metadata 后置校验、`-PreflightOnly` |
 | `scripts/run-pipeline-team-agent.sh` | 安全权限、preflight 探针、metadata |
 | `.github/workflows/agent-runtime-preflight.yml` | 三角色真实运行时探针与 artifact |
 | `.github/workflows/agent-stage-runner.yml` | 合并前可调度的隔离 preflight 兼容入口 |
@@ -24,22 +24,27 @@
 
 ## 技术决策
 
-### 1. 登录 shell 加显式 PATH
+### 1. 登录 shell 加独立参数
 
 PowerShell 使用：
 
 ```text
-wsl.exe ... bash -lc '<command>'
+wsl.exe ... --cd <repo> -- bash -l scripts/run-pipeline-team-agent.sh <stage> <mode>
 ```
 
-命令前置：
+避免使用 `bash -lc '<复合命令>'`。Windows PowerShell 到 `wsl.exe` 的参数
+重组可能使复合命令仅返回 0 而未执行 runner。Stage、mode 和脚本路径必须
+作为独立参数传递。
+
+Bash runner 前置：
 
 ```bash
 export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 ```
 
 登录 shell 负责加载用户配置，显式 PATH 为 OpenCode 默认安装目录提供确定性
-保障。二者并用，避免 runner 服务进程与交互终端环境不同。
+保障。PowerShell 在 preflight 返回后检查角色 metadata；即使桥接错误返回 0，
+也会因缺少执行证据而 fail closed。
 
 ### 2. 不使用危险权限跳过
 
@@ -76,6 +81,8 @@ claude --print --model ultracode-xhigh --effort xhigh \
 - checkout 被指定的 ref；
 - 调用仓库 PowerShell bridge；
 - 上传 `.agent/tmp/runtime-preflight-*`；
+- 使用 `include-hidden-files: true` 上传隐藏目录；
+- 诊断文件缺失时 artifact step 失败；
 - 不写 stage report、不提交、不打 label、不创建 PR。
 
 GitHub 只允许调度默认分支已经存在的 workflow 文件。为了让新增 workflow
@@ -96,7 +103,7 @@ workflow_dispatch
   -> agent-runtime-preflight.yml
      或 agent-stage-runner.yml stage=runtime_preflight
   -> scripts/run-team-stage.ps1 -PreflightOnly
-  -> wsl.exe bash -lc + explicit PATH
+  -> wsl.exe --cd + bash -l + 独立参数
   -> run-pipeline-team-agent.sh <stage> --preflight-only
   -> CLI/plugin/model precheck
   -> no-tool model probe
@@ -113,7 +120,9 @@ stage 共享 PATH、CLI 和模型解析逻辑。
 - model catalog 不包含固定模型：fail closed。
 - superpowers/feature-dev 不可见：fail closed。
 - API 认证、额度、代理或模型调用失败：fail closed。
+- CLI discovery 或模型请求超过硬超时：fail closed。
 - 探针未返回 `PIPELINE_RUNTIME_OK`：fail closed。
+- metadata 或 artifact 缺失：fail closed。
 - Preflight 不允许自动 fallback 到其他模型。
 
 ## 安全影响
