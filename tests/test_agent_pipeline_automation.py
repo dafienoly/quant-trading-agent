@@ -202,7 +202,7 @@ def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
     assert "scripts/run-pipeline-team-agent.sh" in text
     assert "wsl.exe" in text
     assert '"--cd", $wslRoot' in text
-    assert '"bash", "-l", "scripts/run-pipeline-team-agent.sh"' in text
+    assert '"bash", "-i", "scripts/run-pipeline-team-agent.sh"' in text
     assert '"-lc"' not in text
     assert "$bashCommand" not in text
     assert "PreflightOnly" in text

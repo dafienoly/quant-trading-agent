@@ -10,7 +10,8 @@
 
 1. `scripts/run-team-stage.ps1`
    - 增加 `-PreflightOnly`。
-   - 将 WSL 启动改为 `--cd` 与 `bash -l` 独立参数调用。
+   - 将 WSL 启动改为 `--cd` 与 `bash -i` 独立参数调用，加载 runner 用户
+     已配置的代理和 CLI 环境。
    - Preflight 返回后强制校验本角色 metadata，防止空执行返回 0。
 2. `scripts/run-pipeline-team-agent.sh`
    - 增加 `--preflight-only`。
@@ -41,7 +42,7 @@
 
 | 需求 | 实现 |
 |---|---|
-| R-001 WSL 登录环境 | `run-team-stage.ps1` 使用 `bash -l` 独立参数和 metadata 校验 |
+| R-001 WSL 运行环境 | `run-team-stage.ps1` 使用 `bash -i` 独立参数和 metadata 校验 |
 | R-002 安全 OpenCode 调用 | 移除无效和危险权限参数 |
 | R-003 Runtime Preflight | runner preflight 模式、独立 workflow 和 Stage Runner 兼容入口 |
 | R-004 Issue 模板 | 当前角色与 manual main merge 文案 |
@@ -96,6 +97,9 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 - Actions run `28082773049` 真实执行后发现 OpenCode 默认 renderer 在 stdout
   重定向场景超时；同模型诊断使用 JSON event stream 均约 5 秒成功，已将
   preflight 和正式 Lead/Tester 调用固定为 `--format json`。
+- Actions run `28083279232` 进一步确认 Windows service 启动的非交互 WSL
+  没有加载 runner 用户代理环境；交互式 WSL 同模型正常。桥接已改为
+  `bash -i`，不在仓库硬编码代理或凭据；同时避免 login logout 覆盖退出码。
 
 ## 安全确认
 

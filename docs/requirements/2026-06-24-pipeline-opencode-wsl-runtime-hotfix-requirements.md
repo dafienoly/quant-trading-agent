@@ -18,7 +18,7 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 
 ## 目标
 
-1. Windows 到 WSL 的桥接使用登录 shell和独立参数传递，并在 Bash runner
+1. Windows 到 WSL 的桥接使用交互式 shell 和独立参数传递，并在 Bash runner
    中显式补齐受支持的用户 CLI 目录。
 2. Team runner 在调用 OpenCode/Claude 前输出可诊断但不泄露凭据的运行时
    信息。
@@ -36,8 +36,10 @@ Issue 模板仍描述旧 Claude A/B/C 角色及已废止的自动合并行为。
 
 `scripts/run-team-stage.ps1` 必须：
 
-- 使用 `wsl.exe --cd <repo> -- bash -l <script> <args>`，不得把复合 shell
+- 使用 `wsl.exe --cd <repo> -- bash -i <script> <args>`，不得把复合 shell
   命令作为单个 `-c` 参数交给 `wsl.exe`；
+- 加载 runner 用户的交互式 WSL 环境，使其既有代理、认证辅助变量和 CLI
+  配置在 self-hosted service 中生效；仓库不得硬编码这些值；
 - Bash runner 显式加入 `$HOME/.opencode/bin` 和 `$HOME/.local/bin`；
 - 支持现有 `AGENT_WSL_DISTRO`；
 - 保持相对仓库 runner 调用；
@@ -84,7 +86,7 @@ Issue 模板必须：
 
 自动化测试和 strict regression 必须检查：
 
-- `bash -l` 独立参数桥接和显式 OpenCode PATH；
+- `bash -i` 独立参数桥接、用户运行时环境和显式 OpenCode PATH；
 - metadata 存在性、探针超时和 hidden artifact fail-closed；
 - OpenCode 非交互 JSON 输出格式；
 - 不存在危险权限跳过；

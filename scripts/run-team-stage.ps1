@@ -54,7 +54,7 @@ $wslArgs = @()
 if ($env:AGENT_WSL_DISTRO) {
   $wslArgs += @("-d", $env:AGENT_WSL_DISTRO)
 }
-$wslArgs += @("--cd", $wslRoot, "--", "bash", "-l", "scripts/run-pipeline-team-agent.sh", $Stage)
+$wslArgs += @("--cd", $wslRoot, "--", "bash", "-i", "scripts/run-pipeline-team-agent.sh", $Stage)
 if ($PreflightOnly) {
   $wslArgs += "--preflight-only"
 }

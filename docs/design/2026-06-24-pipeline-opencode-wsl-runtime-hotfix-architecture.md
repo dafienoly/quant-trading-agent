@@ -13,7 +13,7 @@
 
 | 文件 | 变更 |
 |---|---|
-| `scripts/run-team-stage.ps1` | `bash -l` 独立参数、metadata 后置校验、`-PreflightOnly` |
+| `scripts/run-team-stage.ps1` | `bash -i` 独立参数、metadata 后置校验、`-PreflightOnly` |
 | `scripts/run-pipeline-team-agent.sh` | 安全权限、preflight 探针、metadata |
 | `.github/workflows/agent-runtime-preflight.yml` | 三角色真实运行时探针与 artifact |
 | `.github/workflows/agent-stage-runner.yml` | 合并前可调度的隔离 preflight 兼容入口 |
@@ -29,7 +29,7 @@
 PowerShell 使用：
 
 ```text
-wsl.exe ... --cd <repo> -- bash -l scripts/run-pipeline-team-agent.sh <stage> <mode>
+wsl.exe ... --cd <repo> -- bash -i scripts/run-pipeline-team-agent.sh <stage> <mode>
 ```
 
 避免使用 `bash -lc '<复合命令>'`。Windows PowerShell 到 `wsl.exe` 的参数
@@ -42,9 +42,11 @@ Bash runner 前置：
 export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 ```
 
-登录 shell 负责加载用户配置，显式 PATH 为 OpenCode 默认安装目录提供确定性
-保障。PowerShell 在 preflight 返回后检查角色 metadata；即使桥接错误返回 0，
-也会因缺少执行证据而 fail closed。
+交互式 shell 负责加载 runner 用户的 `.bashrc` 配置，包括 self-hosted WSL
+已配置的代理环境；不使用 login 模式，避免 `.bash_logout` 的终端清理命令
+覆盖 runner 真实退出码。显式 PATH 为 OpenCode 默认安装目录提供确定性保障。
+代理、认证和凭据不写入仓库。PowerShell 在 preflight 返回后检查角色
+metadata；即使桥接错误返回 0，也会因缺少执行证据而 fail closed。
 
 ### 2. 不使用危险权限跳过
 
@@ -108,7 +110,7 @@ workflow_dispatch
   -> agent-runtime-preflight.yml
      或 agent-stage-runner.yml stage=runtime_preflight
   -> scripts/run-team-stage.ps1 -PreflightOnly
-  -> wsl.exe --cd + bash -l + 独立参数
+  -> wsl.exe --cd + bash -i + 独立参数
   -> run-pipeline-team-agent.sh <stage> --preflight-only
   -> CLI/plugin/model precheck
   -> no-tool model probe
@@ -125,6 +127,8 @@ stage 共享 PATH、CLI 和模型解析逻辑。
 - model catalog 不包含固定模型：fail closed。
 - superpowers/feature-dev 不可见：fail closed。
 - API 认证、额度、代理或模型调用失败：fail closed。
+- Windows service 未继承 WSL 用户代理环境：通过交互式 shell 加载。
+- Login shell 的 `.bash_logout` 覆盖退出码：不启用 login 模式。
 - 默认 renderer 在非交互重定向中挂起：通过固定 JSON event stream 避免。
 - CLI discovery 或模型请求超过硬超时：fail closed。
 - 探针未返回 `PIPELINE_RUNTIME_OK`：fail closed。

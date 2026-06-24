@@ -719,7 +719,7 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
     bridge_markers = (
         "scripts/run-pipeline-team-agent.sh",
         '"--cd", $wslRoot',
-        '"bash", "-l", "scripts/run-pipeline-team-agent.sh"',
+        '"bash", "-i", "scripts/run-pipeline-team-agent.sh"',
         "PreflightOnly",
         "runtime-preflight-$preflightRole.execution.json",
     )

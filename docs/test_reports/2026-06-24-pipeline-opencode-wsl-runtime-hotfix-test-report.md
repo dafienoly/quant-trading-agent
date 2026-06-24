@@ -79,11 +79,13 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 | 严重度 | 缺陷 | 修复 |
 |---|---|---|
-| S1 | Windows runner 的非登录 WSL shell 找不到 OpenCode | `bash -l` + Bash runner 显式 PATH |
+| S1 | Windows runner 的非交互 WSL shell 找不到 OpenCode | `bash -i` + Bash runner 显式 PATH |
 | S1 | `bash -lc` 复合参数被 `wsl.exe` 吞失却返回 0 | `--cd` + `bash -l` 独立参数，metadata 后置校验 |
 | S1 | hidden artifact 缺失但 step 仅 warning | 启用 hidden files 并设为 missing=error |
 | S2 | Runtime discovery 或模型请求可能挂起 | 增加可配置硬超时 |
 | S1 | OpenCode 默认 renderer 在重定向 stdout 时不退出 | 固定 JSON event stream |
+| S1 | Windows runner service 未加载 WSL 用户代理环境 | 交互式 shell 加载 runner 用户配置 |
+| S1 | Login shell 的 `.bash_logout` 将成功改写为退出码 1 | 不启用 login 模式 |
 | S1 | Tester/Lead 使用危险权限跳过 | 删除危险参数，使用配置权限 |
 | S2 | 合并前无法独立验证三个 Runtime | 新增 workflow 和 Stage Runner 隔离兼容入口 |
 | S3 | Issue 模板仍描述旧角色和自动合并 | 更新为当前角色与人工合并 |
