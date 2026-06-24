@@ -334,8 +334,9 @@ def test_pr_metadata_is_written_to_state_and_current_task(tmp_path: Path):
 def test_issue_bootstrap_queries_pr_state_before_reuse():
     text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
 
-    assert "gh pr view $branch --json number,state,merged,headRefName,url" in text
+    assert "gh pr view $branch --json number,state,headRefName,url" in text
     assert "$existingPr.state -eq \"OPEN\"" in text
+    assert "$existingPr.state -eq \"MERGED\"" in text
     assert "$existingPr.state -eq \"CLOSED\"" in text
     assert "set-pr-metadata" in text
 
