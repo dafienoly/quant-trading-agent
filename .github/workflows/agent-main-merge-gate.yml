@@ -153,10 +153,10 @@ jobs:
           if ($pr) {
             gh pr edit $pr --add-label "stage:manual-approval-required"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh pr comment $pr --body "自动化 Merge Gate 已按安全策略阻断。请查看 .agent/gates/auto_merge_gate.json、验收报告和本次 Actions 运行中的 Pipeline Dashboard artifact；main 仍需人工审阅和手动合并。"
+            gh pr comment $pr --body "Merge Gate blocked by safety policy. See .agent/gates/auto_merge_gate.json, acceptance report, and the Pipeline Dashboard artifact in this Actions run. main still requires manual review and merge."
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          Write-Host "自动化策略要求人工审批；PR 已标记，workflow 不会自动合并。"
+          Write-Host "Safety policy requires manual approval. PR has been marked. Workflow will not auto-merge."
           exit 0
 
       - name: Mark PR ready for manual review when gate passes
@@ -172,9 +172,9 @@ jobs:
           }
           gh pr edit $pr --add-label "stage:manual-approval-required"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh pr comment $pr --body "自动化 Merge Gate 已通过基础检查，但本仓库禁止自动合并 main。该 PR 需要人工审阅和手动合并。请查看 .agent/gates/auto_merge_gate.json 与验收报告后再决定。"
+          gh pr comment $pr --body "Merge Gate passed basic checks, but this repo prohibits auto-merge of main. This PR requires manual review and merge. See .agent/gates/auto_merge_gate.json and acceptance report before deciding."
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Host "门禁已通过；PR 仍需人工审阅和手动合并。"
+          Write-Host "Gate passed. PR still requires manual review and merge."
 
       - name: Generate Pipeline Diagnostic Report
         if: always()
