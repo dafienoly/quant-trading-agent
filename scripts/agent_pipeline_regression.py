@@ -32,6 +32,8 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "agent-stage-runner.yml"
 RUNNER_REFERENCE = REPO_ROOT / "docs" / "ops" / "agent-runners" / "run-codex-stage.ps1.reference"
 GITIGNORE_PATH = REPO_ROOT / ".gitignore"
 PR_VALIDATION_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "agent-pr-validation.yml"
+TEAM_RUNNER_PATH = REPO_ROOT / "scripts" / "run-pipeline-team-agent.sh"
+WINDOWS_TEAM_RUNNER_PATH = REPO_ROOT / "scripts" / "run-team-stage.ps1"
 
 CANONICAL_STAGES = (
     "codex_pm",
@@ -623,7 +625,7 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
 
 
 def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
-    """Verify agent-issue-bootstrap.yml passes required real/strict env vars."""
+    """Verify bootstrap keeps Codex env vars and uses the fixed Team runner."""
     checks: list[CheckResult] = []
     text = _read(repo_root / ".github" / "workflows" / "agent-issue-bootstrap.yml")
     if text is None:
@@ -636,8 +638,6 @@ def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
         "AGENT_REAL_CODEX_PM_STRICT",
         "AGENT_REAL_CODEX_ARCHITECT",
         "AGENT_REAL_CODEX_ARCHITECT_STRICT",
-        "AGENT_REAL_CLAUDE_LEAD_PLAN",
-        "AGENT_REAL_CLAUDE_LEAD_PLAN_STRICT",
     ]
     for var in required_vars:
         # Check for the env var definition in the file
@@ -647,6 +647,83 @@ def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
         else:
             checks.append(CheckResult(f"bootstrap_env_{var}", "critical", False, f"bootstrap missing {var}"))
 
+    team_markers = (
+        "run-team-stage.ps1",
+        "-Stage claude_lead_plan",
+        "Run OpenCode GLM 5.2 team-plan",
+    )
+    missing = [marker for marker in team_markers if marker not in text]
+    checks.append(CheckResult(
+        "bootstrap_fixed_team_lead_runner",
+        "critical",
+        not missing,
+        "bootstrap 使用固定 OpenCode Team Lead runner"
+        if not missing
+        else f"bootstrap 缺少 Team Lead runner 标记：{missing}",
+    ))
+
+    return checks
+
+
+def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
+    """Verify fixed model, effort, workflow, and superpowers routing."""
+    checks: list[CheckResult] = []
+    runner = _read(repo_root / TEAM_RUNNER_PATH.relative_to(REPO_ROOT))
+    windows_runner = _read(repo_root / WINDOWS_TEAM_RUNNER_PATH.relative_to(REPO_ROOT))
+    workflow = _read(repo_root / WORKFLOW_PATH.relative_to(REPO_ROOT))
+
+    if runner is None:
+        return [CheckResult("team_runner_exists", "critical", False, "Team runner 不存在")]
+    checks.append(CheckResult("team_runner_exists", "critical", True, "Team runner 已存在"))
+
+    required_runner_markers = (
+        'OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"',
+        'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"',
+        'OPENCODE_TESTER_VARIANT="max"',
+        'CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"',
+        'CLAUDE_DEVELOPER_EFFORT="xhigh"',
+        "using-superpowers",
+        "verification-before-completion",
+        "systematic-debugging",
+        "/feature-dev",
+        "superpowers:using-superpowers",
+        "--permission-mode dontAsk",
+        "--allowedTools",
+    )
+    missing = [marker for marker in required_runner_markers if marker not in runner]
+    checks.append(CheckResult(
+        "team_runner_fixed_runtime_contract",
+        "critical",
+        not missing and "--dangerously-skip-permissions" not in runner,
+        "Team runner 已固定模型、effort、workflow 与 superpowers"
+        if not missing and "--dangerously-skip-permissions" not in runner
+        else f"Team runner 缺少标记或启用了危险权限跳过：{missing}",
+    ))
+
+    bridge_ok = windows_runner is not None and "scripts/run-pipeline-team-agent.sh" in windows_runner
+    checks.append(CheckResult(
+        "team_runner_windows_wsl_bridge",
+        "critical",
+        bridge_ok,
+        "Windows runner 使用仓库内 WSL Team runner"
+        if bridge_ok
+        else "Windows runner 未使用仓库内 WSL Team runner",
+    ))
+
+    workflow_ok = (
+        workflow is not None
+        and "run-team-stage.ps1" in workflow
+        and "CLAUDE_TESTER_AGENT_COMMAND" not in workflow
+        and "CLAUDE_LEAD_AGENT_COMMAND" not in workflow
+    )
+    checks.append(CheckResult(
+        "workflow_fixed_team_routing",
+        "critical",
+        workflow_ok,
+        "workflow 不再允许替换 Team Lead/Tester 执行器"
+        if workflow_ok
+        else "workflow 仍存在可替换的 Team Lead/Tester 路由",
+    ))
     return checks
 
 def check_forbidden_markers(repo_root: Path) -> list[CheckResult]:
@@ -738,6 +815,7 @@ def collect_checks(repo_root: Path, base: str = "origin/main", strict: bool = Fa
     all_checks.extend(run_pipeline_simulation(repo_root))
     all_checks.extend(check_forbidden_markers(repo_root))
     all_checks.extend(check_bootstrap_env(repo_root))
+    all_checks.extend(check_team_runtime_contract(repo_root))
 
     critical_fail = sum(1 for c in all_checks if c.severity == "critical" and not c.passed)
     warning_fail = sum(1 for c in all_checks if c.severity == "warning" and not c.passed)

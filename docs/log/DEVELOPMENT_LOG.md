@@ -923,3 +923,30 @@ Feedback 基础提交能力可用：`POST /product/feedback` 能生成结构化 
 |---|---|
 | `.venv\Scripts\python.exe -m pytest tests/test_bug_auto_fix.py -q --basetemp=runtime\pytest-tmp` | 25 passed |
 | `.venv\Scripts\python.exe -m ruff check src/product_app/bug_fix_agent.py src/product_app/bug_fix_workflow.py src/product_app/bug_watchdog.py src/product_app/service_manager.py src/api/product_routes.py tests/test_bug_auto_fix.py` | passed |
+
+---
+
+## 十五、2026-06-24 GitHub Pipeline 混合 Agent 团队路由
+
+### 15.1 完成内容
+
+1. Team Leader 改为 OpenCode `opencode-go/glm-5.2`。
+2. Developer/BugFix 保持 Claude Code，固定
+   `ultracode-xhigh`、`effort=xhigh`、`feature-dev` 和 `superpowers`。
+3. Test Engineer 改为 OpenCode `opencode-go/deepseek-v4-pro`，固定
+   `variant=max` 和 `superpowers`。
+4. GitHub workflows 改为调用仓库内 Windows/WSL Team runner，不再允许
+   通过 Team command 变量替换执行者。
+5. 保留旧 `claude_*` stage ID 和 labels 作为兼容协议。
+6. 严格回归新增固定模型、effort、workflow、skill 和 WSL bridge 检查。
+
+### 15.2 验证记录
+
+| 验证项 | 结果 |
+|---|---|
+| Pipeline 聚焦测试 | 79 passed in 3.15s |
+| Pipeline 严格回归 | PASS |
+| 全量测试 | 888 passed, 6 skipped, 2 warnings in 60.25s |
+| Ruff / py_compile / Bash / YAML | passed |
+| Restricted modules | 无改动 |
+| Main merge | 继续人工审阅和手动合并 |

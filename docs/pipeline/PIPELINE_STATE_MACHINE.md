@@ -9,14 +9,14 @@ pipeline.
 |---|---|---|---|---|
 | `stage:pm-pending` | Codex A PM | requirements document | `stage:arch-pending` | stays pending |
 | `stage:arch-pending` | Codex B Architect | architecture document | `stage:team-plan-pending` | `stage:pm-pending` |
-| `stage:team-plan-pending` | Claude Code A lead | phase plan | `stage:team-dev-pending` | `stage:arch-pending` |
-| `stage:team-dev-pending` | Claude Code B developer | phase code, tests, dev report | `stage:team-test-pending` | stays pending |
-| `stage:team-test-pending` | Claude Code C tester | phase test report | `stage:team-dev-pending` or `stage:claude-lead-review-pending` | `stage:fix-pending` |
-| `stage:claude-lead-review-pending` | Claude Code A lead | team lead review | `stage:codex-review-pending` | `stage:team-dev-pending` |
+| `stage:team-plan-pending` | OpenCode GLM 5.2 lead | phase plan | `stage:team-dev-pending` | `stage:arch-pending` |
+| `stage:team-dev-pending` | Claude Code ultracode-xhigh developer | phase code, tests, dev report | `stage:team-test-pending` | stays pending |
+| `stage:team-test-pending` | OpenCode DeepSeek V4 Pro max tester | phase test report | `stage:team-dev-pending` or `stage:claude-lead-review-pending` | `stage:fix-pending` |
+| `stage:claude-lead-review-pending` | OpenCode GLM 5.2 lead | team lead review | `stage:codex-review-pending` | `stage:team-dev-pending` |
 | `stage:fix-pending` | BugFix Agent | fix branch/report/regression tests | `stage:team-test-pending` | `stage:blocked` |
 | `stage:codex-review-pending` | Codex B Reviewer | final architecture review | `stage:pm-acceptance-pending` | `stage:team-plan-pending`, `stage:team-dev-pending`, or `stage:postmortem-pending` |
 | `stage:pm-acceptance-pending` | Codex A Acceptance | acceptance report | `stage:merge-ready` | `stage:arch-pending` |
-| `stage:postmortem-pending` | Claude Code A lead | three-strike postmortem | `stage:blocked` or user-approved restart | stays pending |
+| `stage:postmortem-pending` | OpenCode GLM 5.2 lead | three-strike postmortem | `stage:blocked` or user-approved restart | stays pending |
 | `stage:merge-ready` | Merge Gate | auto-merge gate JSON | merged or manual approval | `stage:manual-approval-required` |
 
 ## Terminal States
@@ -52,9 +52,9 @@ checks still apply.
 1. A later stage must not start until earlier required reports exist.
 2. Test failure creates `feedback/bugs/open/BUG_*.md` and `.json` when the issue
    is reproducible.
-3. Claude C phase pass returns to `stage:team-dev-pending` until
+3. OpenCode Test Engineer phase pass returns to `stage:team-dev-pending` until
    `team_pipeline.all_phases_tested=true`.
-4. Codex B review may start only after Claude Code A lead review evidence exists.
+4. Codex B review may start only after OpenCode Lead review evidence exists.
 5. Codex B review failures increment `team_pipeline.codex_review_attempts`.
 6. Three Codex B review failures move the pipeline to `stage:postmortem-pending`.
 7. Review or acceptance failures use `fix/<feature>/<issue>` or

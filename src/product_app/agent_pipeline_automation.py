@@ -70,7 +70,10 @@ REPORT_GLOBS_BY_STAGE: dict[str, list[str]] = {
     "team_plan": ["docs/dev_plans/*-{feature_id}*team-plan.md"],
     "phase_dev": ["docs/dev_reports/*-{feature_id}*phase-*dev-report.md"],
     "phase_test": ["docs/test_reports/*-{feature_id}*phase-*test-report.md"],
-    "claude_lead_review": ["docs/review/*-{feature_id}*claude-lead-review.md"],
+    "claude_lead_review": [
+        "docs/review/*-{feature_id}*opencode-lead-review.md",
+        "docs/review/*-{feature_id}*claude-lead-review.md",
+    ],
     "codex_review": ["docs/review/*-{feature_id}*codex-review*.md"],
     "acceptance": ["docs/acceptance/*-{feature_id}*acceptance.md"],
 }
@@ -294,15 +297,17 @@ def build_feature_state(
         "phase_test_report_pattern": (
             f"docs/test_reports/{today_slug()}-{feature.feature_id}-phase-<n>-test-report.md"
         ),
-        "claude_lead_review": f"docs/review/{today_slug()}-{feature.feature_id}-claude-lead-review.md",
+        "claude_lead_review": (
+            f"docs/review/{today_slug()}-{feature.feature_id}-opencode-lead-review.md"
+        ),
         "codex_review": f"docs/review/{today_slug()}-{feature.feature_id}-codex-review-r1.md",
         "acceptance": f"docs/acceptance/{today_slug()}-{feature.feature_id}-acceptance.md",
         "user_guide": f"docs/user_guides/{today_slug()}-{feature.feature_id}-user-guide.md",
         "postmortem": f"docs/postmortems/{today_slug()}-{feature.feature_id}-r3-failure.md",
     }
     state["team_pipeline"] = {
-        "mode": "claude_first_review",
-        "default_team_id": "claude-team-a",
+        "mode": "opencode_lead_claude_dev_opencode_test",
+        "default_team_id": "hybrid-team-a",
         "max_parallel_teams": 3,
         "max_codex_review_attempts": 3,
         "current_phase": 1,
@@ -312,9 +317,9 @@ def build_feature_state(
     state["agent_roles"] = {
         "codex_a": ["pm", "acceptance"],
         "codex_b": ["architecture", "codex_review"],
-        "claude_a": ["team_plan", "claude_lead_review", "team_performance"],
-        "claude_b": ["phase_dev"],
-        "claude_c": ["phase_test"],
+        "opencode_lead": ["team_plan", "team_lead_review", "team_performance"],
+        "claude_developer": ["phase_dev", "bugfix"],
+        "opencode_tester": ["phase_test"],
     }
     state["manual_approval_required_for"] = [
         "restricted-module",
@@ -749,37 +754,6 @@ def sync_state_from_gates(root: Path, *, dry_run: bool = False) -> dict[str, Any
         "diagnostics": diagnostics,
     }
 
-    current_stage = state.get("current_stage", "")
-    cs_base = current_stage.replace("_pending", "").replace("_in_progress", "")
-    if cs_base != expected_label and any(passed_stages.values()):
-        state["current_stage"] = expected_pending
-        if current_stage != expected_pending:
-            changes.append(f"current_stage {current_stage!r} \u2192 {expected_pending!r}")
-
-    # 3. Update team_pipeline.all_phases_tested
-    tp = dict(state.get("team_pipeline", {}))
-    pt_passed = passed_stages.get("phase_test", False)
-    if pt_passed and not tp.get("all_phases_tested", False):
-        tp["all_phases_tested"] = True
-        changes.append("team_pipeline.all_phases_tested \u2192 true")
-    state["team_pipeline"] = tp
-
-    if not changes:
-        return {"updated": False, "changes_made": [], "diagnostics": diagnostics}
-
-    if not dry_run:
-        write_json(root / STATE_PATH, state)
-        (root / CURRENT_TASK_PATH).write_text(
-            yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8"
-        )
-
-    return {
-        "updated": True,
-        "changes_made": changes,
-        "diagnostics": diagnostics,
-    }
-
-
 def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
     legacy_stage_map = {
         "pm_architect": "codex_pm",
@@ -801,17 +775,17 @@ def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
     if stage == "codex_pm":
         return common + f"""\nTask:\n- Act as Codex A, the PM Agent.\n- Produce the PM requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Include goals, non-goals, feature list, acceptance criteria, safety constraints, and user-facing success criteria.\n- Do not write architecture or product code in this stage.\n"""
     if stage == "codex_architect":
-        return common + f"""\nTask:\n- Read the requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Produce the architecture design at `{docs.get('architecture', '<architecture-doc>')}`.\n- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for Claude Team A/B/C.\n- Do not write product code in this stage.\n"""
+        return common + f"""\nTask:\n- Read the requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Produce the architecture design at `{docs.get('architecture', '<architecture-doc>')}`.\n- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / Claude Developer / OpenCode Tester.\n- Do not write product code in this stage.\n"""
     if stage == "claude_lead_plan":
-        return common + f"""\nTask:\n- Act as Claude Code A, the small-team lead.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to Claude Code B for the next phase until all phases are complete.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.\n- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to Claude Code Developer for the next phase until all phases are complete.\n"""
     if stage == "claude_developer":
-        return common + f"""\nTask:\n- Act as Claude Code B, the phase developer.\n- Implement only the current phase from `{docs.get('team_plan', '<team-plan>')}`.\n- Start from `{branch}` and create `feat/{feature_id}/phase-<n>-<module>`.\n- Write focused tests first where practical.\n- Produce `{docs.get('phase_dev_report_pattern', '<phase-dev-report>')}` with exact self-test commands.\n- After Claude Code C verifies the phase, continue with the next planned phase until all phases are tested.\n- Do not touch restricted trading modules unless the architecture document explicitly permits it.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_developer`; actual role: Claude Code Developer.\n- Runtime is fixed to `ultracode-xhigh`, `effort=xhigh`, feature-dev workflow, and superpowers.\n- Implement only the current phase from `{docs.get('team_plan', '<team-plan>')}`.\n- In GitHub Stage Runner mode, remain on the checked-out PR branch and let the workflow commit/push; in manual mode follow `docs/process/BRANCH_WORKFLOW.md`.\n- Write focused failing tests first where practical.\n- Produce `{docs.get('phase_dev_report_pattern', '<phase-dev-report>')}` with exact self-test commands.\n- After OpenCode Test Engineer verifies the phase, continue with the next planned phase until all phases are tested.\n- Do not touch restricted trading modules unless the architecture document explicitly permits it.\n"""
     if stage == "claude_tester":
-        return common + f"""\nTask:\n- Act as Claude Code C, the phase tester.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, and diff.\n- Produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}`.\n- If the phase passes, route back to Claude Code B for the next phase unless all phases are complete.\n- Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.\n- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and superpowers.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, and diff.\n- Use verification-before-completion; use systematic-debugging for failures.\n- Return to the original branch, delete the temporary test branch, and produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}` without changing business code on the original branch.\n- If the phase passes, route back to Claude Code Developer for the next phase unless all phases are complete.\n- Generate `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
     if stage == "claude_lead_review":
-        return common + f"""\nTask:\n- Act as Claude Code A, the small-team lead reviewer.\n- Review all phase development reports and test reports.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<claude-lead-review>')}`.\n- If any phase is incomplete, route back to Claude Code B/C instead of escalating to Codex B.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.\n- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.\n- Review all phase development reports and test reports.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<opencode-lead-review>')}`.\n- If any phase is incomplete, route back to Claude Code Developer / OpenCode Test Engineer instead of escalating to Codex B.\n"""
     if stage == "codex_reviewer":
-        return common + f"""\nTask:\n- Act as Codex B, the final Architect Reviewer.\n- Review code only after `{docs.get('claude_lead_review', '<claude-lead-review>')}` confirms all phases passed.\n- Produce `{docs.get('codex_review', '<codex-review>')}`.\n- Conclusion must be APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED.\n- If review fails, return structured feedback to Claude Code A. After {max_attempts} failed Codex reviews, trigger the team incompetence alert and postmortem gate.\n"""
+        return common + f"""\nTask:\n- Act as Codex B, the final Architect Reviewer.\n- Review code only after `{docs.get('claude_lead_review', '<opencode-lead-review>')}` confirms all phases passed.\n- Produce `{docs.get('codex_review', '<codex-review>')}`.\n- Conclusion must be APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED.\n- If review fails, return structured feedback to OpenCode Team Leader. After {max_attempts} failed Codex reviews, trigger the team incompetence alert and postmortem gate.\n"""
     if stage == "codex_acceptance":
         return common + f"""\nTask:\n- Perform PM acceptance from the user perspective.\n- Produce `{docs.get('acceptance', '<acceptance-report>')}`.\n- Conclusion must be one of: ACCEPTED, ACCEPTED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED.\n- ACCEPTED_WITH_NOTES is acceptable only for non-blocking notes.\n- CHANGES_REQUESTED or BLOCKED must fail the acceptance gate.\n"""
     if stage == "bugfix":

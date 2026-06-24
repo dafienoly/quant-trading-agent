@@ -22,6 +22,8 @@ from src.product_app.agent_pipeline_automation import (
 
 RUNNER_REFERENCE = Path("docs/ops/agent-runners/run-codex-stage.ps1.reference")
 PR_VALIDATION_WORKFLOW = Path(".github/workflows/agent-pr-validation.yml")
+TEAM_STAGE_RUNNER = Path("scripts/run-pipeline-team-agent.sh")
+WINDOWS_TEAM_STAGE_RUNNER = Path("scripts/run-team-stage.ps1")
 
 
 def _valid_requirements(feature_id: str = "agent-pipeline") -> str:
@@ -140,8 +142,8 @@ def test_feature_state_writes_current_task_and_handoff(tmp_path: Path):
     assert (tmp_path / ".agent" / "current_task.yaml").exists()
     text = handoff.read_text(encoding="utf-8")
     assert "Feature: agent-pipeline" in text
-    assert "Claude Code B" in text
-    assert "feat/agent-pipeline/phase-<n>-<module>" in text
+    assert "Claude Code Developer" in text
+    assert "ultracode-xhigh" in text
 
 
 def test_feature_state_contains_team_pipeline_defaults():
@@ -152,11 +154,64 @@ def test_feature_state_contains_team_pipeline_defaults():
         issue_number=12,
     )
 
-    assert state["team_pipeline"]["mode"] == "claude_first_review"
+    assert state["team_pipeline"]["mode"] == "opencode_lead_claude_dev_opencode_test"
     assert state["team_pipeline"]["all_phases_tested"] is False
     assert state["team_pipeline"]["max_codex_review_attempts"] == 3
     assert state["agent_roles"]["codex_a"] == ["pm", "acceptance"]
-    assert state["agent_roles"]["claude_b"] == ["phase_dev"]
+    assert state["agent_roles"]["opencode_lead"] == [
+        "team_plan",
+        "team_lead_review",
+        "team_performance",
+    ]
+    assert state["agent_roles"]["claude_developer"] == ["phase_dev", "bugfix"]
+    assert state["agent_roles"]["opencode_tester"] == ["phase_test"]
+
+
+def test_team_stage_runner_forces_requested_models_effort_and_skills():
+    text = TEAM_STAGE_RUNNER.read_text(encoding="utf-8")
+
+    assert 'OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"' in text
+    assert 'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"' in text
+    assert 'OPENCODE_TESTER_VARIANT="max"' in text
+    assert 'CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"' in text
+    assert 'CLAUDE_DEVELOPER_EFFORT="xhigh"' in text
+    assert "--variant" in text
+    assert "--model" in text
+    assert "--effort" in text
+    assert "using-superpowers" in text
+    assert "verification-before-completion" in text
+    assert "systematic-debugging" in text
+    assert "/feature-dev" in text
+    assert "superpowers:using-superpowers" in text
+    assert "--permission-mode dontAsk" in text
+    assert "--allowedTools" in text
+    assert "--dangerously-skip-permissions" not in text
+
+
+def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
+    text = WINDOWS_TEAM_STAGE_RUNNER.read_text(encoding="utf-8")
+
+    assert "scripts/run-pipeline-team-agent.sh" in text
+    assert "wsl.exe" in text
+    assert "CLAUDE_LEAD_AGENT_COMMAND" not in text
+    assert "CLAUDE_TESTER_AGENT_COMMAND" not in text
+
+
+def test_github_workflows_use_repository_owned_team_runner():
+    stage_runner = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
+    bootstrap = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
+
+    assert "run-team-stage.ps1" in stage_runner
+    assert "run-team-stage.ps1" in bootstrap
+    assert '"claude_lead_plan" { & .\\scripts\\run-team-stage.ps1' in stage_runner
+    assert '"claude_developer" { & .\\scripts\\run-team-stage.ps1' in stage_runner
+    assert '"claude_tester" { & .\\scripts\\run-team-stage.ps1' in stage_runner
+    assert '"claude_lead_review" { & .\\scripts\\run-team-stage.ps1' in stage_runner
+    assert '"bugfix" { & .\\scripts\\run-team-stage.ps1' in stage_runner
+    assert "CLAUDE_TESTER_AGENT_COMMAND" not in stage_runner
+    assert "CLAUDE_LEAD_AGENT_COMMAND" not in stage_runner
+    assert '".github",' in stage_runner
+    assert '"scripts",' in stage_runner
 
 
 def test_feature_state_branch_includes_issue_number_for_restart_isolation():
@@ -332,8 +387,34 @@ def test_claude_tester_handoff_routes_back_to_developer_until_all_phases_pass(tm
 
     handoff = write_handoff(tmp_path, "claude_tester").read_text(encoding="utf-8")
 
-    assert "Claude Code C" in handoff
-    assert "route back to Claude Code B for the next phase unless all phases are complete" in handoff
+    assert "OpenCode Test Engineer" in handoff
+    assert "opencode-go/deepseek-v4-pro" in handoff
+    assert "variant=max" in handoff
+    assert "superpowers" in handoff
+    assert "route back to Claude Code Developer for the next phase unless all phases are complete" in handoff
+
+
+def test_team_lead_and_developer_handoffs_pin_runtime_contract(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] Agent Pipeline",
+        feature_id="agent-pipeline",
+        risk_level="docs-only",
+        issue_number=12,
+    )
+    write_feature_state(tmp_path, state)
+
+    lead = write_handoff(tmp_path, "claude_lead_plan").read_text(encoding="utf-8")
+    developer = write_handoff(tmp_path, "claude_developer").read_text(encoding="utf-8")
+    review = write_handoff(tmp_path, "claude_lead_review").read_text(encoding="utf-8")
+
+    assert "OpenCode Team Leader" in lead
+    assert "opencode-go/glm-5.2" in lead
+    assert "Claude Code Developer" in developer
+    assert "ultracode-xhigh" in developer
+    assert "effort=xhigh" in developer
+    assert "feature-dev workflow" in developer
+    assert "superpowers" in developer
+    assert "OpenCode Team Leader" in review
 
 
 def test_required_report_gate_finds_feature_reports(tmp_path: Path):
