@@ -1,7 +1,7 @@
 """Tests for scripts.triage.diff_extractor."""
 
 import subprocess
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 import pytest
 

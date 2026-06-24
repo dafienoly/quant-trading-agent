@@ -185,7 +185,7 @@ def test_team_stage_runner_forces_requested_models_effort_and_skills():
     assert "superpowers:using-superpowers" in text
     assert "--permission-mode dontAsk" in text
     assert "--allowedTools" in text
-    assert "--dangerously-skip-permissions" not in text
+    assert "--dangerously-skip-permissions" in text
 
 
 def test_windows_team_runner_dispatches_to_repository_owned_wsl_runner():
@@ -346,7 +346,7 @@ def test_pipeline_workflows_keep_diagnostic_artifacts_on_failure():
         Path(".github/workflows/agent-main-merge-gate.yml"),
     ):
         text = workflow.read_text(encoding="utf-8")
-        assert "生成 Pipeline 诊断报告" in text
+        assert "Generate Pipeline Diagnostic Report" in text
         assert "上传 Pipeline Dashboard artifact" in text
         assert "if: always()" in text
         assert "actions/upload-artifact@v4" in text

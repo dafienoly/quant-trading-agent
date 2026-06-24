@@ -5,7 +5,6 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 
-import pytest
 
 from scripts.triage.rebase_attempt import (
     _parse_merge_tree_conflicts,

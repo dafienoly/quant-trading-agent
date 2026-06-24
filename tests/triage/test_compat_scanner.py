@@ -3,7 +3,6 @@
 import os
 import tempfile
 
-import pytest
 
 from scripts.triage.compat_scanner import (
     RESTRICTED_MODULES,

@@ -70,6 +70,7 @@ def fetch_pr_diffstat(pr_number: int) -> dict:
 
 def _parse_stat_number(text: str) -> int:
     """Extract leading integer from stat text like ' 3 files changed'."""
+    text = text.strip()
     for i, ch in enumerate(text):
         if not ch.isdigit():
             return int(text[:i]) if i > 0 else 0

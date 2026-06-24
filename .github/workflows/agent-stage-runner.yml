@@ -370,7 +370,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-      - name: 生成 Pipeline 诊断报告
+      - name: Generate Pipeline Diagnostic Report
         if: always()
         run: |
           $ErrorActionPreference = "Continue"
@@ -388,7 +388,7 @@ jobs:
                 name = "diagnostic_fallback"
                 severity = "critical"
                 passed = $false
-                message = "正式回归报告未生成；这是诊断 fallback，请查看 Actions 日志。"
+                message = "Pipeline regression report not generated. This is a diagnostic fallback; check the Actions log."
               })
               artifacts = @{ diagnostic_fallback = $true }
             }
@@ -400,16 +400,16 @@ jobs:
           python scripts/agent_pipeline_report_viewer.py --input .agent/reports/pipeline_report.json --output .agent/reports/pipeline_dashboard.html
           $viewerStatus = $LASTEXITCODE
           if ($viewerStatus -ne 0 -or -not (Test-Path .agent/reports/pipeline_dashboard.html)) {
-            $fallbackHtml = @'
+            $fallbackHtml = @"
           <!doctype html>
-          <html lang="zh-CN"><meta charset="utf-8"><title>Pipeline 诊断报告</title>
-          <body><h1>Pipeline 诊断报告</h1><p>正式 Dashboard 生成失败；这是诊断 fallback，请查看同一 artifact 中的 JSON 与 Actions 日志。</p></body></html>
-          '@
+          <html lang="en"><meta charset="utf-8"><title>Pipeline Diagnostic Report</title>
+          <body><h1>Pipeline Diagnostic Report</h1><p>Dashboard generation failed. This is a diagnostic fallback; check the JSON artifact and Actions log.</p></body></html>
+          "@
             $dashboardPath = Join-Path (Get-Location) ".agent/reports/pipeline_dashboard.html"
             [System.IO.File]::WriteAllText($dashboardPath, $fallbackHtml, $utf8NoBom)
           }
 
-          Write-Host "严格回归退出码：$regressionStatus；Dashboard 生成退出码：$viewerStatus"
+          Write-Host "Regression exit code: $regressionStatus; Dashboard generation exit code: $viewerStatus"
           exit 0
 
       - name: 上传 Pipeline Dashboard artifact

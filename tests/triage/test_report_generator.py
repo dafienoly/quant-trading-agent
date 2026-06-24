@@ -1,6 +1,5 @@
 """Tests for scripts.triage.report_generator."""
 
-from datetime import datetime
 
 from scripts.triage.report_generator import generate_triage_report
 

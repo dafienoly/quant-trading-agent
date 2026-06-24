@@ -196,11 +196,11 @@ def generate_triage_report(
 
 ## Safety Confirmation
 
-- **Real trading capability affected?** No
-- **Risk/stock-pool/confirmation bypassed?** No
-- **Restricted modules touched?** {'Yes' if compatibility.get('restricted_hits') else 'No'}
-- **Tests exist?** {'Yes' if compatibility.get('test_files') else 'No'}
-- **Secrets detected?** {'Yes (see safety pattern hits)' if compatibility.get('safety_pattern_hits') else 'No'}
+- **Real trading capability affected?** **No**
+- **Risk/stock-pool/confirmation bypassed?** **No**
+- Restricted modules touched? **{'Yes' if compatibility.get('restricted_hits') else 'No'}**
+- Tests exist? **{'Yes' if compatibility.get('test_files') else 'No'}**
+- Secrets detected? **{'Yes (see safety pattern hits)' if compatibility.get('safety_pattern_hits') else 'No'}**
 
 """
     return report

@@ -97,12 +97,15 @@ def attempt_rebase(
             "error": rebase_result.stderr[:500] if rebase_result.stderr else "rebase failed",
         }
     except subprocess.CalledProcessError as exc:
-        subprocess.run(
-            ["git", "rebase", "--abort"],
-            capture_output=True,
-            text=True,
-            cwd=work_dir,
-        )
+        try:
+            subprocess.run(
+                ["git", "rebase", "--abort"],
+                capture_output=True,
+                text=True,
+                cwd=work_dir,
+            )
+        except Exception:
+            pass
         return {"success": False, "conflict_files": [], "error": str(exc)}
 
 

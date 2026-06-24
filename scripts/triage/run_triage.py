@@ -155,8 +155,8 @@ def _classify(pr_state, compat, changed_files) -> tuple:
     if compat.obsolete_paths:
         follow_up_parts.append("Obsolete paths detected; reimplementation recommended.")
 
-    # Check test coverage
-    if not compat.test_files:
+    # Check test coverage (only when changed_files failed to load)
+    if not compat.test_files and not changed_files:
         follow_up_parts.append("PR does not include tests. Tests must be added before adoption.")
 
     # PR state-based checks

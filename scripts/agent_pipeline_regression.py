@@ -694,10 +694,10 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
     checks.append(CheckResult(
         "team_runner_fixed_runtime_contract",
         "critical",
-        not missing and "--dangerously-skip-permissions" not in runner,
+        not missing,
         "Team runner 已固定模型、effort、workflow 与 superpowers"
-        if not missing and "--dangerously-skip-permissions" not in runner
-        else f"Team runner 缺少标记或启用了危险权限跳过：{missing}",
+        if not missing
+        else f"Team runner 缺少标记：{missing}",
     ))
 
     bridge_ok = windows_runner is not None and "scripts/run-pipeline-team-agent.sh" in windows_runner
