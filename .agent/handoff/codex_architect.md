@@ -1,8 +1,8 @@
 # Agent Handoff: codex_architect
 
-Feature: historical-pr-triage-pr-2-and-pr-3
-Title: [V15.0 Restart 3] Historical PR Triage: PR #2 and PR #3
-Epic branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
+Feature: agentops-control-tower-foundationpipeline-api-re
+Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
+Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
 Risk level: unknown
 
 Required read order:
@@ -13,7 +13,7 @@ Required read order:
 5. docs/pipeline/AUTO_MERGE_POLICY.md
 
 Task:
-- Read the requirements document at `docs/requirements/20260618-historical-pr-triage-pr-2-and-pr-3-requirements.md`.
-- Produce the architecture design at `docs/design/20260618-historical-pr-triage-pr-2-and-pr-3-architecture.md`.
-- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for Claude Team A/B/C.
+- Read the requirements document at `docs/requirements/20260624-agentops-control-tower-foundationpipeline-api-re-requirements.md`.
+- Produce the architecture design at `docs/design/20260624-agentops-control-tower-foundationpipeline-api-re-architecture.md`.
+- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / Claude Developer / OpenCode Tester.
 - Do not write product code in this stage.

@@ -1,8 +1,8 @@
 # Agent Handoff: claude_lead_plan
 
-Feature: historical-pr-triage-pr-2-and-pr-3
-Title: [V15.0 Restart 3] Historical PR Triage: PR #2 and PR #3
-Epic branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
+Feature: agentops-control-tower-foundationpipeline-api-re
+Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
+Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
 Risk level: unknown
 
 Required read order:
@@ -13,8 +13,9 @@ Required read order:
 5. docs/pipeline/AUTO_MERGE_POLICY.md
 
 Task:
-- Act as Claude Code A, the small-team lead.
-- Read `docs/design/20260618-historical-pr-triage-pr-2-and-pr-3-architecture.md` and split implementation into ordered phases.
-- Produce `docs/dev_plans/20260618-historical-pr-triage-pr-2-and-pr-3-team-plan.md`.
+- Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.
+- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.
+- Read `docs/design/20260624-agentops-control-tower-foundationpipeline-api-re-architecture.md` and split implementation into ordered phases.
+- Produce `docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md`.
 - Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.
-- After each phase test passes, route back to Claude Code B for the next phase until all phases are complete.
+- After each phase test passes, route back to Claude Code Developer for the next phase until all phases are complete.
