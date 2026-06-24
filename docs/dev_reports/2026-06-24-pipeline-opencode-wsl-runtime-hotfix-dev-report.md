@@ -81,7 +81,7 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 ## 测试结果
 
-- Pipeline 聚焦测试：`82 passed in 3.27s`。
+- Pipeline 聚焦测试：`82 passed in 3.24s`。
 - Pipeline strict regression：`PASS`，严重失败 `0`，警告 `0`。
 - 全量测试：`991 passed, 6 skipped, 2 warnings in 60.37s`。
 - Ruff：`All checks passed!`。
@@ -90,7 +90,15 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 - 本地真实 DeepSeek V4 Pro max Tester 探针：通过。
 - 本地真实 Claude ultracode-xhigh Developer 探针：通过。
 - 2 个 warning 来自既有第三方依赖弃用提示。
-- Windows self-hosted Runtime Preflight：待 Draft PR 分支运行后补充。
+- Windows self-hosted Runtime Preflight：
+  [Actions run 28083597461](https://github.com/dafienoly/quant-trading-agent/actions/runs/28083597461)
+  成功，三个角色全部通过，正式 `run-stage` job 跳过。
+- Artifact `runtime-preflight-all-28083597461` 上传成功，共 9 个文件；
+  Lead、Tester、Developer 各有 stdout、stderr 和 execution metadata。
+- 三份 stdout 均包含 `PIPELINE_RUNTIME_OK`；metadata 分别确认：
+  - Lead：`opencode-go/glm-5.2`，variant `max`，superpowers required；
+  - Tester：`opencode-go/deepseek-v4-pro`，variant `max`，superpowers required；
+  - Developer：`ultracode-xhigh`，effort `xhigh`，feature-dev 与 superpowers required。
 - Actions run `28082310344` 发现旧复合命令未执行 runner 且 hidden artifact
   被忽略；该次绿色状态不作为通过证据，已增加后置证据校验和 artifact
   fail-closed。
@@ -114,11 +122,9 @@ bash scripts/run-pipeline-team-agent.sh claude_developer --preflight-only
 
 ## 剩余风险
 
-- 当前只完成 Linux/WSL 本地真实探针。修复后的 Windows self-hosted
-  PowerShell→WSL 路径必须在 Draft PR 上取得成功 Actions 证据。
 - 模型服务后续发生认证、配额或模型下线时会 fail closed，需要运维处理。
 
 ## 最终结论
 
-`PASS_WITH_NOTES`。本地实现和验证通过；Windows self-hosted Runtime
-Preflight 成功前不得合并。
+`PASS`。本地回归、真实本地探针和 Windows self-hosted 三角色动态预检均
+通过。PR 仍保持 Draft，合并前需人工审阅。

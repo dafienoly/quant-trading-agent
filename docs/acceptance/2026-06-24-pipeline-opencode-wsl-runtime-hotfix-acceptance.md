@@ -4,7 +4,7 @@
 
 修复 Issue 自动 Pipeline 的实际运行阻断：
 
-- Windows runner 使用 WSL 登录 shell；
+- Windows runner 使用 WSL 交互式 shell 加载用户运行时环境；
 - OpenCode 默认安装目录进入 PATH；
 - 删除无效和危险权限参数；
 - 新增三角色真实 Runtime Preflight；
@@ -27,11 +27,15 @@
 
 ## 测试结果
 
-- 聚焦测试：`82 passed in 3.27s`。
+- 聚焦测试：`82 passed in 3.24s`。
 - Strict regression：`PASS`。
 - 全量测试：`991 passed, 6 skipped, 2 warnings in 60.37s`。
 - 本地 GLM 5.2、DeepSeek V4 Pro max、Claude ultracode-xhigh 真实探针通过。
-- Windows self-hosted Runtime Preflight：待 Draft PR 运行。
+- Windows self-hosted
+  [Runtime Preflight run 28083597461](https://github.com/dafienoly/quant-trading-agent/actions/runs/28083597461)：
+  三角色全部通过。
+- Artifact `runtime-preflight-all-28083597461`：9 个诊断文件，三份 stdout
+  均包含 `PIPELINE_RUNTIME_OK`，三份 metadata 与固定模型和 effort 契约一致。
 
 ## 安全确认
 
@@ -46,16 +50,17 @@
 
 | 验收项 | 结果 |
 |---|---|
-| WSL 登录 shell | 通过 |
+| WSL 用户运行时环境 | 通过 |
 | OpenCode PATH | 通过 |
 | 删除危险权限参数 | 通过 |
 | 三模型本地真实探针 | 通过 |
 | Runtime Preflight workflow | 通过 |
 | Issue 模板当前角色 | 通过 |
 | Main 人工合并 | 通过 |
-| Windows self-hosted 动态探针 | 待 PR Actions |
+| Windows self-hosted 动态探针 | 通过 |
+| Runtime 诊断 artifact | 通过 |
 
 ## 最终结论
 
-`ACCEPTED_WITH_NOTES`。代码与本地验证满足需求；Windows self-hosted
-Runtime Preflight 成功并完成人工审阅前不得合并。
+`ACCEPTED`。代码、本地回归和 Windows self-hosted 真实 Runtime 证据均满足
+需求。PR 保持 Draft，仍须按仓库规则完成人工审阅后再转 Ready。
