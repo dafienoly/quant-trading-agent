@@ -541,8 +541,8 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
         "pm": ("docs/requirements", f"{date_str}-{feature_id}-requirements.md", list(VALID_PM_HEADINGS)),
         "architecture": ("docs/design", f"{date_str}-{feature_id}-architecture.md", list(VALID_ARCH_HEADINGS)),
         "team_plan": ("docs/dev_plans", f"{date_str}-{feature_id}-team-plan.md", ["## Phase Plan"]),
-        "phase_dev": ("docs/dev_reports", f"{date_str}-{feature_id}-phase-1-dev-report.md", ["## Summary"]),
-        "phase_test": ("docs/test_reports", f"{date_str}-{feature_id}-phase-1-test-report.md", ["## Results"]),
+        "phase_dev": ("docs/dev_reports", f"{date_str}-{feature_id}-phase-1-dev-report.md", ["## 最终结论"]),
+        "phase_test": ("docs/test_reports", f"{date_str}-{feature_id}-phase-1-test-report.md", ["## 最终结论"]),
         "claude_lead_review": ("docs/review", f"{date_dashed}-{feature_id}-claude-lead-review.md", ["## Review Decision"]),
         "codex_review": ("docs/review", f"{date_dashed}-{feature_id}-codex-review-r1.md", ["## Review Decision"]),
         "acceptance": ("docs/acceptance", f"{date_dashed}-{feature_id}-acceptance.md", ["## Acceptance Decision"]),
@@ -568,6 +568,12 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
             content = f"# {feature_id} PM Acceptance\n\n## Acceptance Decision\n\n{decision}\n\n"
         elif stage_key == "codex_review":
             content = f"# {feature_id} Codex Review R1\n\n## Review Decision\n\nAPPROVED\n\n"
+        elif stage_key == "phase_dev":
+            content = f"# {feature_id} Dev Report\n\n## 最终结论\n\nPASS\n\n"
+        elif stage_key == "phase_test":
+            content = f"# {feature_id} Test Report\n\n## 最终结论\n\nPASS\n\n"
+        elif stage_key == "claude_lead_review":
+            content = f"# {feature_id} Lead Review\n\n## Review Decision\n\nAPPROVED\n\n"
 
         filepath.write_text(content)
         if filepath.exists() and filepath.stat().st_size > 0:
@@ -575,6 +581,20 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
             checks.append(CheckResult(f"artifact_{stage_key}", "critical", True, f"{filename} created"))
         else:
             checks.append(CheckResult(f"artifact_{stage_key}", "critical", False, f"{filename} missing"))
+
+    delivery_gate = tmp / ".agent" / "gates" / "phase_dev_delivery_gate.json"
+    delivery_gate.parent.mkdir(parents=True, exist_ok=True)
+    delivery_gate.write_text(
+        json.dumps(
+            {
+                "passed": True,
+                "feature_id": feature_id,
+                "stage": "claude_developer",
+                "invalid": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     # 4. Check gates
     gates_passed = 0
@@ -686,15 +706,12 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         'OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"',
         'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"',
         'OPENCODE_TESTER_VARIANT="max"',
-        'CLAUDE_DEVELOPER_MODEL="ultracode-xhigh"',
-        'CLAUDE_DEVELOPER_EFFORT="xhigh"',
+        'OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"',
+        'OPENCODE_DEVELOPER_VARIANT="max"',
         "using-superpowers",
         "verification-before-completion",
         "systematic-debugging",
-        "/feature-dev",
-        "superpowers:using-superpowers",
-        "--permission-mode dontAsk",
-        "--allowedTools",
+        "--agent build",
         "--preflight-only",
         "PIPELINE_RUNTIME_OK",
         "PREFLIGHT_TIMEOUT_SECONDS",
@@ -738,6 +755,9 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
     workflow_ok = (
         workflow is not None
         and "run-team-stage.ps1" in workflow
+        and "validate-stage-delivery" in workflow
+        and "route_back_to" in workflow
+        and '"feedback",' in workflow
         and "CLAUDE_TESTER_AGENT_COMMAND" not in workflow
         and "CLAUDE_LEAD_AGENT_COMMAND" not in workflow
     )
@@ -802,7 +822,7 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
     issue_template = _read(repo_root / AGENT_ISSUE_TEMPLATE_PATH.relative_to(REPO_ROOT))
     issue_required = (
         "OpenCode Lead",
-        "Claude Code Developer",
+        "OpenCode Developer",
         "OpenCode Test Engineer",
         "manual main merge",
     )

@@ -21,9 +21,9 @@ Every Agent must read:
 |---|---|---|
 | Codex A PM | Codex B Architect | requirements document |
 | Codex B Architect | OpenCode Lead | architecture document and phase guidance |
-| OpenCode Lead | Claude Code Developer | team phase plan |
-| Claude Code Developer | OpenCode Test Engineer | code, tests, phase dev report, self-test commands |
-| OpenCode Test Engineer | Claude Code Developer | phase test report when more phases remain or blockers exist |
+| OpenCode Lead | OpenCode Developer | team phase plan |
+| OpenCode Developer | OpenCode Test Engineer | code, tests, phase dev report, delivery gate, self-test commands |
+| OpenCode Test Engineer | OpenCode Developer | phase test report when more phases remain or blockers exist |
 | OpenCode Test Engineer | OpenCode Lead | phase test report when all phases pass |
 | OpenCode Lead | Codex B Reviewer | OpenCode lead review after all phases pass |
 | Codex B Reviewer | OpenCode Lead or Codex A Acceptance | final architecture review report |
@@ -67,3 +67,5 @@ restricted_modules_touched: false
    pass and OpenCode Lead must produce a lead review first.
 7. Never request Codex B final review when
    `team_pipeline.all_phases_tested=false`.
+8. Never claim a changed path that is absent from the current diff.
+9. Never treat report presence as a pass when the final decision is negative.

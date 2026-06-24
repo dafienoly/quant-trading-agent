@@ -10,8 +10,8 @@ pipeline.
 | `stage:pm-pending` | Codex A PM | requirements document | `stage:arch-pending` | stays pending |
 | `stage:arch-pending` | Codex B Architect | architecture document | `stage:team-plan-pending` | `stage:pm-pending` |
 | `stage:team-plan-pending` | OpenCode GLM 5.2 lead | phase plan | `stage:team-dev-pending` | `stage:arch-pending` |
-| `stage:team-dev-pending` | Claude Code ultracode-xhigh developer | phase code, tests, dev report | `stage:team-test-pending` | stays pending |
-| `stage:team-test-pending` | OpenCode DeepSeek V4 Pro max tester | phase test report | `stage:team-dev-pending` or `stage:claude-lead-review-pending` | `stage:fix-pending` |
+| `stage:team-dev-pending` | OpenCode DeepSeek V4 Flash max developer | phase code, tests, dev report, delivery gate | `stage:team-test-pending` | stays pending |
+| `stage:team-test-pending` | OpenCode DeepSeek V4 Pro max tester | phase test report | `stage:team-dev-pending` or `stage:claude-lead-review-pending` | `stage:team-dev-pending` |
 | `stage:claude-lead-review-pending` | OpenCode GLM 5.2 lead | team lead review | `stage:codex-review-pending` | `stage:team-dev-pending` |
 | `stage:fix-pending` | BugFix Agent | fix branch/report/regression tests | `stage:team-test-pending` | `stage:blocked` |
 | `stage:codex-review-pending` | Codex B Reviewer | final architecture review | `stage:pm-acceptance-pending` | `stage:team-plan-pending`, `stage:team-dev-pending`, or `stage:postmortem-pending` |
@@ -38,6 +38,7 @@ The automation writes deterministic gate results under `.agent/gates/`:
 | `.agent/gates/review_gate.json` | Required docs through review |
 | `.agent/gates/team_plan_gate.json` | Required docs through Claude A team plan |
 | `.agent/gates/phase_dev_gate.json` | Required docs through Claude B phase dev |
+| `.agent/gates/phase_dev_delivery_gate.json` | Actual Developer diff, test file, and claimed-path verification |
 | `.agent/gates/phase_test_gate.json` | Required docs through Claude C phase test |
 | `.agent/gates/claude_lead_review_gate.json` | Required docs through Claude A lead review |
 | `.agent/gates/codex_review_gate.json` | Required docs through Codex B final review |
@@ -50,8 +51,8 @@ checks still apply.
 ## State Transition Rules
 
 1. A later stage must not start until earlier required reports exist.
-2. Test failure creates `feedback/bugs/open/BUG_*.md` and `.json` when the issue
-   is reproducible.
+2. Test failure creates and commits `feedback/bugs/open/BUG_*.md` and `.json`
+   when the issue is reproducible.
 3. OpenCode Test Engineer phase pass returns to `stage:team-dev-pending` until
    `team_pipeline.all_phases_tested=true`.
 4. Codex B review may start only after OpenCode Lead review evidence exists.
@@ -61,3 +62,5 @@ checks still apply.
    `bugfix/<bug-id>-<timestamp>` branches.
 8. A stage may only advance by committing its required report or gate result.
 9. Any restricted module change moves the merge stage to manual approval.
+10. Gate `feature_id` must match the active task; stale gates never imply pass.
+11. Negative final decisions are routing signals, not successful stage completion.

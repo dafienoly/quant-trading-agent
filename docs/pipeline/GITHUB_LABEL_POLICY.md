@@ -20,7 +20,7 @@ Agent pipeline.
 | `agent:pm` | PM requirement generation needed |
 | `agent:architect` | Architecture generation needed |
 | `agent:claude-lead` | 兼容标签：OpenCode GLM 5.2 team lead needed |
-| `agent:claude-developer` | Claude Code ultracode-xhigh phase developer needed |
+| `agent:claude-developer` | Compatibility label for OpenCode DeepSeek V4 Flash max phase developer |
 | `agent:claude-tester` | 兼容标签：OpenCode DeepSeek V4 Pro max tester needed |
 | `agent:bugfix` | BugFix Agent needed |
 | `agent:reviewer` | Codex B final architecture review needed |
@@ -33,7 +33,7 @@ Agent pipeline.
 | `stage:pm-pending` | Waiting for PM requirements |
 | `stage:arch-pending` | Waiting for architecture design |
 | `stage:team-plan-pending` | Waiting for OpenCode GLM 5.2 phase plan |
-| `stage:team-dev-pending` | Waiting for Claude Code ultracode-xhigh phase implementation |
+| `stage:team-dev-pending` | Waiting for OpenCode DeepSeek V4 Flash max phase implementation |
 | `stage:team-test-pending` | Waiting for OpenCode DeepSeek V4 Pro max verification |
 | `stage:claude-lead-review-pending` | Waiting for OpenCode GLM 5.2 lead review after all phases pass |
 | `stage:fix-pending` | Waiting for bugfix/review-fix implementation |
