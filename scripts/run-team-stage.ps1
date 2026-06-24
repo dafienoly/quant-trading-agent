@@ -32,7 +32,8 @@ if ($repo -match '^([A-Za-z]):\\(.*)$') {
   exit 2
 }
 
-if ($repo.Contains("'")) {
+$singleQuote = [char]0x27
+if ($repo.Contains($singleQuote)) {
   Write-Error "仓库路径包含不受支持的单引号字符。"
   exit 2
 }
