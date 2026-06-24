@@ -310,7 +310,6 @@ def render_market() -> None:
 
 def render_readonly_monitoring() -> None:
     """V16.0b 只读行情监控 Dashboard 区块"""
-    import json
     st.subheader("只读行情监控")
     watchlist = []
     try:
@@ -328,14 +327,14 @@ def render_readonly_monitoring() -> None:
             col3.markdown("🧪 HEALTHY" if "未知" not in "等待" else "⚠️ STALE")
 
     try:
-        r = requests.get(f"{API_BASE}/product/refresh-status", timeout=3)
+        r = requests.get(f"{DEFAULT_API_BASE}/product/refresh-status", timeout=3)
         rs = r.json()
         st.write(f"最近刷新状态：{rs.get('status', 'IDLE')}")
     except Exception:
         st.write("最近刷新状态：查询失败")
 
     try:
-        r = requests.get(f"{API_BASE}/product/signal-observation", timeout=3)
+        r = requests.get(f"{DEFAULT_API_BASE}/product/signal-observation", timeout=3)
         sig = r.json()
         if sig.get("status") == "OK":
             blocked = [o for o in sig.get("observations", []) if o.get("status") == "BLOCKED"]

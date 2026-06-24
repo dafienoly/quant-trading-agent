@@ -1,13 +1,17 @@
 """Tests for V16.0b readonly market dashboard."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 from src.api.app import create_app
 
 client = TestClient(create_app())
 
 
-def test_quote_health_endpoint():
+@patch("src.api.product_routes.fetch_product_quotes")
+def test_quote_health_endpoint(mock_fpq):
+    mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
     r = client.get("/product/quote-health")
     assert r.status_code == 200
     data = r.json()
@@ -34,14 +38,19 @@ def test_signal_observation_endpoint_returns_observations():
         assert "status" in obs
         assert "health" in obs
 
-def test_quotes_snapshot_endpoint():
+@patch("src.api.product_routes.fetch_product_quotes")
+def test_quotes_snapshot_endpoint(mock_fpq):
+    mock_fpq.return_value = {"quotes": [{"symbol": "000001.SZ"}], "status": "OK"}
     r = client.get("/product/quotes-snapshot")
     assert r.status_code == 200
     data = r.json()
     assert data.get("status") in ("OK", "ERROR")
 
 
-def test_quote_refresh_trigger():
+@patch("src.api.product_routes.get_service_manager")
+def test_quote_refresh_trigger(mock_gsm):
+    from src.product_app.service_manager import ServiceManager
+    mock_gsm.return_value = ServiceManager()
     r = client.post("/product/quote-refresh")
     assert r.status_code == 200
     assert r.json().get("status") in ("OK", "ERROR")

@@ -24,9 +24,9 @@ ruff check src/api/product_routes.py src/product_app/
 
 ## 测试结果
 
-- 聚焦 52 passed（含 12 个 V16.0b 新增）
-- 全量 882 passed, 6 skipped
-- Ruff All checks passed
+- 聚焦 55 passed（含 15 个 V16.0b 新增）
+- 全量 8885 passed, 6 skipped（3 端点 mock 后 55 专注通过）
+- Ruff exit=0（V16.0b 文件）
 - Regression --strict 状态：通过
 - Report gate passed
 
