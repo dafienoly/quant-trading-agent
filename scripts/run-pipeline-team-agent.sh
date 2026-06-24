@@ -422,6 +422,8 @@ EOF
       printf '%s\n\n' "/feature-dev"
       cat "$prompt_file"
     } >"${prompt_file}.claude"
+    echo "Prompt file size: $(wc -c < "${prompt_file}.claude") bytes"
+    echo "Handoff file size: $(wc -c < "$handoff") bytes"
     if ! $CLAUDE_BIN \
       --print \
       --model "$CLAUDE_DEVELOPER_MODEL" \
@@ -450,6 +452,10 @@ EOF
       exit 2
     fi
     echo "Claude Code completed. stdout lines: $(wc -l < "$stdout_file"), stderr lines: $(wc -l < "$stderr_file")"
+    echo "stdout preview:" >&2
+    head -5 "$stdout_file" >&2
+    echo "stderr preview:" >&2
+    head -5 "$stderr_file" >&2
     verify_branch_restored
     write_execution_metadata \
       "claude-code" "$CLAUDE_DEVELOPER_MODEL" "$CLAUDE_DEVELOPER_EFFORT" \
