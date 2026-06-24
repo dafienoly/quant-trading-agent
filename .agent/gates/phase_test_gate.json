@@ -1,5 +1,5 @@
 {
-  "passed": true,
+  "passed": false,
   "feature_id": "agentops-control-tower-foundationpipeline-api-re",
   "checked_stages": [
     "pm",
@@ -11,23 +11,29 @@
   "missing": {},
   "found": {
     "pm": [
-      "docs\\requirements\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md"
+      "docs/requirements/2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md"
     ],
     "architecture": [
-      "docs\\design\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md"
+      "docs/design/2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md"
     ],
     "team_plan": [
-      "docs\\dev_plans\\20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md"
+      "docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md"
     ],
     "phase_dev": [
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md"
+      "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md"
     ],
     "phase_test": [
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md"
+      "docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md"
+    ]
+  },
+  "invalid": {
+    "phase_test": [
+      "docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md:conclusion_REJECTED:test report final conclusion is REJECTED with S1 defect (Phase 1 implementation completely missing)",
+      "docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md:bug_artifact_not_on_disk:claimed feedback/bugs/open/BUG_20260624-agentops-phase-1-missing-implementation.{md,json} do not exist"
     ]
   },
   "reasons": [
-    "all_required_reports_found"
-  ],
-  "invalid": {}
+    "invalid_required_stage_reports",
+    "phase_test_report_conclusion_rejected_s1_defect_open"
+  ]
 }
