@@ -115,8 +115,12 @@ jobs:
           $branch = "${{ steps.init.outputs.epic_branch }}"
           $reuseRemoteBranch = $false
 
+          $existingPrRaw = $null
+          $ErrorActionPreference = "Continue"
           $existingPrRaw = gh pr view $branch --json number,state,headRefName,url 2>$null
-          if ($LASTEXITCODE -eq 0 -and $existingPrRaw) {
+          $ghExit = $LASTEXITCODE
+          $ErrorActionPreference = "Stop"
+          if ($ghExit -eq 0 -and $existingPrRaw) {
             $existingPr = $existingPrRaw | ConvertFrom-Json
             if ($existingPr.headRefName -ne $branch) {
               Write-Error "PR lookup for '$branch' returned head '$($existingPr.headRefName)'; failing closed."
@@ -251,8 +255,12 @@ jobs:
           git push -u origin $branch
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          $prRaw = $null
+          $ErrorActionPreference = "Continue"
           $prRaw = gh pr view $branch --json number,state,headRefName,url 2>$null
-          if ($LASTEXITCODE -eq 0 -and $prRaw) {
+          $ghExit2 = $LASTEXITCODE
+          $ErrorActionPreference = "Stop"
+          if ($ghExit2 -eq 0 -and $prRaw) {
             $existingPr = $prRaw | ConvertFrom-Json
             if ($existingPr.headRefName -ne $branch) {
               Write-Error "PR #$($existingPr.number) head '$($existingPr.headRefName)' does not match branch '$branch'."

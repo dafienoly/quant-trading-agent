@@ -214,9 +214,10 @@ def slugify_feature(text: str, *, max_length: int = 48) -> str:
     """Create a branch-safe feature slug from an issue title or user text."""
     text = text.strip().lower()
     text = re.sub(r"^\[[^\]]+\]\s*", "", text)
-    text = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", text)
+    # Strip non-ASCII (including Chinese) to avoid encoding issues on Windows runners
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^a-z0-9]+", "-", text)
     text = text.strip("-") or "agent-feature"
-    # Keep Chinese titles usable but cap length to avoid awkward branch names.
     return text[:max_length].strip("-") or "agent-feature"
 
 

@@ -124,9 +124,11 @@ def test_unknown_business_code_requires_manual_approval():
 def test_slugify_feature_handles_issue_prefix_and_spaces():
     slug = slugify_feature("[Feature] 接入 Tencent Quote Provider!!!")
 
-    assert slug.startswith("接入-tencent-quote-provider")
+    assert slug.startswith("tencent-quote-provider")
     assert " " not in slug
     assert "!" not in slug
+    # Non-ASCII (Chinese) must be stripped to avoid Windows encoding issues
+    assert all(ord(c) < 128 for c in slug)
 
 
 def test_feature_state_writes_current_task_and_handoff(tmp_path: Path):
