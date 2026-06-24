@@ -5,7 +5,7 @@ issue_number: 75
 issue_url: https://github.com/dafienoly/quant-trading-agent/issues/75
 run_id: '28088686013'
 epic_branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
-current_stage: manual_approval_required_pending
+current_stage: phase_dev_pending
 created_at: '2026-06-24T09:25:22.405385+00:00'
 required_docs:
   requirements: docs/requirements/20260624-agentops-control-tower-foundationpipeline-api-re-requirements.md
@@ -24,7 +24,7 @@ team_pipeline:
   max_parallel_teams: 3
   max_codex_review_attempts: 3
   current_phase: 1
-  all_phases_tested: true
+  all_phases_tested: false
   codex_review_attempts: 0
 agent_roles:
   codex_a:
@@ -50,14 +50,14 @@ manual_approval_required_for:
 - main-merge-when-auto-merge-gate-fails
 - codex-review-fails-three-times
 stage_status:
-  pm: pending
-  architecture: pending
-  team_plan: pending
-  phase_dev: passed
-  phase_test: passed
+  pm: passed
+  architecture: passed
+  team_plan: passed
+  phase_dev: failed
+  phase_test: failed
   claude_lead_review: passed
-  codex_review: passed
-  acceptance: passed
+  codex_review: pending
+  acceptance: pending
 pr_number: 77
 pr_url: https://github.com/dafienoly/quant-trading-agent/pull/77
 pull_request:

@@ -1,8 +1,8 @@
 # Agent Handoff: claude_lead_review
 
-Feature: historical-pr-triage-pr-2-and-pr-3
-Title: [V15.0 Restart 3] Historical PR Triage: PR #2 and PR #3
-Epic branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
+Feature: agentops-control-tower-foundationpipeline-api-re
+Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
+Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
 Risk level: unknown
 
 Required read order:
@@ -13,8 +13,9 @@ Required read order:
 5. docs/pipeline/AUTO_MERGE_POLICY.md
 
 Task:
-- Act as Claude Code A, the small-team lead reviewer.
+- Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.
+- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.
 - Review all phase development reports and test reports.
 - Confirm every planned phase is complete and tested before handing off to Codex B.
-- Produce `docs/review/20260618-historical-pr-triage-pr-2-and-pr-3-claude-lead-review.md`.
-- If any phase is incomplete, route back to Claude Code B/C instead of escalating to Codex B.
+- Produce `docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md`.
+- If any phase is incomplete, route back to Claude Code Developer / OpenCode Test Engineer instead of escalating to Codex B.
