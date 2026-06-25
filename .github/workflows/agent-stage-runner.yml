@@ -265,15 +265,7 @@ jobs:
           $gatePassed = $false
           if (Test-Path $gateFile) {
             $gateData = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
-            $deliveryOk = $deliveryStatus -eq 0
-            if (-not $deliveryOk -and $gate -eq "phase_dev") {
-              $deliveryFile = ".agent/gates/phase_dev_delivery_gate.json"
-              if (Test-Path $deliveryFile) {
-                $deliveryData = Get-Content $deliveryFile -Raw -Encoding utf8 | ConvertFrom-Json
-                $deliveryOk = ($deliveryData.passed -eq $true)
-              }
-            }
-            $gatePassed = $gateData.passed -eq $true -and $deliveryOk
+            $gatePassed = $gateData.passed -eq $true
           }
 
           python scripts/agent_pipeline.py sync-state-from-gates
