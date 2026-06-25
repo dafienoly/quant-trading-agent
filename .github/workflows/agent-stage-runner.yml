@@ -72,22 +72,28 @@ jobs:
       )
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
-      - name: Determine checkout ref for dispatching PR
+      - name: Determine checkout ref
         id: checkout-ref
-        if: inputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $pr = "${{ inputs.pr_number }}"
-          $branch = gh pr view $pr --json headRefName --jq ".headRefName"
-          if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
-          "checkout_ref=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $branch = ""
+          $pr = "${{ inputs.pr_number || github.event.pull_request.number }}"
+          if ($pr) {
+            $branch = gh pr view $pr --json headRefName --jq ".headRefName"
+            if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
+          } elseif ("${{ github.event_name }}" -eq "pull_request") {
+            $branch = "${{ github.event.pull_request.head.ref }}"
+          }
+          if ($branch) {
+            "checkout_ref=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Checkout PR branch
+      - name: Checkout actual branch
         if: steps.checkout-ref.outputs.checkout_ref != ''
         run: |
           $ErrorActionPreference = "Stop"
