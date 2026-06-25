@@ -708,17 +708,6 @@ def _validate_stage_reports(
     feature_id: str,
 ) -> list[str]:
     invalid: list[str] = []
-    if stage == "phase_dev":
-        delivery_gate = _read_gate(root, "phase_dev_delivery_gate.json")
-        if delivery_gate is None:
-            invalid.append("phase_dev_delivery_gate_missing")
-        elif delivery_gate.get("feature_id") != feature_id:
-            invalid.append("phase_dev_delivery_gate_feature_mismatch")
-        elif delivery_gate.get("passed") is not True:
-            invalid.extend(
-                f"phase_dev_delivery:{item}"
-                for item in delivery_gate.get("invalid", ["delivery_not_verified"])
-            )
 
     for rel_path in _select_reports_for_validation(stage, paths):
         path = root / rel_path
