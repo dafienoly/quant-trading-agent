@@ -21,7 +21,7 @@ git diff --check
 - 聚焦测试 `95 passed`，严格回归通过，Ruff 与 diff 检查通过。
 - 全量测试 `1004 passed, 6 skipped`。
 - PR #77 最新提交隔离演练得到 `phase_test=PASS`、`total_phases=5`、`current_phase=2`、`next_stage=claude_developer`。
-- 远端 Actions 结果待提交 Draft PR 后补充。
+- Draft PR #79 的 `Pipeline 轻量验证` 已通过。
 
 ## 安全确认
 
@@ -32,4 +32,4 @@ git diff --check
 
 ## 最终结论
 
-`PASS_WITH_NOTES`：本地功能门禁通过；远端 workflow_dispatch 与 PR #77 恢复动作需在 Hotfix PR 合并并验证后执行。
+`PASS`：本地功能门禁、远端 PR validation 和 PR #77 隔离迁移演练均通过。PR #77 的正式恢复动作需在 Hotfix 合并后执行。
