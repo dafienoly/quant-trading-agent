@@ -39,6 +39,6 @@
   "claimed_files": [],
   "invalid": [],
   "reasons": [
-    "stage_delivery_verified"
+    "reused_previous_delivery_gate"
   ]
 }
