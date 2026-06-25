@@ -1,11 +1,40 @@
 {
   "passed": false,
   "feature_id": "agentops-control-tower-foundationpipeline-api-re",
-  "current_phase": 3,
-  "found": {},
+  "checked_stages": [
+    "pm",
+    "architecture",
+    "team_plan",
+    "phase_dev"
+  ],
   "missing": {},
-  "invalid": {},
+  "found": {
+    "pm": [
+      "docs\\requirements\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md"
+    ],
+    "architecture": [
+      "docs\\design\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md"
+    ],
+    "team_plan": [
+      "docs\\dev_plans\\20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md"
+    ],
+    "phase_dev": [
+      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md",
+      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-dev-report.md",
+      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-dev-report.md"
+    ]
+  },
   "reasons": [
-    "awaiting_next_phase"
-  ]
+    "invalid_required_stage_reports"
+  ],
+  "invalid": {
+    "phase_dev": [
+      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-dev-report.md:missing_explicit_final_decision"
+    ]
+  },
+  "decisions": {
+    "phase_dev": "PASS"
+  },
+  "decision": "PASS",
+  "route_back_to": "claude_developer"
 }

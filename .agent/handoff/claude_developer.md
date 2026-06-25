@@ -15,10 +15,10 @@ Required read order:
 Task:
 - Compatibility stage ID: `claude_developer`; actual role: OpenCode Developer.
 - Runtime is fixed to `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent permissions, and superpowers.
-- Implement only the current phase 2 from `docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md`.
+- Implement only the current phase 3 from `docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md`.
 - In GitHub Stage Runner mode, remain on the checked-out PR branch and let the workflow commit/push; in manual mode follow `docs/process/BRANCH_WORKFLOW.md`.
 - Write focused failing tests first where practical.
-- Produce `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-dev-report.md` with exact self-test commands and a truthful changed-file list.
+- Produce `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-dev-report.md` with exact self-test commands and a truthful changed-file list.
 - Every claimed changed path must exist and appear in the current diff; non-documentation phases require implementation and test changes.
 - After OpenCode Test Engineer verifies the phase, continue with the next planned phase until all phases are tested.
 - Do not touch restricted trading modules unless the architecture document explicitly permits it.
