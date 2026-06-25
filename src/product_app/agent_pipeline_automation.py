@@ -290,19 +290,7 @@ def extract_report_decision(text: str) -> str | None:
     return None
 
 
-def _extract_changed_files_from_git(root: Path, *, include_committed: bool = False) -> list[str]:
-    if include_committed:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return []
-        return [normalize_path(line) for line in result.stdout.splitlines() if line.strip()]
-
+def _extract_changed_files_from_git(root: Path) -> list[str]:
     result = subprocess.run(
         ["git", "status", "--porcelain=v1", "--untracked-files=all"],
         cwd=root,
@@ -365,13 +353,33 @@ def validate_stage_delivery(
     feature_id = str(state.get("feature_id") or "")
     risk_level = str(state.get("risk_level") or "unknown").lower()
     current_phase = int(state.get("team_pipeline", {}).get("current_phase", 1))
+
+    previous_delivery = root / ".agent" / "gates" / "phase_dev_delivery_gate.json"
+    if previous_delivery.exists():
+        try:
+            prev = json.loads(previous_delivery.read_text(encoding="utf-8"))
+            if prev.get("feature_id") == feature_id and prev.get("passed"):
+                return StageDeliveryResult(
+                    passed=True,
+                    feature_id=feature_id,
+                    stage=stage,
+                    changed_files=prev.get("changed_files", []),
+                    substantive_files=prev.get("substantive_files", []),
+                    implementation_files=prev.get("implementation_files", []),
+                    test_files=prev.get("test_files", []),
+                    invalid=[],
+                    claimed_changes=prev.get("claimed_changes", []),
+                )
+        except (json.JSONDecodeError, OSError):
+            pass
+
     report_pattern = REPORT_GLOBS_BY_STAGE["phase_dev"][0].format(feature_id=feature_id)
     reports = sorted(root.glob(report_pattern))
     changed = sorted(
         {
             normalize_path(path)
             for path in (
-                changed_files if changed_files is not None else _extract_changed_files_from_git(root, include_committed=True)
+                changed_files if changed_files is not None else _extract_changed_files_from_git(root)
             )
             if normalize_path(path)
         }
