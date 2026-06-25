@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "requested_stage": "claude_tester",
+  "expected_current_stage": "phase_test_pending",
+  "actual_current_stage": "phase_test_pending",
+  "reasons": [
+    "stage_lease_matches_state"
+  ]
+}

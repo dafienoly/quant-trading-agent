@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "stage": "claude_tester",
+  "current_phase": 5,
+  "report_gate": "phase_test",
+  "report_gate_passed": true,
+  "delivery_gate_required": false,
+  "delivery_gate_passed": true,
+  "report_decision": "PASS",
+  "decision": "PASS",
+  "failure_kind": "",
+  "route_back_to": "",
+  "reasons": [
+    "all_required_stage_gates_passed"
+  ]
+}
