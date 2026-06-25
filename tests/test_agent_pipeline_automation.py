@@ -277,7 +277,7 @@ def test_github_workflows_use_repository_owned_team_runner():
     assert "CLAUDE_LEAD_AGENT_COMMAND" not in stage_runner
     assert '".github",' in stage_runner
     assert '"scripts",' in stage_runner
-    assert '"feedback",' in stage_runner
+    assert '"feedback",' not in stage_runner
     assert "validate-stage-delivery" in stage_runner
     assert "steps.stage-gate.outputs.gate_passed" in stage_runner
     assert "route_back_to" in stage_runner

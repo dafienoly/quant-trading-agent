@@ -290,7 +290,19 @@ def extract_report_decision(text: str) -> str | None:
     return None
 
 
-def _extract_changed_files_from_git(root: Path) -> list[str]:
+def _extract_changed_files_from_git(root: Path, *, include_committed: bool = False) -> list[str]:
+    if include_committed:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return []
+        return [normalize_path(line) for line in result.stdout.splitlines() if line.strip()]
+
     result = subprocess.run(
         ["git", "status", "--porcelain=v1", "--untracked-files=all"],
         cwd=root,
@@ -359,7 +371,7 @@ def validate_stage_delivery(
         {
             normalize_path(path)
             for path in (
-                changed_files if changed_files is not None else _extract_changed_files_from_git(root)
+                changed_files if changed_files is not None else _extract_changed_files_from_git(root, include_committed=True)
             )
             if normalize_path(path)
         }
