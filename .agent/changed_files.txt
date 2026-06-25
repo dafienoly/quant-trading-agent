@@ -1,4 +1,4 @@
-﻿.agent/artifact_manifest_codex_acceptance.json
+.agent/artifact_manifest_codex_acceptance.json
 .agent/artifact_manifest_codex_reviewer.json
 .agent/changed_files.txt
 .agent/current_task.yaml
@@ -51,6 +51,7 @@ docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phas
 docs/user_guides/2026-06-24-agentops-control-tower-foundationpipeline-api-re-user-guide.md
 docs/user_guides/2026-06-25-agentops-control-tower-foundationpipeline-api-re-user-guide.md
 scripts/agent_pipeline_acceptance_entry.py
+scripts/agent_pipeline_regression.py
 scripts/validate_pr_reports.py
 src/api/agentops_routes.py
 src/api/app.py

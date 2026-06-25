@@ -3,7 +3,7 @@
   "requires_manual_approval": true,
   "risk_level": "manual-main-approval",
   "changed_files": [
-    "﻿.agent/artifact_manifest_codex_acceptance.json",
+    ".agent/artifact_manifest_codex_acceptance.json",
     ".agent/artifact_manifest_codex_reviewer.json",
     ".agent/changed_files.txt",
     ".agent/current_task.yaml",
@@ -56,6 +56,7 @@
     "docs/user_guides/2026-06-24-agentops-control-tower-foundationpipeline-api-re-user-guide.md",
     "docs/user_guides/2026-06-25-agentops-control-tower-foundationpipeline-api-re-user-guide.md",
     "scripts/agent_pipeline_acceptance_entry.py",
+    "scripts/agent_pipeline_regression.py",
     "scripts/validate_pr_reports.py",
     "src/api/agentops_routes.py",
     "src/api/app.py",
@@ -84,10 +85,10 @@
   ],
   "restricted_files": [],
   "unsafe_files": [
-    "﻿.agent/artifact_manifest_codex_acceptance.json",
     ".github/workflows/agent-main-merge-gate.yml",
     "AGENTS.md",
     "scripts/agent_pipeline_acceptance_entry.py",
+    "scripts/agent_pipeline_regression.py",
     "scripts/validate_pr_reports.py",
     "src/api/agentops_routes.py",
     "src/api/app.py",
@@ -104,6 +105,7 @@
     "src/ui_report/product_dashboard.py"
   ],
   "safe_files": [
+    ".agent/artifact_manifest_codex_acceptance.json",
     ".agent/artifact_manifest_codex_reviewer.json",
     ".agent/changed_files.txt",
     ".agent/current_task.yaml",
