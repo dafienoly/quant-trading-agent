@@ -311,8 +311,23 @@ jobs:
           # Ensure we are on a branch before committing (agents may leave detached HEAD)
           $currentBranch = git rev-parse --abbrev-ref HEAD
           if ($currentBranch -eq "HEAD") {
-            Write-Host "Detached HEAD detected; restoring to '${{ steps.checkout-ref.outputs.checkout_ref || github.ref_name }}'"
-            git checkout "${{ steps.checkout-ref.outputs.checkout_ref || github.ref_name }}"
+            $targetBranch = "${{ steps.checkout-ref.outputs.checkout_ref || github.event.pull_request.head.ref || github.ref_name }}"
+            if ($targetBranch -eq "HEAD" -or $targetBranch -match '^\d+/merge$' -or -not $targetBranch) {
+              # Fallback: use gh to get the PR head ref
+              $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+              if ($pr) {
+                $targetBranch = gh pr view $pr --json headRefName --jq '.headRefName'
+                if ($LASTEXITCODE -ne 0 -or -not $targetBranch) {
+                  Write-Error "Cannot determine branch to restore from detached HEAD"
+                  exit 2
+                }
+              } else {
+                Write-Error "Cannot determine branch to restore from detached HEAD (no PR number)"
+                exit 2
+              }
+            }
+            Write-Host "Detached HEAD detected; restoring to '$targetBranch'"
+            git checkout "$targetBranch"
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Failed to restore branch from detached HEAD"
               exit 2
