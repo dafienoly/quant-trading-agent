@@ -99,6 +99,80 @@ def test_non_docs_pr_passes_with_reports(tmp_path: Path):
     assert data["reports_present"] is True
 
 
+def test_pipeline_in_progress_uses_stage_report_profile(tmp_path: Path):
+    repo = tmp_path / "pipeline-progress"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, capture_output=True)
+    (repo / "src" / "main.py").write_text("# base")
+    _git_commit_all(repo, "base")
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
+    (repo / "src" / "change.py").write_text("# change")
+    state = repo / ".agent" / "state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(json.dumps({"feature_id": "x", "current_stage": "phase_test_pending"}))
+    _write_report(
+        repo / "docs" / "dev_reports" / "phase-1-dev-report.md",
+        "# 第一阶段开发报告\n\n"
+        "## 实现范围\n\n本阶段完成真实功能实现，并补充异常路径、失败关闭路径和可复现测试证据。\n\n"
+        "## 自测命令与结果\n\n`pytest tests/test_example.py -q`，全部通过。\n\n"
+        "## 最终结论\n\nPASS\n",
+    )
+    _write_report(
+        repo / "docs" / "acceptance" / "future-acceptance.md",
+        "# Acceptance\n\nThis is a placeholder.\n",
+    )
+    _git_commit_all(repo, "feature")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--head", "feature", "--strict", "--json"],
+        capture_output=True, text=True, cwd=repo, timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stdout
+    data = json.loads(proc.stdout)
+    assert data["pipeline_mode"] is True
+    assert data["pipeline_in_progress"] is True
+    assert data["report_files"]["docs/dev_reports/phase-1-dev-report.md"]["profile"] == "pipeline_stage"
+    assert "docs/acceptance/future-acceptance.md" not in data["report_files"]
+
+
+def test_pipeline_final_stage_requires_strict_acceptance_report(tmp_path: Path):
+    repo = tmp_path / "pipeline-final"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, capture_output=True)
+    (repo / "src" / "main.py").write_text("# base")
+    _git_commit_all(repo, "base")
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
+    (repo / "src" / "change.py").write_text("# change")
+    state = repo / ".agent" / "state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(json.dumps({"feature_id": "x", "current_stage": "manual_approval_required"}))
+    _write_report(
+        repo / "docs" / "dev_reports" / "feature-dev.md",
+        "# 功能说明\n\n## 变更范围\n\n实现了完整功能和异常处理。\n\n## 测试命令\n\npytest\n\n"
+        "## 测试结果\n\n测试通过。\n\n## 安全确认\n\n不涉及真实交易。\n\n## 最终结论\n\nPASS\n",
+    )
+    _write_report(
+        repo / "docs" / "acceptance" / "future-acceptance.md",
+        "# Acceptance\n\nThis is a placeholder.\n",
+    )
+    _git_commit_all(repo, "feature")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--head", "feature", "--strict", "--json"],
+        capture_output=True, text=True, cwd=repo, timeout=30,
+    )
+
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)
+    assert data["pipeline_in_progress"] is False
+    assert any("future-acceptance.md" in issue for issue in data["issues"])
+
+
 # -- content checks ---------------------------------------------------------
 
 def test_empty_report_rejected(tmp_path: Path):

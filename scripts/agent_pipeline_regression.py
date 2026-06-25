@@ -133,14 +133,41 @@ def check_workflow(repo_root: Path) -> list[CheckResult]:
         else:
             checks.append(CheckResult(f"workflow_has_{stage}", "critical", False, f"workflow missing {stage}"))
 
-    # Label-to-stage mapping
-    label_map = {"stage:pm-pending": "codex_pm", "stage:arch-pending": "codex_architect"}
-    for label, expected_stage in label_map.items():
-        pattern = f'"{label}" {{ $stage = "{expected_stage}"'
-        if pattern in text:
-            checks.append(CheckResult(f"workflow_label_{label}", "critical", True, f"label {label} -> {expected_stage}"))
-        else:
-            checks.append(CheckResult(f"workflow_label_{label}", "critical", False, f"label mapping {label} -> {expected_stage} not found"))
+    trigger_block = text.split("permissions:", 1)[0]
+    single_entry = (
+        "workflow_dispatch:" in trigger_block
+        and "pull_request:" not in trigger_block
+        and "github.event.label" not in text
+        and "github.event.pull_request" not in text
+    )
+    checks.append(CheckResult(
+        "workflow_single_dispatch_entry",
+        "critical",
+        single_entry,
+        "Stage Runner 仅由 workflow_dispatch 进入"
+        if single_entry
+        else "Stage Runner 仍存在 label 或 pull_request 执行入口",
+    ))
+
+    transaction_markers = (
+        "agent-stage-pr-${{ inputs.pr_number || github.run_id }}",
+        "cancel-in-progress: false",
+        "validate-stage-start --stage $env:STAGE",
+        "evaluate-stage-transition --stage $env:STAGE",
+        "apply-stage-transition --stage $env:STAGE",
+        ".agent/gates/stage_transition_gate.json",
+    )
+    missing_transaction_markers = [
+        marker for marker in transaction_markers if marker not in text
+    ]
+    checks.append(CheckResult(
+        "workflow_transaction_controller",
+        "critical",
+        not missing_transaction_markers,
+        "Stage Runner 已启用 PR 串行、阶段租约和组合门禁"
+        if not missing_transaction_markers
+        else f"Stage Runner 缺少事务控制标记：{missing_transaction_markers}",
+    ))
 
     # Gate mapping
     for stage, gate in GATE_MAPPING.items():
@@ -686,6 +713,26 @@ def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
         "bootstrap 使用固定 OpenCode Team Lead runner"
         if not missing
         else f"bootstrap 缺少 Team Lead runner 标记：{missing}",
+    ))
+
+    transition_markers = tuple(
+        marker
+        for stage in ("codex_pm", "codex_architect", "claude_lead_plan")
+        for marker in (
+            f"evaluate-stage-transition --stage {stage}",
+            f"apply-stage-transition --stage {stage}",
+        )
+    )
+    missing_transitions = [
+        marker for marker in transition_markers if marker not in text
+    ]
+    checks.append(CheckResult(
+        "bootstrap_stage_transitions",
+        "critical",
+        not missing_transitions,
+        "Bootstrap 已提交 PM、架构和 Team Plan 状态迁移"
+        if not missing_transitions
+        else f"Bootstrap 缺少状态迁移：{missing_transitions}",
     ))
 
     return checks

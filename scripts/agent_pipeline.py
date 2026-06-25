@@ -14,11 +14,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.product_app.agent_pipeline_automation import (  # noqa: E402
     AUTO_MERGE_GATE_PATH,
+    apply_stage_transition,
     advance_after_phase_test,
     build_feature_state,
     check_required_reports,
     check_state_gate_consistency,
     classify_changed_files,
+    evaluate_stage_transition,
     normalize_gate_decision,
     read_state,
     register_stage_failure,
@@ -26,6 +28,7 @@ from src.product_app.agent_pipeline_automation import (  # noqa: E402
     sync_team_plan_metadata,
     sync_state_from_gates,
     validate_stage_delivery,
+    validate_stage_start,
     write_feature_state,
     write_handoff,
     write_json,
@@ -132,6 +135,31 @@ def cmd_validate_stage_delivery(args: argparse.Namespace) -> int:
     write_json(gate_path, payload)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if result.passed else 2
+
+
+def cmd_validate_stage_start(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = validate_stage_start(root, stage=args.stage)
+    payload = result.__dict__
+    write_json(root / ".agent" / "gates" / "stage_start_gate.json", payload)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if result.passed else 2
+
+
+def cmd_evaluate_stage_transition(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = evaluate_stage_transition(root, stage=args.stage)
+    payload = result.__dict__
+    write_json(root / ".agent" / "gates" / "stage_transition_gate.json", payload)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if result.passed else 2
+
+
+def cmd_apply_stage_transition(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = apply_stage_transition(root, stage=args.stage)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("reason") == "stage_transition_committed" else 2
 
 
 def cmd_advance_phase(args: argparse.Namespace) -> int:
@@ -257,6 +285,43 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stage", required=True, choices=["claude_developer", "bugfix"])
     p.add_argument("--changed-files-file")
     p.set_defaults(func=cmd_validate_stage_delivery)
+
+    runner_stage_choices = [
+        "codex_pm",
+        "codex_architect",
+        "claude_lead_plan",
+        "claude_developer",
+        "claude_tester",
+        "claude_lead_review",
+        "bugfix",
+        "codex_reviewer",
+        "codex_acceptance",
+        "postmortem",
+    ]
+
+    p = init.add_parser(
+        "validate-stage-start",
+        parents=[common_root],
+        help="Reject stale or out-of-order queued stage runs",
+    )
+    p.add_argument("--stage", required=True, choices=runner_stage_choices)
+    p.set_defaults(func=cmd_validate_stage_start)
+
+    p = init.add_parser(
+        "evaluate-stage-transition",
+        parents=[common_root],
+        help="Combine all gates required for one stage transition",
+    )
+    p.add_argument("--stage", required=True, choices=runner_stage_choices)
+    p.set_defaults(func=cmd_evaluate_stage_transition)
+
+    p = init.add_parser(
+        "apply-stage-transition",
+        parents=[common_root],
+        help="Commit an evaluated non-tester transition to pipeline state",
+    )
+    p.add_argument("--stage", required=True, choices=runner_stage_choices)
+    p.set_defaults(func=cmd_apply_stage_transition)
 
     p = init.add_parser("advance-phase", parents=[common_root])
     p.set_defaults(func=cmd_advance_phase)
