@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "requested_stage": "codex_acceptance",
+  "expected_current_stage": "acceptance_pending",
+  "actual_current_stage": "acceptance_pending",
+  "reasons": [
+    "stage_lease_matches_state"
+  ]
+}

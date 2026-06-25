@@ -1,30 +1,39 @@
-feature_id: historical-pr-triage-pr-2-and-pr-3
-title: '[V15.0 Restart 3] Historical PR Triage: PR #2 and PR #3'
+feature_id: agentops-control-tower-foundationpipeline-api-re
+title: '[V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心'
 risk_level: unknown
-issue_number: 62
-issue_url: https://github.com/dafienoly/quant-trading-agent/issues/62
-epic_branch: epic/20260618-historical-pr-triage-pr-2-and-pr-3
-current_stage: manual_approval_required_pending
-created_at: '2026-06-18T08:49:27.347996+00:00'
+issue_number: 75
+issue_url: https://github.com/dafienoly/quant-trading-agent/issues/75
+run_id: '28088686013'
+epic_branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
+current_stage: merge_gate_pending
+created_at: '2026-06-24T09:25:22.405385+00:00'
 required_docs:
-  requirements: docs/requirements/20260618-historical-pr-triage-pr-2-and-pr-3-requirements.md
-  architecture: docs/design/20260618-historical-pr-triage-pr-2-and-pr-3-architecture.md
-  team_plan: docs/dev_plans/20260618-historical-pr-triage-pr-2-and-pr-3-team-plan.md
-  phase_dev_report_pattern: docs/dev_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-<n>-dev-report.md
-  phase_test_report_pattern: docs/test_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-<n>-test-report.md
-  claude_lead_review: docs/review/20260618-historical-pr-triage-pr-2-and-pr-3-claude-lead-review.md
-  codex_review: docs/review/20260618-historical-pr-triage-pr-2-and-pr-3-codex-review-r1.md
-  acceptance: docs/acceptance/20260618-historical-pr-triage-pr-2-and-pr-3-acceptance.md
-  user_guide: docs/user_guides/20260618-historical-pr-triage-pr-2-and-pr-3-user-guide.md
-  postmortem: docs/postmortems/20260618-historical-pr-triage-pr-2-and-pr-3-r3-failure.md
+  requirements: docs/requirements/20260624-agentops-control-tower-foundationpipeline-api-re-requirements.md
+  architecture: docs/design/20260624-agentops-control-tower-foundationpipeline-api-re-architecture.md
+  team_plan: docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md
+  phase_dev_report_pattern: docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-<n>-dev-report.md
+  phase_test_report_pattern: docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-<n>-test-report.md
+  claude_lead_review: docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md
+  codex_review: docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-codex-review-r1.md
+  acceptance: docs/acceptance/20260624-agentops-control-tower-foundationpipeline-api-re-acceptance.md
+  user_guide: docs/user_guides/20260624-agentops-control-tower-foundationpipeline-api-re-user-guide.md
+  postmortem: docs/postmortems/20260624-agentops-control-tower-foundationpipeline-api-re-r3-failure.md
 team_pipeline:
-  mode: claude_first_review
-  default_team_id: claude-team-a
+  mode: opencode_lead_claude_dev_opencode_test
+  default_team_id: hybrid-team-a
   max_parallel_teams: 3
   max_codex_review_attempts: 3
-  current_phase: 1
+  current_phase: 5
   all_phases_tested: true
   codex_review_attempts: 0
+  total_phases: 5
+  completed_phases:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  phase_test_attempts: {}
 agent_roles:
   codex_a:
   - pm
@@ -32,13 +41,14 @@ agent_roles:
   codex_b:
   - architecture
   - codex_review
-  claude_a:
+  opencode_lead:
   - team_plan
-  - claude_lead_review
+  - team_lead_review
   - team_performance
-  claude_b:
+  claude_developer:
   - phase_dev
-  claude_c:
+  - bugfix
+  opencode_tester:
   - phase_test
 manual_approval_required_for:
 - restricted-module
@@ -48,11 +58,17 @@ manual_approval_required_for:
 - main-merge-when-auto-merge-gate-fails
 - codex-review-fails-three-times
 stage_status:
-  pm: pending
-  architecture: pending
-  team_plan: pending
+  pm: passed
+  architecture: passed
+  team_plan: passed
   phase_dev: passed
   phase_test: passed
   claude_lead_review: passed
   codex_review: passed
   acceptance: passed
+pr_number: 77
+pr_url: https://github.com/dafienoly/quant-trading-agent/pull/77
+pull_request:
+  number: 77
+  url: https://github.com/dafienoly/quant-trading-agent/pull/77
+  head_ref: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75

@@ -976,3 +976,113 @@ Feedback 基础提交能力可用：`POST /product/feedback` 能生成结构化 
 | 本地三角色真实 Runtime 探针 | 全部通过 |
 | Restricted modules | 无改动 |
 | Windows self-hosted Runtime Preflight | 待 Draft PR Actions |
+
+---
+
+## 十七、2026-06-25 AgentOps Control Tower Foundation（Phases 1-5）
+
+### 17.1 背景
+
+实现 AgentOps Control Tower 只读观测基础层——Pipeline 观测契约、只读聚合 API 与状态中心页面，为后续流水线可视化提供数据基础。
+
+### 17.2 完成内容
+
+#### Phase 1 — 后端 Pipeline 观测契约与只读聚合器
+
+| 文件 | 说明 |
+|------|------|
+| `src/product_app/agentops/__init__.py` | 子包初始化 |
+| `src/product_app/agentops/pipeline_contracts.py` | Pydantic 契约/枚举/响应/错误模型 |
+| `src/product_app/agentops/pipeline_state_reader.py` | 只读读取 `.agent/` 下状态文件 |
+| `src/product_app/agentops/pipeline_aggregator.py` | 聚合为 `AgentOpsPipelineObservation` |
+| `src/product_app/agentops/pipeline_errors.py` | 结构化错误模型 |
+| `src/product_app/agentops/pipeline_sanitizer.py` | 敏感信息清洗（相对路径/Token 脱敏） |
+| `tests/test_agentops_pipeline_contracts.py` | 契约测试 |
+| `tests/test_agentops_pipeline_state_reader.py` | Reader 测试 |
+| `tests/test_agentops_pipeline_aggregator.py` | 聚合器测试 |
+| `tests/test_agentops_pipeline_sanitizer.py` | Sanitizer 测试 |
+| `tests/test_agentops_pipeline_errors.py` | 错误模型测试 |
+
+#### Phase 2 — 只读 AgentOps API 路由
+
+| 文件 | 说明 |
+|------|------|
+| `src/api/agentops_routes.py` | 只读 GET 路由 |
+| `src/api/app.py` | 注册 agentops router |
+| `tests/test_agentops_routes.py` | HTTP 契约测试 |
+
+端点：
+- `GET /product/agentops/pipelines/{feature_id}`
+- `GET /product/agentops/pipelines/by-issue/{issue_number}`
+
+#### Phase 3 — Streamlit 状态中心（方案 B）
+
+| 文件 | 说明 |
+|------|------|
+| `src/ui_report/agentops_state.py` | 状态中心 helper：只读 GET 调用、st.session_state 缓存、状态转换 |
+| `tests/test_agentops_state.py` | 状态转换测试 |
+
+#### Phase 4 — Control Tower Streamlit 页面（方案 B）
+
+| 文件 | 说明 |
+|------|------|
+| `src/ui_report/agentops_control_tower.py` | Control Tower 页面组件 |
+| `tests/test_agentops_control_tower_page.py` | 页面 smoke 测试 |
+
+#### Phase 5 — 文档、报告与回归（2026-06-25 新鲜验证）
+
+具体验证结果见 `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md`：
+- 后端单元测试 98/98 通过（Phase 1-2 agentops 实现）
+- API 回归 18/18 通过（现有 product 路由无回归）
+- Streamlit 测试 46/46 + UI 回归 3/3 = 49/49 通过
+- 全量 agentops 测试合计 144/144 通过
+- ruff/py_compile 静态检查通过
+- 全阶段文档齐备（5 份 dev report + 4 份 test report）
+- 未触碰受限模块
+- 安全确认全部通过
+
+### 17.3 技术决策
+
+- 前端栈决策采用**方案 B（Streamlit）**，沿用仓库既有 Streamlit 框架，不引入 React/Node 工具链
+- agentops 功能限定为只读，不修改交易/风控/执行/行情/回测/因子/策略/股票池模块
+- API 仅注册 GET 端点，sanitizer 处理绝对路径→相对、token-like→`<redacted>`
+
+### 17.4 安全确认
+
+| 检查项 | 结果 |
+|--------|------|
+| 默认不真实自动下单 | ✅ 全程只读，无交易入口 |
+| 未修改风险/执行/策略模块 | ✅ grep 确认无 import |
+| 敏感信息清洗 | ✅ sanitizer 绝对路径→相对、Token 脱敏 |
+| 未提交密钥 | ✅ 无 .env/token/cookie 泄露 |
+| fail-visible | ✅ 缺失→missing/unknown/blocked，不默认为通过 |
+
+### 17.5 验证记录（2026-06-25 新鲜验证）
+
+```bash
+# 后端单元测试（Phase 1-2）
+python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_pipeline_errors.py tests/test_agentops_routes.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
+# 98 passed in 2.81s
+
+# API 回归（共享 entrypoint）
+python3 -m pytest tests/test_product_routes.py tests/test_v16_0b_watchlist_api.py tests/test_v16_0b_signal_observation.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full-regression
+# 18 passed in 14.63s
+
+# Streamlit 回归
+python3 -m pytest tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-page
+# 46 passed in 0.95s
+
+# UI 回归
+python3 -m pytest tests/test_product_dashboard_source.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-ui-regression
+# 3 passed in 0.34s
+
+# 静态检查
+python3 -m ruff check src/product_app/agentops src/api/agentops_routes.py src/api/app.py tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_pipeline_errors.py tests/test_agentops_routes.py
+# All checks passed
+python3 -m py_compile src/product_app/agentops/*.py src/api/agentops_routes.py src/api/app.py
+# (no output)
+python3 -m ruff check src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py
+# All checks passed
+python3 -m py_compile src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py
+# (no output)
+```

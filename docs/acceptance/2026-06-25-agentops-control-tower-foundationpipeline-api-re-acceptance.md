@@ -1,0 +1,139 @@
+# agentops-control-tower-foundationpipeline-api-re PM Acceptance
+
+## 变更范围
+
+本次验收覆盖 AgentOps Pipeline 观测契约、只读聚合 API、Streamlit 状态中心、Control Tower 页面、五个开发与测试阶段，以及最终 Lead Review 和 Codex Review。同步验收最终报告门禁与用户入口修复：最终验证只检查 `acceptance_gate.json` 指定的权威验收报告，Merge Gate 会把验收报告、最新测试报告、Codex Review、用户指南和 API/UI 入口发布到 PR 正文。用户可从 `/product/agentops` 只读 API 与 Dashboard 的 AgentOps Control Tower 页面检查交付结果。
+
+## 测试命令
+
+```bash
+python3 -m pytest tests/test_agentops_pipeline_*.py tests/test_agentops_routes.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py tests/test_product_routes.py tests/test_v16_0b_*.py tests/test_product_dashboard_source.py -q --tb=line --basetemp=runtime/pytest-tmp-agentops-control-tower-all
+python3 -m ruff check src/product_app/agentops src/api/agentops_routes.py src/api/app.py tests/test_agentops_*.py
+python3 -m py_compile src/product_app/agentops/*.py src/api/agentops_routes.py src/api/app.py src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py
+git diff --check
+python -m pytest tests/test_validate_pr_reports.py tests/test_agent_pipeline_acceptance_entry.py tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q
+python scripts/agent_pipeline_regression.py --strict
+python scripts/validate_pr_reports.py --base origin/main --head HEAD --strict --json
+```
+
+## 测试结果
+
+Phase 5 Test Engineer 复验结果为 `PASS`：AgentOps 与 Product 聚焦回归 `165 passed`，后端单元测试 `98 passed`，API 回归 `18 passed`，Streamlit 状态中心与 Control Tower `46 passed`，Dashboard UI 回归 `3 passed`。Pipeline 验收入口修复聚焦测试为 `128 passed`，严格回归为 `8/8 gates passed`，当前 PR 最终报告门禁返回 `passed=true` 且 `issues=[]`。全项目扩展回归中的 6 个失败均由运行环境缺少 `socksio` 引起，已记录为非阻断环境备注。
+
+## 安全确认
+
+本功能只提供 Pipeline 状态读取、聚合、展示与错误可见性，不提供 approve、rerun、merge、下单、撤单或交易审批动作。未修改风险、执行、股票池和 Broker 模块；未暴露 `LEVEL_3_AUTO`；未启用真实交易；main 仍须人工审阅和手动合并。
+
+## 最终结论
+
+`ACCEPTED_WITH_NOTES`。功能主流程、只读边界、异常可见性和用户界面均通过验收。非阻断备注为 `risk_level=unknown`、历史文档日期命名差异，以及运行环境缺少 `socksio`。
+
+## Acceptance Scope
+
+本次验收对象为 Feature `agentops-control-tower-foundationpipeline-api-re`：
+
+[V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
+
+验收角色：Codex A（PM Acceptance）。
+
+验收范围：
+
+- 验证 PM、Architecture、Team Plan、Phase Development、Phase Test、Lead Review、Codex Review 等上游阶段是否完成。
+- 验证 gate evidence 是否支持进入最终验收。
+- 验证该功能是否保持 AgentOps Control Tower Foundation 的只读、可观测、非交易执行边界。
+- 验证是否存在阻断验收的安全、流程或交付物缺口。
+- 本报告仅基于已提供的 handoff、Resolved Acceptance Manifest、Pipeline State 与 Gate Evidence 进行 PM acceptance 判断，不修改代码、不写入文件、不执行工具。
+
+## Artifacts Reviewed
+
+以下 artifact 以 Resolved Acceptance Manifest 为准，均标记为 `exists=true`，本次验收不根据日期格式或路径模式重新推断：
+
+| Artifact | Path | Exists |
+|---|---|---|
+| requirements | `docs/requirements/2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md` | True |
+| architecture | `docs/design/2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md` | True |
+| team_plan | `docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md` | True |
+| phase_dev | `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md` | True |
+| phase_test | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report-r2.md` | True |
+| claude_lead_review | `docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md` | True |
+| codex_review | `docs/review/2026-06-24-agentops-control-tower-foundationpipeline-api-re-codex-review-r1.md` | True |
+
+Gate evidence 同时显示 phase 1 到 phase 5 的开发报告与测试报告均已被发现并纳入阶段 gate。
+
+## Gate Review
+
+| Gate | Result | Evidence Summary |
+|---|---|---|
+| phase_dev_gate | PASS | PM、Architecture、Team Plan、Phase Dev artifacts found；`all_required_reports_found` |
+| phase_test_gate | PASS | Phase Dev 与 Phase Test artifacts found；`all_required_reports_found` |
+| claude_lead_review_gate | APPROVED_WITH_NOTES | Lead review artifact found；无 missing 或 invalid |
+| codex_review_gate | APPROVED_WITH_NOTES | Codex review artifacts found；无 missing 或 invalid |
+
+Pipeline State 显示：
+
+- `pm`: passed
+- `architecture`: passed
+- `team_plan`: passed
+- `phase_dev`: passed
+- `phase_test`: passed
+- `claude_lead_review`: passed
+- `codex_review`: passed
+- `acceptance`: pending
+
+Gate evidence 未显示缺失 artifact、invalid artifact 或阻断性 stage failure。由于 gate evidence 与 acceptance manifest 均确认上游交付物存在，本次验收不将日期格式差异视为缺失。
+
+## Safety Review
+
+本功能定位为 V16.1 AgentOps Control Tower Foundation，验收重点是只读观测、pipeline 状态聚合、AgentOps 可观测基础能力，而非交易执行能力。
+
+安全边界验收结论：
+
+| Check | Result |
+|---|---|
+| 是否新增真实交易能力 | 未见证据显示新增真实 order path |
+| 是否绕过 human confirmation | 未见证据显示绕过 |
+| 是否暴露 `LEVEL_3_AUTO` 为普通用户选项 | 未见证据显示暴露 |
+| 是否变更 risk policy 或 execution policy | Pipeline 标记存在 restricted/manual approval 类风险项，但 gate 未显示相关阻断失败 |
+| 是否保持 AgentOps 只读观测边界 | 与 feature title、stage evidence、review gate 结论一致 |
+| 是否伪造 live trading 能力 | 未见证据显示存在 |
+| 是否存在 secret 泄露证据 | Gate evidence 未显示 |
+| 是否保留 `/product/**` 产品 API 约束 | 未见 gate 阻断；Codex review gate 已通过并为 APPROVED_WITH_NOTES |
+| 是否保留 Streamlit 有效入口 | 未见证据显示将 Streamlit 标记为 legacy/deprecated/待删除 |
+
+注意：`risk_level` 在 Pipeline State 中为 `unknown`。该状态本身不构成阻断，因为上游 phase gates、lead review gate 与 codex review gate 均已通过或带 notes 通过；但它应作为非阻断跟踪项保留。
+
+## Acceptance Findings
+
+### Non-blocking Notes
+
+1. Lead review 与 Codex review 的 gate decision 均为 `APPROVED_WITH_NOTES`，说明存在非阻断备注。当前提供的 gate evidence 未显示 S0/S1/S2 阻断项，因此不阻止 PM acceptance。
+
+2. Pipeline State 中 `risk_level` 为 `unknown`。考虑到本功能涉及 AgentOps 与 pipeline API 观测基础能力，且未见新增真实交易能力证据，该项作为后续治理备注处理，不作为本次验收阻断。
+
+3. Pipeline State 的 `required_docs.acceptance` 指向 `docs/acceptance/20260624-agentops-control-tower-foundationpipeline-api-re-acceptance.md`，而本次 handoff 指定目标输出路径为 `docs\acceptance\2026-06-25-agentops-control-tower-foundationpipeline-api-re-acceptance.md`。根据用户指令，本次报告采用 handoff 指定的目标路径；该路径差异不代表上游 artifact 缺失。
+
+### Blocking Findings
+
+未发现基于当前 handoff、manifest 与 gate evidence 可确认的阻断性验收问题。
+
+## Acceptance Decision
+
+ACCEPTED_WITH_NOTES
+
+验收理由：
+
+- 上游 PM、Architecture、Team Plan、Development、Testing、Lead Review、Codex Review 阶段均已通过对应 gate。
+- Resolved Acceptance Manifest 中列出的必需 artifact 均存在。
+- Gate evidence 未显示 missing、invalid 或 blocking decision。
+- 当前证据未显示新增真实交易能力、绕过风控、绕过人工确认、暴露 `LEVEL_3_AUTO`、伪造 live 数据或 secret 泄露。
+- 现存备注属于非阻断性质，适合以 `ACCEPTED_WITH_NOTES` 进入后续合并或发布前人工检查流程。
+
+## Handoff
+
+建议后续处理：
+
+- 合并前保留 manual merge 与 human confirmation 边界。
+- 若进入主分支合并，继续遵守 `AUTO_MERGE_POLICY` 与当前 pipeline 的 manual approval requirements。
+- 后续治理项：补充或标准化 `risk_level`，避免长期保持 `unknown`。
+- 保留 Lead Review 与 Codex Review 中的 non-blocking notes，作为后续维护或 hardening 的输入。
+- 不得将本次 AgentOps 只读观测能力解释为真实交易、自动交易或 LLM 决策能力。

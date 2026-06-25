@@ -205,6 +205,23 @@ def _pipeline_lifecycle(root: Path) -> tuple[bool, bool, str]:
     return True, current_stage not in FINAL_PIPELINE_STAGES, current_stage
 
 
+def _select_pipeline_acceptance_reports(
+    root: Path,
+    accept_reports: list[str],
+) -> list[str]:
+    """Select the authoritative final acceptance artifact for a pipeline PR."""
+    gate_path = root / ".agent" / "gates" / "acceptance_gate.json"
+    if gate_path.exists():
+        try:
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            gate = {}
+        artifact = str(gate.get("acceptance_artifact") or "").replace("\\", "/")
+        if artifact and artifact in accept_reports and (root / artifact).exists():
+            return [artifact]
+    return sorted(accept_reports)[-1:]
+
+
 def validate_reports(
     base: str,
     head: str,
@@ -273,6 +290,37 @@ def validate_reports(
         result["reports_present"] = bool(dev_reports)
         result["reports_required"] = False
         result["passed"] = len(result["issues"]) == 0
+        return result
+
+    if pipeline_mode:
+        selected_acceptance = _select_pipeline_acceptance_reports(root, accept_reports)
+        if not dev_reports:
+            result["issues"].append("no docs/dev_reports/ file in diff")
+        if not selected_acceptance:
+            result["issues"].append("no authoritative docs/acceptance/ file in diff")
+        result["reports_present"] = bool(dev_reports and selected_acceptance)
+
+        for f in dev_reports:
+            issues = check_stage_report_content(root / f, require_chinese=True)
+            if issues:
+                result["issues"].extend(f"{f}: {issue}" for issue in issues)
+            result["report_files"][f] = {
+                "path": f,
+                "profile": "pipeline_stage",
+                "issues": issues,
+                "valid": len(issues) == 0,
+            }
+        for f in selected_acceptance:
+            issues = check_report_content(root / f, strict, require_chinese=True)
+            if issues:
+                result["issues"].extend(f"{f}: {issue}" for issue in issues)
+            result["report_files"][f] = {
+                "path": f,
+                "profile": "pipeline_final_acceptance",
+                "issues": issues,
+                "valid": len(issues) == 0,
+            }
+        result["passed"] = len(result["issues"]) == 0 and result["reports_present"]
         return result
 
     if not dev_reports:

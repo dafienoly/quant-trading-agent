@@ -22,6 +22,7 @@ permissions:
   pull-requests: write
   issues: write
   checks: read
+  statuses: write
 
 concurrency:
   group: agent-main-merge-gate-pr-${{ github.event.pull_request.number || inputs.feature_id || github.run_id }}
@@ -98,9 +99,17 @@ jobs:
           Write-Host "Merge base: $mergeBase"
 
           New-Item -ItemType Directory -Force -Path .agent | Out-Null
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-          git diff --name-only "$mergeBase..HEAD" | Out-File -FilePath .agent/changed_files.txt -Encoding utf8
+          $changedFiles = @(git diff --name-only "$mergeBase..HEAD")
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $changedFilesText = if ($changedFiles.Count -gt 0) {
+            ($changedFiles -join "`n") + "`n"
+          } else {
+            ""
+          }
+          $changedFilesPath = Join-Path (Get-Location) ".agent/changed_files.txt"
+          [System.IO.File]::WriteAllText($changedFilesPath, $changedFilesText, $utf8NoBom)
 
           Write-Host "Changed files since merge base:"
           Get-Content .agent/changed_files.txt
@@ -143,7 +152,33 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
-      - name: Require manual approval when gate fails
+      - name: Publish user acceptance entry to PR body
+        if: inputs.pr_number != '' || github.event.pull_request.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+          $sha = git rev-parse HEAD
+          $actionsUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          New-Item -ItemType Directory -Force -Path .agent/reports | Out-Null
+          python scripts/agent_pipeline_acceptance_entry.py `
+            --repository "${{ github.repository }}" `
+            --ref $sha `
+            --actions-url $actionsUrl `
+            --output .agent/reports/pr_acceptance_entry.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $entry = Get-Content .agent/reports/pr_acceptance_entry.md -Raw -Encoding utf8
+          $body = gh pr view $pr --repo "${{ github.repository }}" --json body --jq ".body"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pattern = '(?s)\r?\n?<!-- agent-user-acceptance:start -->.*?<!-- agent-user-acceptance:end -->'
+          $baseBody = [regex]::Replace([string]$body, $pattern, '').TrimEnd()
+          $newBody = "$baseBody`n`n$entry"
+          gh pr edit $pr --repo "${{ github.repository }}" --body $newBody
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Require manual approval for non-auto-merge changes
         if: steps.classify.outputs.status != '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -153,7 +188,7 @@ jobs:
           if ($pr) {
             gh pr edit $pr --add-label "stage:manual-approval-required"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh pr comment $pr --body "Merge Gate blocked by safety policy. See .agent/gates/auto_merge_gate.json, acceptance report, and the Pipeline Dashboard artifact in this Actions run. main still requires manual review and merge."
+            gh pr comment $pr --body "Merge Gate checks passed, but these changes are outside the documentation/test-only auto-merge allowlist. See .agent/gates/auto_merge_gate.json, the acceptance report, and the Pipeline Dashboard artifact. main still requires manual review and merge."
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           Write-Host "Safety policy requires manual approval. PR has been marked. Workflow will not auto-merge."
@@ -177,6 +212,7 @@ jobs:
           Write-Host "Gate passed. PR still requires manual review and merge."
 
       - name: Generate Pipeline Diagnostic Report
+        id: diagnostics
         if: always()
         run: |
           $ErrorActionPreference = "Continue"
@@ -216,6 +252,11 @@ jobs:
           }
 
           Write-Host "Regression exit code: $regressionStatus; Dashboard generation exit code: $viewerStatus"
+          [System.IO.File]::AppendAllText(
+            $env:GITHUB_OUTPUT,
+            "regression_status=$regressionStatus`nviewer_status=$viewerStatus`n",
+            $utf8NoBom
+          )
           exit 0
 
       - name: 上传 Pipeline Dashboard artifact
@@ -228,5 +269,47 @@ jobs:
             .agent/reports/pipeline_dashboard.html
             .agent/gates/*.json
             .agent/changed_files.txt
+            .agent/reports/pr_acceptance_entry.md
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish final acceptance status on PR head
+        if: always() && (inputs.pr_number != '' || github.event.pull_request.number != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $regressionStatus = "${{ steps.diagnostics.outputs.regression_status }}"
+          $viewerStatus = "${{ steps.diagnostics.outputs.viewer_status }}"
+          $sha = git rev-parse HEAD
+          $actionsUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $context = [System.Text.Encoding]::UTF8.GetString(
+            [System.Convert]::FromBase64String("UGlwZWxpbmUg5pyA57uI6aqM5pS2")
+          )
+          if ($regressionStatus -eq "0" -and $viewerStatus -eq "0") {
+            $state = "success"
+            $description = [System.Text.Encoding]::UTF8.GetString(
+              [System.Convert]::FromBase64String("UGlwZWxpbmUg6aqM5pS244CB6K+K5pat5oql5ZGK5ZKM55So5oi35YWl5Y+j5Z2H5bey6YCa6L+H")
+            )
+          } else {
+            $state = "failure"
+            $description = [System.Text.Encoding]::UTF8.GetString(
+              [System.Convert]::FromBase64String("UGlwZWxpbmUg6K+K5pat5aSx6LSl77yM6K+35p+l55yLIEFjdGlvbnMg5LiOIGFydGlmYWN0")
+            )
+          }
+          gh api --method POST "repos/${{ github.repository }}/statuses/$sha" `
+            -f state=$state `
+            -f context=$context `
+            -f description=$description `
+            -f target_url=$actionsUrl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Enforce Pipeline diagnostic result
+        if: always()
+        run: |
+          $regressionStatus = "${{ steps.diagnostics.outputs.regression_status }}"
+          $viewerStatus = "${{ steps.diagnostics.outputs.viewer_status }}"
+          if ($regressionStatus -ne "0" -or $viewerStatus -ne "0") {
+            Write-Error "Pipeline diagnostic failed: regression=$regressionStatus viewer=$viewerStatus. Artifact has been uploaded."
+            exit 2
+          }
+          Write-Host "Pipeline diagnostic passed."

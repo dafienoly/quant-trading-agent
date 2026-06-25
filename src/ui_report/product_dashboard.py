@@ -10,6 +10,9 @@ import streamlit as st
 
 from src.ui_report.i18n import t
 
+from src.ui_report.agentops_control_tower import render_control_tower_page
+from src.ui_report.agentops_state import load_by_feature_id as load_agentops_feature
+
 DEFAULT_API_BASE = "http://localhost:8000"
 API_TIMEOUT = 8
 
@@ -903,6 +906,23 @@ def render_live_data() -> None:
             _banner("danger", t("failed_to_build"))
 
 
+def _render_control_tower() -> None:
+    feature_id = st.text_input(
+        t("feature_id"),
+        value=st.session_state.get("ct_feature_id", ""),
+        key="ct_feature_input",
+    )
+    if st.button(t("status"), key="ct_load_btn") and feature_id:
+        st.session_state["ct_feature_id"] = feature_id
+        st.session_state["ct_state"] = load_agentops_feature(feature_id)
+
+    state = st.session_state.get("ct_state")
+    if state:
+        render_control_tower_page(state)
+    else:
+        st.info(t("feature_not_selected"))
+
+
 def main() -> None:
     st.set_page_config(page_title=t("page_title"), layout="wide", initial_sidebar_state="expanded")
     st.markdown(PAGE_CSS, unsafe_allow_html=True)
@@ -931,6 +951,7 @@ def main() -> None:
             t("tab_human_confirmation"),
             t("tab_configuration"),
             t("tab_feedback"),
+            t("tab_agentops_control_tower"),
         ]
     )
 
@@ -954,6 +975,8 @@ def main() -> None:
         render_configuration()
     with tabs[9]:
         render_feedback()
+    with tabs[10]:
+        _render_control_tower()
 
 
 if __name__ == "__main__":

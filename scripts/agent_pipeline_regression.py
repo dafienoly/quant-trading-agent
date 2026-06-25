@@ -479,19 +479,30 @@ def check_gates(repo_root: Path) -> list[CheckResult]:
 
         gate_stages = list(GATE_MAPPING.values())
         gates_passed = 0
+        gate_failures: list[str] = []
         gates_total = len(gate_stages)
         for gs in gate_stages:
             try:
                 result = check_required_reports(tmp, feature_id="gate-test-feature", through_stage=gs)
                 if result.passed:
                     gates_passed += 1
-            except Exception:
-                pass
+                else:
+                    gate_failures.append(
+                        f"{gs}: missing={result.missing}, invalid={result.invalid}"
+                    )
+            except Exception as exc:
+                gate_failures.append(f"{gs}: {exc.__class__.__name__}: {exc}")
 
-        if gates_passed >= max(1, gates_total * 0.5):
+        if gates_passed == gates_total:
             checks.append(CheckResult("gates_pass", "critical", True, f"{gates_passed}/{gates_total} gates passed"))
         else:
-            checks.append(CheckResult("gates_pass", "critical", False, f"only {gates_passed}/{gates_total} gates passed"))
+            detail = "; ".join(gate_failures)
+            checks.append(CheckResult(
+                "gates_pass",
+                "critical",
+                False,
+                f"only {gates_passed}/{gates_total} gates passed; {detail}",
+            ))
 
     return checks
 
@@ -596,13 +607,13 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
         elif stage_key == "codex_review":
             content = f"# {feature_id} Codex Review R1\n\n## Review Decision\n\nAPPROVED\n\n"
         elif stage_key == "phase_dev":
-            content = f"# {feature_id} Dev Report\n\n## 最终结论\n\nPASS\n\n"
+            content = f"# {feature_id} Dev Report\n\n## Final Result\n\nPASS\n\n"
         elif stage_key == "phase_test":
-            content = f"# {feature_id} Test Report\n\n## 最终结论\n\nPASS\n\n"
+            content = f"# {feature_id} Test Report\n\n## Final Result\n\nPASS\n\n"
         elif stage_key == "claude_lead_review":
             content = f"# {feature_id} Lead Review\n\n## Review Decision\n\nAPPROVED\n\n"
 
-        filepath.write_text(content)
+        filepath.write_text(content, encoding="utf-8")
         if filepath.exists() and filepath.stat().st_size > 0:
             artifact_created += 1
             checks.append(CheckResult(f"artifact_{stage_key}", "critical", True, f"{filename} created"))
@@ -625,19 +636,32 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
 
     # 4. Check gates
     gates_passed = 0
+    gate_failures: list[str] = []
     gates_total = len(STAGE_ORDER)
     for through_stage in STAGE_ORDER:
         try:
             result = check_required_reports(tmp, feature_id=feature_id, through_stage=through_stage)
             if result.passed:
                 gates_passed += 1
-        except Exception:
-            pass
+            else:
+                gate_failures.append(
+                    f"{through_stage}: missing={result.missing}, invalid={result.invalid}"
+                )
+        except Exception as exc:
+            gate_failures.append(
+                f"{through_stage}: {exc.__class__.__name__}: {exc}"
+            )
 
     if gates_passed == gates_total:
         checks.append(CheckResult("sim_all_gates_pass", "critical", True, f"{gates_passed}/{gates_total} gates passed"))
     else:
-        checks.append(CheckResult("sim_all_gates_pass", "warning", False, f"only {gates_passed}/{gates_total} gates passed"))
+        detail = "; ".join(gate_failures)
+        checks.append(CheckResult(
+            "sim_all_gates_pass",
+            "critical",
+            False,
+            f"only {gates_passed}/{gates_total} gates passed; {detail}",
+        ))
 
     # 5. Validate state sync
     try:

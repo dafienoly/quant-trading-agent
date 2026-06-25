@@ -954,6 +954,132 @@ tests/test_bug_auto_fix.py — 21 passed
 
 ---
 
+## AgentOps Control Tower Foundation（Phases 1-5）
+
+### 完成日期
+
+2026-06-25
+
+### 架构选择
+
+前端栈采用**方案 B（Streamlit）**，沿用仓库既有 Streamlit 框架，不引入 React/Node 工具链。
+
+### Phase 1 — 后端 Pipeline 观测契约与只读聚合器
+
+#### 交付物清单
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/product_app/agentops/__init__.py` | 子包初始化 |
+| 2 | `src/product_app/agentops/pipeline_contracts.py` | Pydantic 契约/枚举/响应/错误模型 |
+| 3 | `src/product_app/agentops/pipeline_state_reader.py` | 只读读取 `.agent/` 状态文件 |
+| 4 | `src/product_app/agentops/pipeline_aggregator.py` | 聚合为 `AgentOpsPipelineObservation` |
+| 5 | `src/product_app/agentops/pipeline_errors.py` | 结构化错误模型 |
+| 6 | `src/product_app/agentops/pipeline_sanitizer.py` | 敏感信息清洗 |
+
+#### 测试文件（5 个）
+
+| # | 文件 | 覆盖范围 |
+|---|------|---------|
+| 1 | `tests/test_agentops_pipeline_contracts.py` | 契约字段、枚举、contract_version |
+| 2 | `tests/test_agentops_pipeline_state_reader.py` | YAML/JSON 读取、缺失处理 |
+| 3 | `tests/test_agentops_pipeline_aggregator.py` | 聚合逻辑、fail-visible |
+| 4 | `tests/test_agentops_pipeline_sanitizer.py` | 路径脱敏、Token 脱敏 |
+| 5 | `tests/test_agentops_pipeline_errors.py` | 错误模型序列化 |
+
+#### 测试结果
+
+```
+98 passed in 2.76s
+```
+
+### Phase 2 — 只读 AgentOps API 路由
+
+#### 交付物清单
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/api/agentops_routes.py` | 只读 GET 路由 |
+| 2 | `src/api/app.py` | 注册 agentops router |
+| 3 | `tests/test_agentops_routes.py` | HTTP 契约测试 |
+
+#### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/product/agentops/pipelines/{feature_id}` | GET | 按 feature_id 查询 |
+| `/product/agentops/pipelines/by-issue/{issue_number}` | GET | 按 issue_number 查询 |
+
+#### 测试结果
+
+```
+98 passed (含 Phase 1 测试)
+18 passed (API 回归：product_routes + watchlist + signal)
+```
+
+### Phase 3 — Streamlit 状态中心（方案 B）
+
+#### 交付物清单
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/ui_report/agentops_state.py` | 状态中心 helper：只读 GET、st.session_state 缓存、状态转换 |
+| 2 | `tests/test_agentops_state.py` | 状态转换测试 |
+
+#### 测试结果
+
+```
+46 passed (含 Phase 3 + Phase 4 测试)
+```
+
+### Phase 4 — Control Tower Streamlit 页面（方案 B）
+
+#### 交付物清单
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `src/ui_report/agentops_control_tower.py` | Control Tower 页面组件 |
+| 2 | `tests/test_agentops_control_tower_page.py` | 页面 smoke 测试 |
+
+#### 核心约束
+
+| 约束 | 状态 |
+|------|------|
+| 只读，无控制动作按钮 | ✅ grep 无 POST/PUT/PATCH/DELETE |
+| 缺失文档显示 missing/unknown | ✅ fail-visible |
+| 无真实交易入口 | ✅ 未修改受限模块 |
+
+### Phase 5 — 文档、报告与回归
+
+#### 本次验证记录
+
+| 验证项 | 结果 |
+|--------|------|
+| 后端 pytest (Phase 1-2) | 98 passed |
+| API 回归 (product/watchlist/signal) | 18 passed |
+| Streamlit tests (Phase 3-4) | 46 passed |
+| UI 回归 (dashboard) | 3 passed |
+| ruff 静态检查 | All checks passed |
+| py_compile | passed |
+| git diff --check | 无空白问题 |
+| 必需文档检查 | 12/12 完整（需求+架构+团队计划+5份dev报告+4份test报告） |
+| 受限模块审计 | 未触碰任何受限模块 |
+
+### 全阶段总结
+
+| 项目 | 状态 |
+|------|------|
+| 需求文档 | ✅ |
+| 架构设计 | ✅ |
+| 团队计划 | ✅ |
+| 开发报告（Phases 1-5） | ✅ |
+| 测试报告（Phases 1-4） | ✅ |
+| 日志更新 | ✅ |
+| 未触碰受限模块 | ✅ |
+| 无 S0/S1/S2 缺陷 | ✅ |
+
+---
+
 ## Cross-Phase: Agent 开发流程治理
 
 ### 完成日期

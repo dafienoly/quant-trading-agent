@@ -1,36 +1,36 @@
 {
-    "feature_id":  "historical-pr-triage-pr-2-and-pr-3",
+    "feature_id":  "agentops-control-tower-foundationpipeline-api-re",
     "missing":  [
 
                 ],
     "artifacts":  {
                       "architecture":  {
-                                           "path":  "docs/design/2026-06-18-historical-pr-triage-pr-2-and-pr-3-architecture.md",
+                                           "path":  "docs/design/2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md",
                                            "source":  ".agent\\gates\\claude_lead_review_gate.json found.architecture",
                                            "exists":  true
                                        },
                       "team_plan":  {
-                                        "path":  "docs/dev_plans/2026-06-18-historical-pr-triage-pr-2-and-pr-3-team-plan.md",
+                                        "path":  "docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md",
                                         "source":  ".agent\\gates\\claude_lead_review_gate.json found.team_plan",
                                         "exists":  true
                                     },
                       "phase_test":  {
-                                         "path":  "docs/test_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-1-test-report.md",
+                                         "path":  "docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report-r2.md",
                                          "source":  ".agent\\gates\\phase_test_gate.json found.phase_test",
                                          "exists":  true
                                      },
                       "phase_dev":  {
-                                        "path":  "docs/dev_reports/20260618-historical-pr-triage-pr-2-and-pr-3-phase-1-dev-report.md",
+                                        "path":  "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md",
                                         "source":  ".agent\\gates\\phase_dev_gate.json found.phase_dev",
                                         "exists":  true
                                     },
                       "requirements":  {
-                                           "path":  "docs/requirements/2026-06-18-historical-pr-triage-pr-2-and-pr-3-requirements.md",
+                                           "path":  "docs/requirements/2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md",
                                            "source":  ".agent\\gates\\claude_lead_review_gate.json found.pm",
                                            "exists":  true
                                        },
                       "claude_lead_review":  {
-                                                 "path":  "docs/review/2026-06-18-historical-pr-triage-pr-2-and-pr-3-claude-lead-review.md",
+                                                 "path":  "docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md",
                                                  "source":  ".agent\\gates\\claude_lead_review_gate.json found.claude_lead_review",
                                                  "exists":  true
                                              }

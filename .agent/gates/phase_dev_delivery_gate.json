@@ -1,0 +1,20 @@
+{
+  "passed": false,
+  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "stage": "claude_developer",
+  "current_phase": 5,
+  "changed_files": [
+    "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md"
+  ],
+  "substantive_files": [],
+  "test_files": [],
+  "claimed_files": [],
+  "invalid": [
+    "report_only_delivery",
+    "missing_implementation_change",
+    "missing_test_change"
+  ],
+  "reasons": [
+    "stage_delivery_invalid"
+  ]
+}

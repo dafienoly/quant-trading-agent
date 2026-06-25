@@ -529,6 +529,18 @@ def test_main_merge_gate_never_auto_merges():
 
     assert "gh pr merge" not in text
     assert "requires manual review and merge" in text
+    assert "Publish user acceptance entry to PR body" in text
+    assert "agent_pipeline_acceptance_entry.py" in text
+    assert "agent-user-acceptance:start" in text
+    assert ".agent/reports/pr_acceptance_entry.md" in text
+    assert "Enforce Pipeline diagnostic result" in text
+    assert "steps.diagnostics.outputs.regression_status" in text
+    assert "Require manual approval for non-auto-merge changes" in text
+    assert "[System.IO.File]::WriteAllText($changedFilesPath" in text
+    assert "Publish final acceptance status on PR head" in text
+    assert "UGlwZWxpbmUg5pyA57uI6aqM5pS2" in text
+    assert "-f context=$context" in text
+    assert "statuses: write" in text
 
 
 def test_pr_validation_runs_required_lightweight_checks():
