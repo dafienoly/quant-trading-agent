@@ -315,20 +315,6 @@ def _extract_changed_files_from_git(root: Path) -> list[str]:
     return sorted(set(changed))
 
 
-def _extract_branch_diff_from_git(root: Path) -> list[str]:
-    """Return all files changed on the current branch vs main."""
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "main...HEAD"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        return []
-    return [normalize_path(line) for line in result.stdout.splitlines() if line.strip()]
-
-
 def _extract_claimed_change_paths(text: str) -> list[str]:
     section_match = re.search(
         r"(?ims)^#{2,4}\s*(变更范围|变更文件|修改文件|changed files?)\s*$"
@@ -373,7 +359,23 @@ def validate_stage_delivery(
     if previous_delivery.exists():
         try:
             prev = json.loads(previous_delivery.read_text(encoding="utf-8"))
-            if prev.get("feature_id") == feature_id and prev.get("passed"):
+            phase_test_gate = _read_gate(root, "phase_test_gate.json") or {}
+            rejected_current_phase = (
+                phase_test_gate.get("decision") == "REJECTED"
+                and int(phase_test_gate.get("current_phase", current_phase)) == current_phase
+            )
+            previous_phase = prev.get("current_phase")
+            same_phase = (
+                int(previous_phase) == current_phase
+                if previous_phase is not None
+                else current_phase == 1
+            )
+            if (
+                prev.get("feature_id") == feature_id
+                and prev.get("passed")
+                and same_phase
+                and not rejected_current_phase
+            ):
                 return StageDeliveryResult(
                     passed=True,
                     feature_id=feature_id,
@@ -388,30 +390,6 @@ def validate_stage_delivery(
                 )
         except (json.JSONDecodeError, OSError):
             pass
-
-    # If no uncommitted changes but feature branch has prior commits with
-    # substantive files, treat delivery as already validated.
-    if changed_files is None and not _extract_changed_files_from_git(root):
-        branch_diff = _extract_branch_diff_from_git(root)
-        substantive = [
-            p for p in branch_diff
-            if (p.startswith(_SUBSTANTIVE_PATH_PREFIXES) or p in _SUBSTANTIVE_ROOT_FILES)
-            and not p.startswith(_DELIVERY_REPORT_PREFIXES)
-            and not p.startswith(".agent/")
-        ]
-        if substantive:
-            return StageDeliveryResult(
-                passed=True,
-                feature_id=feature_id,
-                stage=stage,
-                current_phase=current_phase,
-                changed_files=branch_diff,
-                substantive_files=substantive,
-                test_files=[p for p in substantive if p.startswith("tests/")],
-                claimed_files=[],
-                invalid=[],
-                reasons=["branch_already_contains_substantive_delivery"],
-            )
 
     report_pattern = REPORT_GLOBS_BY_STAGE["phase_dev"][0].format(feature_id=feature_id)
     reports = sorted(root.glob(report_pattern))
