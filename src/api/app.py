@@ -33,6 +33,10 @@ def create_app(
     from src.api.agentops_routes import router as agentops_router
     app.include_router(agentops_router, prefix="/product/agentops", tags=["agentops"])
 
+    # 注册 V16.2 市场数据 Relay 路由
+    from src.api.market_routes import router as market_router
+    app.include_router(market_router, prefix="/product/market", tags=["market"])
+
     @app.get("/health")
     def health() -> dict:
         return {

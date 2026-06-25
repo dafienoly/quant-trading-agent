@@ -8,9 +8,10 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import date, datetime
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 
 import pandas as pd
 
@@ -19,9 +20,154 @@ class DataCapability(str, Enum):
     """数据能力枚举"""
     REALTIME_QUOTES = "realtime_quotes"
     DAILY_BARS = "daily_bars"
+    INDEX_QUOTES = "index_quotes"
+    INDEX_BARS = "index_bars"
+    ETF_QUOTES = "etf_quotes"
+    ETF_BARS = "etf_bars"
+    SECTOR_QUOTES = "sector_quotes"
+    TRADE_CALENDAR = "trade_calendar"
     FUNDAMENTALS = "fundamentals"
     STOCK_INFO = "stock_info"
     INTRADAY_BARS = "intraday_bars"
+
+
+class MarketDataType(str, Enum):
+    SOURCE_HEALTH = "source_health"
+    SOURCE_LIST = "source_list"
+    STOCK_QUOTE = "stock_quote"
+    INDEX_QUOTE = "index_quote"
+    ETF_QUOTE = "etf_quote"
+    SECTOR_QUOTE = "sector_quote"
+    STOCK_BARS = "stock_bars"
+    INDEX_BARS = "index_bars"
+    ETF_BARS = "etf_bars"
+    TRADE_CALENDAR = "trade_calendar"
+
+
+class DataUsage(str, Enum):
+    DISPLAY = "display"
+    ANALYSIS = "analysis"
+    SIGNAL = "signal"
+    EXECUTION = "execution"
+
+
+class DataQualityStatus(str, Enum):
+    COMPLETE = "complete"
+    STALE = "stale"
+    INCOMPLETE = "incomplete"
+    UNAVAILABLE = "unavailable"
+    INCONSISTENT = "inconsistent"
+    MOCK = "mock"
+
+
+class ProviderStatus(str, Enum):
+    OK = "ok"
+    DEGRADED = "degraded"
+    ERROR = "error"
+    CIRCUIT_OPEN = "circuit_open"
+    UNKNOWN = "unknown"
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True)
+class QuoteSnapshot:
+    symbol: str
+    name: str
+    price: float | None
+    prev_close: float | None
+    open: float | None
+    high: float | None
+    low: float | None
+    volume: float | int | None
+    amount: float | None
+    change: float | None
+    pct_change: float | None
+    timestamp: str
+    trading_day: str
+    currency: str = "CNY"
+    timezone: str = "Asia/Shanghai"
+    source_volume_unit: str = "share"
+    status: str = "NORMAL"
+
+    def to_dict(self) -> dict[str, Any]:
+        return _json_value(asdict(self))
+
+
+@dataclass(frozen=True)
+class Bar:
+    trade_date: str
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float | None
+    volume: float | int | None
+    amount: float | None
+    raw_close: float | None = None
+    adjusted_close: float | None = None
+    is_suspended: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return _json_value(asdict(self))
+
+
+@dataclass(frozen=True)
+class BarSeries:
+    symbol: str
+    frequency: str
+    adjust: str
+    bars: list[Bar]
+    currency: str = "CNY"
+    timezone: str = "Asia/Shanghai"
+
+    def to_dict(self) -> dict[str, Any]:
+        return _json_value(asdict(self))
+
+
+@dataclass(frozen=True)
+class DataSourceHealth:
+    provider_name: str
+    status: ProviderStatus
+    capabilities: list[str] = field(default_factory=list)
+    last_success_at: str = ""
+    last_error_at: str = ""
+    latency_ms: float = 0.0
+    rate_limit_status: str = "unknown"
+    error_summary: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return _json_value(asdict(self))
+
+
+@dataclass(frozen=True)
+class MarketDataEnvelope:
+    request_id: str
+    source: str
+    provider_name: str
+    data_type: MarketDataType
+    fetched_at: str
+    latency_ms: float
+    cached: bool
+    stale: bool
+    mock: bool
+    quality_status: DataQualityStatus
+    blocking_for_signal: bool
+    payload: Any
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return _json_value(asdict(self))
 
 
 @dataclass
@@ -38,6 +184,9 @@ class ProviderResult:
     error: str = ""
     elapsed_ms: float = 0.0
     fallback_chain: list[str] = field(default_factory=list)
+    request_id: str = ""
+    started_at: str = ""
+    completed_at: str = ""
 
 
 @dataclass
@@ -50,6 +199,8 @@ class ProviderHealth:
     row_count: int
     field_coverage: dict[str, bool] = field(default_factory=dict)
     last_success_at: str = ""
+    last_error_at: str = ""
+    rate_limit_status: str = "unknown"
     error: str = ""
 
 
