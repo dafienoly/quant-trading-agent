@@ -22,6 +22,7 @@ permissions:
   pull-requests: write
   issues: write
   checks: read
+  statuses: write
 
 concurrency:
   group: agent-main-merge-gate-pr-${{ github.event.pull_request.number || inputs.feature_id || github.run_id }}
@@ -271,6 +272,29 @@ jobs:
             .agent/reports/pr_acceptance_entry.md
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish final acceptance status on PR head
+        if: always() && (inputs.pr_number != '' || github.event.pull_request.number != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $regressionStatus = "${{ steps.diagnostics.outputs.regression_status }}"
+          $viewerStatus = "${{ steps.diagnostics.outputs.viewer_status }}"
+          $sha = git rev-parse HEAD
+          $actionsUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if ($regressionStatus -eq "0" -and $viewerStatus -eq "0") {
+            $state = "success"
+            $description = "Pipeline 验收、诊断报告和用户入口均已通过"
+          } else {
+            $state = "failure"
+            $description = "Pipeline 诊断失败，请查看 Actions 与 artifact"
+          }
+          gh api --method POST "repos/${{ github.repository }}/statuses/$sha" `
+            -f state=$state `
+            -f context="Pipeline 最终验收" `
+            -f description=$description `
+            -f target_url=$actionsUrl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Enforce Pipeline diagnostic result
         if: always()

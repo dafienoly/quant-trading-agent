@@ -537,6 +537,9 @@ def test_main_merge_gate_never_auto_merges():
     assert "steps.diagnostics.outputs.regression_status" in text
     assert "Require manual approval for non-auto-merge changes" in text
     assert "[System.IO.File]::WriteAllText($changedFilesPath" in text
+    assert "Publish final acceptance status on PR head" in text
+    assert 'context="Pipeline 最终验收"' in text
+    assert "statuses: write" in text
 
 
 def test_pr_validation_runs_required_lightweight_checks():
