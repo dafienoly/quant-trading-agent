@@ -1,5 +1,5 @@
 {
-  "passed": false,
+  "passed": true,
   "feature_id": "agentops-control-tower-foundationpipeline-api-re",
   "checked_stages": [
     "pm",
@@ -23,13 +23,11 @@
     ]
   },
   "reasons": [
-    "invalid_required_stage_reports"
+    "all_required_reports_found"
   ],
-  "invalid": {
-    "phase_dev": [
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md:missing_explicit_final_decision"
-    ]
+  "invalid": {},
+  "decisions": {
+    "phase_dev": "PASS_WITH_NOTES"
   },
-  "decisions": {},
-  "route_back_to": "claude_developer"
+  "decision": "PASS_WITH_NOTES"
 }
