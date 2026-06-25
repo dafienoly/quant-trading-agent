@@ -365,10 +365,10 @@ def validate_stage_delivery(
                     stage=stage,
                     changed_files=prev.get("changed_files", []),
                     substantive_files=prev.get("substantive_files", []),
-                    implementation_files=prev.get("implementation_files", []),
                     test_files=prev.get("test_files", []),
+                    claimed_files=prev.get("claimed_files", []),
                     invalid=[],
-                    claimed_changes=prev.get("claimed_changes", []),
+                    reasons=["reused_previous_delivery_gate"],
                 )
         except (json.JSONDecodeError, OSError):
             pass
