@@ -533,6 +533,10 @@ def test_main_merge_gate_never_auto_merges():
     assert "agent_pipeline_acceptance_entry.py" in text
     assert "agent-user-acceptance:start" in text
     assert ".agent/reports/pr_acceptance_entry.md" in text
+    assert "Enforce Pipeline diagnostic result" in text
+    assert "steps.diagnostics.outputs.regression_status" in text
+    assert "Require manual approval for non-auto-merge changes" in text
+    assert "[System.IO.File]::WriteAllText($changedFilesPath" in text
 
 
 def test_pr_validation_runs_required_lightweight_checks():

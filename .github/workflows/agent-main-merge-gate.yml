@@ -98,9 +98,17 @@ jobs:
           Write-Host "Merge base: $mergeBase"
 
           New-Item -ItemType Directory -Force -Path .agent | Out-Null
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-          git diff --name-only "$mergeBase..HEAD" | Out-File -FilePath .agent/changed_files.txt -Encoding utf8
+          $changedFiles = @(git diff --name-only "$mergeBase..HEAD")
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $changedFilesText = if ($changedFiles.Count -gt 0) {
+            ($changedFiles -join "`n") + "`n"
+          } else {
+            ""
+          }
+          $changedFilesPath = Join-Path (Get-Location) ".agent/changed_files.txt"
+          [System.IO.File]::WriteAllText($changedFilesPath, $changedFilesText, $utf8NoBom)
 
           Write-Host "Changed files since merge base:"
           Get-Content .agent/changed_files.txt
@@ -169,7 +177,7 @@ jobs:
           gh pr edit $pr --repo "${{ github.repository }}" --body $newBody
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Require manual approval when gate fails
+      - name: Require manual approval for non-auto-merge changes
         if: steps.classify.outputs.status != '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,7 +187,7 @@ jobs:
           if ($pr) {
             gh pr edit $pr --add-label "stage:manual-approval-required"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh pr comment $pr --body "Merge Gate blocked by safety policy. See .agent/gates/auto_merge_gate.json, acceptance report, and the Pipeline Dashboard artifact in this Actions run. main still requires manual review and merge."
+            gh pr comment $pr --body "Merge Gate checks passed, but these changes are outside the documentation/test-only auto-merge allowlist. See .agent/gates/auto_merge_gate.json, the acceptance report, and the Pipeline Dashboard artifact. main still requires manual review and merge."
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           Write-Host "Safety policy requires manual approval. PR has been marked. Workflow will not auto-merge."
@@ -203,6 +211,7 @@ jobs:
           Write-Host "Gate passed. PR still requires manual review and merge."
 
       - name: Generate Pipeline Diagnostic Report
+        id: diagnostics
         if: always()
         run: |
           $ErrorActionPreference = "Continue"
@@ -242,6 +251,11 @@ jobs:
           }
 
           Write-Host "Regression exit code: $regressionStatus; Dashboard generation exit code: $viewerStatus"
+          [System.IO.File]::AppendAllText(
+            $env:GITHUB_OUTPUT,
+            "regression_status=$regressionStatus`nviewer_status=$viewerStatus`n",
+            $utf8NoBom
+          )
           exit 0
 
       - name: 上传 Pipeline Dashboard artifact
@@ -257,3 +271,14 @@ jobs:
             .agent/reports/pr_acceptance_entry.md
           if-no-files-found: error
           retention-days: 14
+
+      - name: Enforce Pipeline diagnostic result
+        if: always()
+        run: |
+          $regressionStatus = "${{ steps.diagnostics.outputs.regression_status }}"
+          $viewerStatus = "${{ steps.diagnostics.outputs.viewer_status }}"
+          if ($regressionStatus -ne "0" -or $viewerStatus -ne "0") {
+            Write-Error "Pipeline diagnostic failed: regression=$regressionStatus viewer=$viewerStatus. Artifact has been uploaded."
+            exit 2
+          }
+          Write-Host "Pipeline diagnostic passed."
