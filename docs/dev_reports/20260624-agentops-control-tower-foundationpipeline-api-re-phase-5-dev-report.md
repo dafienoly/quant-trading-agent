@@ -24,10 +24,10 @@ Phase 5 为文档汇总与回归阶段，无新增功能代码。变更范围：
 
 | 计划条目 | 对应实现 |
 |----------|----------|
-| Phase 5: 全阶段中文报告齐备 | ✅ 5 份 dev report + 4 份 test report 齐备 |
-| Phase 5: 后端全量回归 | ✅ 144/144 passed（Phase 1-4 agentops 全量测试） |
+| Phase 5: 全阶段中文报告齐备 | ✅ 5 份 dev report（Phase 1-5）+ 4 份 test report（Phase 1-4）齐备 |
+| Phase 5: 后端单元测试 | ✅ 98/98 passed（Phase 1-2 agentops 实现） |
 | Phase 5: API 回归 | ✅ 18/18 passed（现有 product 路由无回归） |
-| Phase 5: Streamlit + UI 回归 | ✅ 49/49 passed（状态中心 + Control Tower + dashboard） |
+| Phase 5: Streamlit + UI 回归 | ✅ 46/46 + 3/3 = 49/49 passed（状态中心 + Control Tower + dashboard） |
 | Phase 5: 日志更新 | ✅ DEVELOPMENT_LOG.md + PHASE_COMPLETION_REPORT.md 已有 AgentOps 条目 |
 | Phase 5: 静态检查 | ✅ ruff + py_compile 通过 |
 | Phase 5: 安全与受限模块审计 | ✅ agentops 代码未触碰受限模块 |
@@ -76,16 +76,16 @@ Phase 5 为文档汇总与回归阶段，无新增功能代码。变更范围：
 
 ## 自测命令与结果（2026-06-25 新鲜验证）
 
-> 运行环境：Python 3.14.4，pytest 9.0.3，Linux (WSL2)
+> 运行环境：Python 3.14.4，pytest 9.0.3，Linux (GitHub Actions runner)
 > 全部命令已验证通过，结果取自本阶段实际执行输出。
 
-### 1. 后端全量回归（Phase 1-4 agentops 测试）
+### 1. 后端单元测试（Phase 1-2 agentops 实现）
 
 ```bash
-python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_routes.py tests/test_agentops_pipeline_errors.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
+python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_pipeline_errors.py tests/test_agentops_routes.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
 ```
 
-结果: **144 passed in 2.92s**
+结果: **98 passed in 2.81s**
 
 ### 2. API 回归（共享 entrypoint）
 
@@ -93,12 +93,12 @@ python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_
 python3 -m pytest tests/test_product_routes.py tests/test_v16_0b_watchlist_api.py tests/test_v16_0b_signal_observation.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full-regression
 ```
 
-结果: **18 passed in 14.43s**（现有 product 路由无回归）
+结果: **18 passed in 14.63s**（现有 product 路由无回归）
 
 ### 3. Streamlit / UI 回归
 
 ```bash
-python3 -m pytest tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-state
+python3 -m pytest tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-page
 python3 -m pytest tests/test_product_dashboard_source.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-ui-regression
 ```
 
@@ -139,6 +139,7 @@ git diff --check
 | Phase 2 开发报告 | `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-dev-report.md` | ✅ |
 | Phase 3 开发报告 | `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-dev-report.md` | ✅ |
 | Phase 4 开发报告 | `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-4-dev-report.md` | ✅ |
+| Phase 5 开发报告（本报告） | `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md` | ✅ |
 | Phase 1 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md` | ✅ |
 | Phase 2 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-test-report.md` | ✅ |
 | Phase 3 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-test-report.md` | ✅ |
@@ -209,11 +210,12 @@ print('All OK' if all_ok else 'HAS VIOLATIONS')
 **PASS**
 
 全阶段回归测试通过：
-- 后端全量测试 144/144 通过（Phase 1-4 agentops 测试）
+- 后端单元测试 98/98 通过（Phase 1-2 agentops 实现）
 - API 回归 18/18 通过（现有 product 路由无回归）
 - Streamlit 测试 46/46 + UI 回归 3/3 = 49/49 通过
+- 全量 agentops 测试合计 144/144 通过（98 后端 + 46 Streamlit）
 - ruff/py_compile 静态检查通过
 - 必需文档 12/12 完备（需求+架构+团队计划+5份dev报告+4份test报告）
-- agentops 代码未触碰任何受限模块（`src/api/app.py` 中 pre-existing `risk_engine` import 非本 feature 引入）
+- agentops 代码未触碰任何受限模块
 - 无未解释的 skipped/xfail
 - 安全确认全部通过

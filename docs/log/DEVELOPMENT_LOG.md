@@ -1029,11 +1029,17 @@ Feedback 基础提交能力可用：`POST /product/feedback` 能生成结构化 
 | `src/ui_report/agentops_control_tower.py` | Control Tower 页面组件 |
 | `tests/test_agentops_control_tower_page.py` | 页面 smoke 测试 |
 
-#### Phase 5 — 文档、报告与回归
+#### Phase 5 — 文档、报告与回归（2026-06-25 新鲜验证）
 
-- 全阶段回归测试：后端 98/98 + API 回归 18/18 + Streamlit 46/46 + UI 回归 3/3
-- 静态检查：ruff + py_compile 通过
-- 全阶段文档齐备（dev/test 报告 + 日志更新）
+具体验证结果见 `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md`：
+- 后端单元测试 98/98 通过（Phase 1-2 agentops 实现）
+- API 回归 18/18 通过（现有 product 路由无回归）
+- Streamlit 测试 46/46 + UI 回归 3/3 = 49/49 通过
+- 全量 agentops 测试合计 144/144 通过
+- ruff/py_compile 静态检查通过
+- 全阶段文档齐备（5 份 dev report + 4 份 test report）
+- 未触碰受限模块
+- 安全确认全部通过
 
 ### 17.3 技术决策
 
@@ -1051,28 +1057,32 @@ Feedback 基础提交能力可用：`POST /product/feedback` 能生成结构化 
 | 未提交密钥 | ✅ 无 .env/token/cookie 泄露 |
 | fail-visible | ✅ 缺失→missing/unknown/blocked，不默认为通过 |
 
-### 17.5 验证记录
+### 17.5 验证记录（2026-06-25 新鲜验证）
 
 ```bash
-# 后端回归
-python3 -m pytest tests/test_agentops_pipeline_*.py tests/test_agentops_routes.py -q --tb=short
-# 98 passed
+# 后端单元测试（Phase 1-2）
+python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_pipeline_errors.py tests/test_agentops_routes.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
+# 98 passed in 2.81s
 
 # API 回归（共享 entrypoint）
-python3 -m pytest tests/test_product_routes.py tests/test_v16_0b_watchlist_api.py tests/test_v16_0b_signal_observation.py -q --tb=short
-# 18 passed
+python3 -m pytest tests/test_product_routes.py tests/test_v16_0b_watchlist_api.py tests/test_v16_0b_signal_observation.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full-regression
+# 18 passed in 14.63s
 
 # Streamlit 回归
-python3 -m pytest tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short
-# 46 passed
+python3 -m pytest tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-page
+# 46 passed in 0.95s
 
 # UI 回归
-python3 -m pytest tests/test_product_dashboard_source.py -q --tb=short
-# 3 passed
+python3 -m pytest tests/test_product_dashboard_source.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-ui-regression
+# 3 passed in 0.34s
 
 # 静态检查
-python3 -m ruff check src/product_app/agentops src/api/agentops_routes.py src/api/app.py tests/test_agentops_*.py
+python3 -m ruff check src/product_app/agentops src/api/agentops_routes.py src/api/app.py tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_pipeline_errors.py tests/test_agentops_routes.py
 # All checks passed
-python3 -m py_compile src/product_app/agentops/*.py src/api/agentops_routes.py src/api/app.py src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py
+python3 -m py_compile src/product_app/agentops/*.py src/api/agentops_routes.py src/api/app.py
+# (no output)
+python3 -m ruff check src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py
+# All checks passed
+python3 -m py_compile src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py
 # (no output)
 ```
