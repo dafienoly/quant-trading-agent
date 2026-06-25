@@ -20,6 +20,7 @@
 .agent/handoff/codex_pm.md
 .agent/handoff/codex_reviewer.md
 .agent/state.json
+.github/workflows/agent-main-merge-gate.yml
 AGENTS.md
 docs/acceptance/2026-06-24-agentops-control-tower-foundationpipeline-api-re-acceptance.md
 docs/acceptance/2026-06-25-agentops-control-tower-foundationpipeline-api-re-acceptance.md
@@ -49,8 +50,11 @@ docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phas
 docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-test-report.md
 docs/user_guides/2026-06-24-agentops-control-tower-foundationpipeline-api-re-user-guide.md
 docs/user_guides/2026-06-25-agentops-control-tower-foundationpipeline-api-re-user-guide.md
+scripts/agent_pipeline_acceptance_entry.py
+scripts/validate_pr_reports.py
 src/api/agentops_routes.py
 src/api/app.py
+src/product_app/agent_pipeline_automation.py
 src/product_app/agentops/__init__.py
 src/product_app/agentops/pipeline_aggregator.py
 src/product_app/agentops/pipeline_contracts.py
@@ -61,6 +65,8 @@ src/ui_report/agentops_control_tower.py
 src/ui_report/agentops_state.py
 src/ui_report/i18n.py
 src/ui_report/product_dashboard.py
+tests/test_agent_pipeline_acceptance_entry.py
+tests/test_agent_pipeline_automation.py
 tests/test_agentops_control_tower_page.py
 tests/test_agentops_pipeline_aggregator.py
 tests/test_agentops_pipeline_contracts.py
@@ -69,3 +75,4 @@ tests/test_agentops_pipeline_sanitizer.py
 tests/test_agentops_pipeline_state_reader.py
 tests/test_agentops_routes.py
 tests/test_agentops_state.py
+tests/test_validate_pr_reports.py
