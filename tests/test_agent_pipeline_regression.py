@@ -71,17 +71,16 @@ def test_workflow_has_codex_architect():
     assert "workflow_has_codex_architect" in names
 
 
-def test_workflow_label_pm_pending():
+def test_workflow_has_single_dispatch_entry():
     report = _json_report()
-    names = [c["name"] for c in report["checks"]]
-    # The name may contain colons encoded differently
-    assert any("workflow_label" in n and "pm-pending" in n for n in names)
+    check = next(c for c in report["checks"] if c["name"] == "workflow_single_dispatch_entry")
+    assert check["passed"]
 
 
-def test_workflow_label_arch_pending():
+def test_workflow_has_transaction_controller():
     report = _json_report()
-    names = [c["name"] for c in report["checks"]]
-    assert any("workflow_label" in n and "arch-pending" in n for n in names)
+    check = next(c for c in report["checks"] if c["name"] == "workflow_transaction_controller")
+    assert check["passed"]
 
 
 def test_gate_mapping_codex_pm():

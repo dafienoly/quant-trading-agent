@@ -35,6 +35,12 @@ REJECT_PATTERNS = (
 
 # Required Chinese characters minimum for non-pure-doc reports
 MIN_CHINESE_CHARS = 30
+FINAL_PIPELINE_STAGES = {
+    "merge_gate_pending",
+    "manual_approval_required",
+    "manual_approval_required_pending",
+    "completed",
+}
 
 ALLOWED_PURE_DOC_DIRS = (
     "docs/",
@@ -151,6 +157,54 @@ def check_report_content(path: str | Path, strict: bool, require_chinese: bool =
     return issues
 
 
+def check_stage_report_content(path: str | Path, require_chinese: bool = True) -> list[str]:
+    """Validate an in-progress phase report without imposing final-report headings."""
+    p = Path(path)
+    if not p.exists():
+        return ["_file_not_found"]
+    try:
+        text = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ["_unreadable"]
+    if not text.strip():
+        return ["_empty"]
+
+    issues: list[str] = []
+    lines = text.splitlines()
+    if not any(line.strip().startswith("# ") for line in lines):
+        issues.append("missing Markdown title")
+    for pattern in REJECT_PATTERNS:
+        if any(
+            line.strip().rstrip(".。，,!！:：").lower().startswith(pattern.lower())
+            for line in lines
+        ):
+            issues.append(f"contains standalone forbidden pattern: {pattern}")
+    if not re.search(
+        r"(?i)\b(PASS(?:_WITH_NOTES)?|REJECTED|APPROVED(?:_WITH_NOTES)?|"
+        r"CHANGES_REQUESTED|ACCEPTED(?:_WITH_NOTES)?|BLOCKED)\b",
+        text,
+    ):
+        issues.append("missing explicit stage decision")
+    if require_chinese:
+        body_text = "\n".join(line for line in lines if not line.strip().startswith("#"))
+        chinese_chars = sum(1 for char in body_text if "\u4e00" <= char <= "\u9fff")
+        if chinese_chars < MIN_CHINESE_CHARS:
+            issues.append("insufficient Chinese content in report body")
+    return issues
+
+
+def _pipeline_lifecycle(root: Path) -> tuple[bool, bool, str]:
+    state_path = root / ".agent" / "state.json"
+    if not state_path.exists():
+        return False, False, ""
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True, False, "invalid"
+    current_stage = str(state.get("current_stage") or "")
+    return True, current_stage not in FINAL_PIPELINE_STAGES, current_stage
+
+
 def validate_reports(
     base: str,
     head: str,
@@ -169,6 +223,9 @@ def validate_reports(
         "changed_files_count": 0,
         "issues": [],
         "report_files": {},
+        "pipeline_mode": False,
+        "pipeline_in_progress": False,
+        "pipeline_stage": "",
     }
 
     # Get changed files
@@ -184,6 +241,10 @@ def validate_reports(
 
     result["changed_files_count"] = len(files)
     result["pure_docs"] = is_pure_docs_changed(files)
+    pipeline_mode, pipeline_in_progress, pipeline_stage = _pipeline_lifecycle(Path(repo_root))
+    result["pipeline_mode"] = pipeline_mode
+    result["pipeline_in_progress"] = pipeline_in_progress
+    result["pipeline_stage"] = pipeline_stage
 
     # Pure docs PR — no reports required
     if result["pure_docs"]:
@@ -197,6 +258,22 @@ def validate_reports(
     # Find dev reports
     dev_reports = _find_new_or_modified(files, "docs/dev_reports/", root)
     accept_reports = _find_new_or_modified(files, "docs/acceptance/", root)
+
+    if pipeline_mode and pipeline_in_progress:
+        for f in dev_reports:
+            issues = check_stage_report_content(root / f, require_chinese=True)
+            if issues:
+                result["issues"].extend(f"{f}: {issue}" for issue in issues)
+            result["report_files"][f] = {
+                "path": f,
+                "profile": "pipeline_stage",
+                "issues": issues,
+                "valid": len(issues) == 0,
+            }
+        result["reports_present"] = bool(dev_reports)
+        result["reports_required"] = False
+        result["passed"] = len(result["issues"]) == 0
+        return result
 
     if not dev_reports:
         result["issues"].append("no docs/dev_reports/ file in diff")

@@ -1,12 +1,10 @@
 name: Agent Stage Runner
 
 run-name: >-
-  ${{ inputs.stage || github.event.label.name || 'unknown-stage' }}
-  / PR #${{ inputs.pr_number || github.event.pull_request.number || '' }}
+  ${{ inputs.stage || 'unknown-stage' }}
+  / PR #${{ inputs.pr_number || '' }}
 
 on:
-  pull_request:
-    types: [labeled]
   workflow_dispatch:
     inputs:
       stage:
@@ -50,8 +48,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: agent-stage-pr-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.event.label.name || inputs.stage }}
-  cancel-in-progress: true
+  group: agent-stage-pr-${{ inputs.pr_number || github.run_id }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -59,17 +57,7 @@ defaults:
 
 jobs:
   run-stage:
-    if: >-
-      (
-        github.event_name == 'workflow_dispatch' &&
-        inputs.stage != 'runtime_preflight'
-      ) ||
-      (
-        github.event_name == 'pull_request' &&
-        github.event.action == 'labeled' &&
-        startsWith(github.event.pull_request.head.ref, 'epic/') &&
-        contains(fromJson('["stage:pm-pending","stage:arch-pending","stage:team-plan-pending","stage:team-dev-pending","stage:team-test-pending","stage:claude-lead-review-pending","stage:fix-pending","stage:codex-review-pending","stage:pm-acceptance-pending","stage:postmortem-pending"]'), github.event.label.name)
-      )
+    if: inputs.stage != 'runtime_preflight'
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
       - name: Determine checkout ref
@@ -139,29 +127,24 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $stage = "${{ inputs.stage }}"
-          $label = "${{ github.event.label.name || '' }}"
           if (-not $stage) {
-            switch ($label) {
-              "stage:pm-pending" { $stage = "codex_pm" }
-              "stage:arch-pending" { $stage = "codex_architect" }
-              "stage:team-plan-pending" { $stage = "claude_lead_plan" }
-              "stage:team-dev-pending" { $stage = "claude_developer" }
-              "stage:team-test-pending" { $stage = "claude_tester" }
-              "stage:claude-lead-review-pending" { $stage = "claude_lead_review" }
-              "stage:fix-pending" { $stage = "bugfix" }
-              "stage:codex-review-pending" { $stage = "codex_reviewer" }
-              "stage:pm-acceptance-pending" { $stage = "codex_acceptance" }
-              "stage:postmortem-pending" { $stage = "postmortem" }
-              default {
-                Write-Error "Cannot infer stage from label '$label'"
-                exit 2
-              }
-            }
+            Write-Error "A workflow_dispatch stage is required."
+            exit 2
           }
-
-          python scripts/agent_pipeline.py write-handoff --stage $stage
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "stage=$stage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Validate stage lease before Agent execution
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          python scripts/agent_pipeline.py validate-stage-start --stage $env:STAGE
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Stage '$env:STAGE' is stale or out of order; no Agent command was executed."
+            exit $LASTEXITCODE
+          }
+          python scripts/agent_pipeline.py write-handoff --stage $env:STAGE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run configured Agent command
         env:
@@ -180,7 +163,7 @@ jobs:
           CODEX_A_ACCEPTANCE_AGENT_COMMAND: ${{ secrets.CODEX_A_ACCEPTANCE_AGENT_COMMAND || vars.CODEX_A_ACCEPTANCE_AGENT_COMMAND }}
           REVIEW_AGENT_COMMAND: ${{ secrets.REVIEW_AGENT_COMMAND || vars.REVIEW_AGENT_COMMAND }}
           ACCEPTANCE_AGENT_COMMAND: ${{ secrets.ACCEPTANCE_AGENT_COMMAND || vars.ACCEPTANCE_AGENT_COMMAND }}
-          DRY_RUN: ${{ inputs.dry_run || contains(github.event.pull_request.labels.*.name, 'agent:dry-run') }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           $ErrorActionPreference = "Stop"
           if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") {
@@ -250,7 +233,7 @@ jobs:
             "claude_lead_review" { $gate = "claude_lead_review" }
             "codex_reviewer" { $gate = "codex_review" }
             "codex_acceptance" { $gate = "acceptance" }
-            "bugfix" { $gate = "phase_test" }
+            "bugfix" { $gate = "phase_dev" }
             "postmortem" {
               Write-Host "Postmortem stage has no standard report gate."
               "gate_passed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -259,23 +242,21 @@ jobs:
             default { $gate = "team_plan" }
           }
 
-          $deliveryStatus = 0
           if ($env:STAGE -eq "claude_developer" -or $env:STAGE -eq "bugfix") {
             python scripts/agent_pipeline.py validate-stage-delivery --stage $env:STAGE
-            $deliveryStatus = $LASTEXITCODE
           }
 
           python scripts/agent_pipeline.py check-gates --through-stage $gate
           $gateStatus = $LASTEXITCODE
-          $gateFile = ".agent/gates/${gate}_gate.json"
-          $gatePassed = $false
-          if (Test-Path $gateFile) {
-            $gateData = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
-            $gatePassed = $gateData.passed -eq $true
+          python scripts/agent_pipeline.py evaluate-stage-transition --stage $env:STAGE
+          $transitionStatus = $LASTEXITCODE
+          $transitionFile = ".agent/gates/stage_transition_gate.json"
+          if (-not (Test-Path $transitionFile)) {
+            Write-Error "Composite stage transition gate was not generated."
+            exit 2
           }
-
-          python scripts/agent_pipeline.py sync-state-from-gates
-          $syncStatus = $LASTEXITCODE
+          $transition = Get-Content $transitionFile -Raw -Encoding utf8 | ConvertFrom-Json
+          $gatePassed = $transition.passed -eq $true
 
           $retryAllowed = $true
           if (-not $gatePassed -and $gate -eq "phase_test") {
@@ -299,12 +280,18 @@ jobs:
               $nextStage = $phaseResult.next_stage
             }
           }
+          if ($env:STAGE -ne "claude_tester") {
+            python scripts/agent_pipeline.py apply-stage-transition --stage $env:STAGE
+            if ($LASTEXITCODE -ne 0) {
+              $gatePassed = $false
+            }
+          }
 
           "gate_name=$gate" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "gate_passed=$($gatePassed.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "next_stage=$nextStage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "gate_status=$gateStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "sync_status=$syncStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "transition_status=$transitionStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "retry_allowed=$($retryAllowed.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           exit 0
 
@@ -386,25 +373,25 @@ jobs:
           }
 
       - name: Dispatch explicit PR validation
-        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        if: inputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+          $pr = "${{ inputs.pr_number }}"
           $branch = gh pr view $pr --json headRefName --jq ".headRefName"
           if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
           gh workflow run agent-pr-validation.yml --ref $branch -f pr_number=$pr
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Advance PR label for next automated stage
-        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        if: inputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
           STAGE: ${{ steps.stage.outputs.stage }}
         run: |
           $ErrorActionPreference = "Stop"
-          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+          $pr = "${{ inputs.pr_number }}"
           $branch = gh pr view $pr --json headRefName --jq ".headRefName"
           if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
 
@@ -436,12 +423,12 @@ jobs:
           }
 
           if (-not $gatePassed) {
-            $gateFile = ".agent/gates/${gateName}_gate.json"
+            $gateFile = ".agent/gates/stage_transition_gate.json"
             $routeBack = ""
             if (Test-Path $gateFile) {
               $failedGate = Get-Content $gateFile -Raw -Encoding utf8 | ConvertFrom-Json
               $routeBack = $failedGate.route_back_to
-              Write-Host "Stage gate failed: gate=$gateName decision=$($failedGate.decision) route_back_to=$routeBack"
+              Write-Host "Stage gate failed: gate=$gateName decision=$($failedGate.decision) failure_kind=$($failedGate.failure_kind) route_back_to=$routeBack"
             }
 
             Remove-StageLabels
@@ -590,7 +577,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-dashboard-stage-${{ steps.stage.outputs.stage || 'unknown' }}-pr-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.run_id }}
+          name: pipeline-dashboard-stage-${{ steps.stage.outputs.stage || 'unknown' }}-pr-${{ inputs.pr_number || github.run_id }}-${{ github.run_id }}
           path: |
             .agent/reports/pipeline_report.json
             .agent/reports/pipeline_dashboard.html
