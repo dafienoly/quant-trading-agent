@@ -14,8 +14,8 @@ Required read order:
 
 Task:
 - Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.
-- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.
-- Review all phase development reports and test reports.
+- Runtime is fixed to `opencode-go/glm-5.2`, `variant=max`, and must use superpowers.
+- Review all phase development reports, test reports, actual git diff, delivery gates, and phase metadata.
 - Confirm every planned phase is complete and tested before handing off to Codex B.
-- Produce `docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md`.
-- If any phase is incomplete, route back to Claude Code Developer / OpenCode Test Engineer instead of escalating to Codex B.
+- Produce `docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md` with an explicit APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED decision.
+- If any phase is incomplete, route back to OpenCode Developer / OpenCode Test Engineer instead of escalating to Codex B.
