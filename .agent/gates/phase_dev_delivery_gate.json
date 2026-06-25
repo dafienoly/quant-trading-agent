@@ -2,43 +2,29 @@
   "passed": true,
   "feature_id": "agentops-control-tower-foundationpipeline-api-re",
   "stage": "claude_developer",
+  "current_phase": 2,
   "changed_files": [
-    "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md",
-    "src/product_app/agentops/__init__.py",
-    "src/product_app/agentops/pipeline_aggregator.py",
-    "src/product_app/agentops/pipeline_contracts.py",
-    "src/product_app/agentops/pipeline_errors.py",
-    "src/product_app/agentops/pipeline_sanitizer.py",
-    "src/product_app/agentops/pipeline_state_reader.py",
-    "tests/test_agentops_pipeline_aggregator.py",
-    "tests/test_agentops_pipeline_contracts.py",
-    "tests/test_agentops_pipeline_errors.py",
-    "tests/test_agentops_pipeline_sanitizer.py",
-    "tests/test_agentops_pipeline_state_reader.py"
+    ".agent/handoff/claude_developer.md",
+    "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-dev-report.md",
+    "src/api/agentops_routes.py",
+    "src/api/app.py",
+    "tests/test_agentops_routes.py"
   ],
   "substantive_files": [
-    "src/product_app/agentops/__init__.py",
-    "src/product_app/agentops/pipeline_aggregator.py",
-    "src/product_app/agentops/pipeline_contracts.py",
-    "src/product_app/agentops/pipeline_errors.py",
-    "src/product_app/agentops/pipeline_sanitizer.py",
-    "src/product_app/agentops/pipeline_state_reader.py",
-    "tests/test_agentops_pipeline_aggregator.py",
-    "tests/test_agentops_pipeline_contracts.py",
-    "tests/test_agentops_pipeline_errors.py",
-    "tests/test_agentops_pipeline_sanitizer.py",
-    "tests/test_agentops_pipeline_state_reader.py"
+    "src/api/agentops_routes.py",
+    "src/api/app.py",
+    "tests/test_agentops_routes.py"
   ],
   "test_files": [
-    "tests/test_agentops_pipeline_aggregator.py",
-    "tests/test_agentops_pipeline_contracts.py",
-    "tests/test_agentops_pipeline_errors.py",
-    "tests/test_agentops_pipeline_sanitizer.py",
-    "tests/test_agentops_pipeline_state_reader.py"
+    "tests/test_agentops_routes.py"
   ],
-  "claimed_files": [],
+  "claimed_files": [
+    "src/api/agentops_routes.py",
+    "src/api/app.py",
+    "tests/test_agentops_routes.py"
+  ],
   "invalid": [],
   "reasons": [
-    "reused_previous_delivery_gate"
+    "stage_delivery_verified"
   ]
 }
