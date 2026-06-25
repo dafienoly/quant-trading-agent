@@ -1133,10 +1133,7 @@ def advance_after_phase_test(root: Path) -> dict[str, Any]:
         state["stage_status"] = stage_status
         state["team_pipeline"] = team
         write_feature_state(root, state)
-        # Reset only phase_test_gate for the new phase; phase_dev evidence from
-        # the completed phase is preserved for traceability.  The next developer
-        # run's check-gates will regenerate phase_dev_gate.json with the new phase.
-        for gate_name in ("phase_test_gate.json",):
+        for gate_name in ("phase_dev_gate.json", "phase_test_gate.json"):
             write_json(
                 root / GATES_DIR / gate_name,
                 {

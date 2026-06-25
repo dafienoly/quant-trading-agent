@@ -60,28 +60,22 @@ jobs:
     if: inputs.stage != 'runtime_preflight'
     runs-on: [self-hosted, Windows, X64, local-windows-codex]
     steps:
-      - name: Determine checkout ref
+      - name: Determine checkout ref for dispatching PR
         id: checkout-ref
+        if: inputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $branch = ""
-          $pr = "${{ inputs.pr_number || github.event.pull_request.number }}"
-          if ($pr) {
-            $branch = gh pr view $pr --json headRefName --jq ".headRefName"
-            if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
-          } elseif ("${{ github.event_name }}" -eq "pull_request") {
-            $branch = "${{ github.event.pull_request.head.ref }}"
-          }
-          if ($branch) {
-            "checkout_ref=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          }
+          $pr = "${{ inputs.pr_number }}"
+          $branch = gh pr view $pr --json headRefName --jq ".headRefName"
+          if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
+          "checkout_ref=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Checkout actual branch
+      - name: Checkout PR branch
         if: steps.checkout-ref.outputs.checkout_ref != ''
         run: |
           $ErrorActionPreference = "Stop"
@@ -300,32 +294,6 @@ jobs:
           $ErrorActionPreference = "Stop"
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
-
-          # Ensure we are on a branch before committing (agents may leave detached HEAD)
-          $currentBranch = git rev-parse --abbrev-ref HEAD
-          if ($currentBranch -eq "HEAD") {
-            $targetBranch = "${{ steps.checkout-ref.outputs.checkout_ref || github.event.pull_request.head.ref || github.ref_name }}"
-            if ($targetBranch -eq "HEAD" -or $targetBranch -match '^\d+/merge$' -or -not $targetBranch) {
-              # Fallback: use gh to get the PR head ref
-              $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
-              if ($pr) {
-                $targetBranch = gh pr view $pr --json headRefName --jq '.headRefName'
-                if ($LASTEXITCODE -ne 0 -or -not $targetBranch) {
-                  Write-Error "Cannot determine branch to restore from detached HEAD"
-                  exit 2
-                }
-              } else {
-                Write-Error "Cannot determine branch to restore from detached HEAD (no PR number)"
-                exit 2
-              }
-            }
-            Write-Host "Detached HEAD detected; restoring to '$targetBranch'"
-            git checkout "$targetBranch"
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "Failed to restore branch from detached HEAD"
-              exit 2
-            }
-          }
 
           $changedTestReports = git status --porcelain=v1 --untracked-files=all -- docs/test_reports
           foreach ($line in $changedTestReports) {
