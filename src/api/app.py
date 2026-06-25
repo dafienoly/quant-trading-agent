@@ -29,6 +29,10 @@ def create_app(
     from src.api.product_routes import router as product_router
     app.include_router(product_router, prefix="/product", tags=["product"])
 
+    # 注册 AgentOps 只读观测路由
+    from src.api.agentops_routes import router as agentops_router
+    app.include_router(agentops_router, prefix="/product/agentops", tags=["agentops"])
+
     @app.get("/health")
     def health() -> dict:
         return {
