@@ -308,6 +308,17 @@ jobs:
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
 
+          # Ensure we are on a branch before committing (agents may leave detached HEAD)
+          $currentBranch = git rev-parse --abbrev-ref HEAD
+          if ($currentBranch -eq "HEAD") {
+            Write-Host "Detached HEAD detected; restoring to '${{ steps.checkout-ref.outputs.checkout_ref || github.ref_name }}'"
+            git checkout "${{ steps.checkout-ref.outputs.checkout_ref || github.ref_name }}"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to restore branch from detached HEAD"
+              exit 2
+            }
+          }
+
           $changedTestReports = git status --porcelain=v1 --untracked-files=all -- docs/test_reports
           foreach ($line in $changedTestReports) {
             if ($line.Length -lt 4) { continue }
