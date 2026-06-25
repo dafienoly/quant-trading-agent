@@ -1,12 +1,17 @@
 name: Agent PR 轻量验证
 
 run-name: >-
-  PR #${{ github.event.pull_request.number || 'manual' }} Pipeline 轻量验证
+  PR #${{ github.event.pull_request.number || github.event.inputs.pr_number || 'manual' }} Pipeline 轻量验证
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 要验证的 PR 编号
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,13 +19,15 @@ permissions:
   issues: write
 
 concurrency:
-  group: agent-pr-validation-${{ github.event.pull_request.number || github.ref }}
+  group: agent-pr-validation-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate:
     name: Pipeline 轻量验证
     runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
     steps:
       - name: 检出 PR 代码
         uses: actions/checkout@v4
@@ -210,7 +217,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pipeline-dashboard-pr-${{ github.event.pull_request.number || github.run_id }}-${{ github.run_id }}
+          name: pipeline-dashboard-pr-${{ env.PR_NUMBER || github.run_id }}-${{ github.run_id }}
           path: |
             .agent/reports/pipeline_report.json
             .agent/reports/pipeline_dashboard.html
@@ -220,12 +227,11 @@ jobs:
           retention-days: 14
 
       - name: 更新 PR Dashboard 查看说明
-        if: always() && github.event_name == 'pull_request'
+        if: always() && env.PR_NUMBER != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          ARTIFACT_NAME: pipeline-dashboard-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          ARTIFACT_NAME: pipeline-dashboard-pr-${{ env.PR_NUMBER }}-${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail

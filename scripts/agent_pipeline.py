@@ -21,6 +21,7 @@ from src.product_app.agent_pipeline_automation import (  # noqa: E402
     classify_changed_files,
     normalize_gate_decision,
     read_state,
+    register_stage_failure,
     set_pr_metadata,
     sync_team_plan_metadata,
     sync_state_from_gates,
@@ -140,6 +141,13 @@ def cmd_advance_phase(args: argparse.Namespace) -> int:
     return 0 if result.get("advanced") else 2
 
 
+def cmd_register_stage_failure(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    result = register_stage_failure(root, stage=args.stage)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_write_handoff(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     path = write_handoff(root, args.stage)
@@ -252,6 +260,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = init.add_parser("advance-phase", parents=[common_root])
     p.set_defaults(func=cmd_advance_phase)
+
+    p = init.add_parser("register-stage-failure", parents=[common_root])
+    p.add_argument("--stage", required=True, choices=["phase_test"])
+    p.set_defaults(func=cmd_register_stage_failure)
 
     p = init.add_parser("write-handoff", parents=[common_root])
     p.add_argument(
