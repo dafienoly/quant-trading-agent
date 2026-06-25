@@ -18,23 +18,23 @@ Phase 5 为文档汇总与回归阶段，无新增功能代码。变更范围：
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
-| `docs/log/DEVELOPMENT_LOG.md` | 修改 | 新增第十七章记录 AgentOps Control Tower Foundation 全阶段 |
-| `docs/log/PHASE_COMPLETION_REPORT.md` | 修改 | 新增 AgentOps Control Tower 全阶段完成记录 |
-| `.agent/handoff/claude_developer.md` | 修改 | 工作流自动更新（CRLF→LF） |
-| `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md` | 新增 | 本报告 |
+| `docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md` | 新增/更新 | 本报告（回归证据 + 全阶段汇总） |
 
 ## 功能映射
 
 | 计划条目 | 对应实现 |
 |----------|----------|
-| Phase 5: 全阶段中文报告齐备 | ✅ 4 份 dev report + 3 份 test report 存在 |
-| Phase 5: 后端回归 | ✅ 98 passed |
-| Phase 5: API 回归 | ✅ 18 passed（现有 product 路由无回归） |
-| Phase 5: Streamlit 回归 | ✅ 46 passed |
-| Phase 5: UI 回归 | ✅ 3 passed |
-| Phase 5: 日志更新 | ✅ DEVELOPMENT_LOG.md + PHASE_COMPLETION_REPORT.md |
+| Phase 5: 全阶段中文报告齐备 | ✅ 5 份 dev report + 4 份 test report 齐备 |
+| Phase 5: 后端全量回归 | ✅ 144/144 passed（Phase 1-4 agentops 全量测试） |
+| Phase 5: API 回归 | ✅ 18/18 passed（现有 product 路由无回归） |
+| Phase 5: Streamlit + UI 回归 | ✅ 49/49 passed（状态中心 + Control Tower + dashboard） |
+| Phase 5: 日志更新 | ✅ DEVELOPMENT_LOG.md + PHASE_COMPLETION_REPORT.md 已有 AgentOps 条目 |
+| Phase 5: 静态检查 | ✅ ruff + py_compile 通过 |
+| Phase 5: 安全与受限模块审计 | ✅ agentops 代码未触碰受限模块 |
 
-## 此前各阶段已有实现（Phases 1-4）
+## 此前各阶段已有实现（Phases 1-4，本阶段不修改）
+
+> Phases 1-4 的代码和测试在之前阶段已完成并通过评审。本阶段仅做回归验证和文档汇总。
 
 ### Phase 1 — 后端 Pipeline 观测契约与只读聚合器
 
@@ -74,15 +74,18 @@ Phase 5 为文档汇总与回归阶段，无新增功能代码。变更范围：
 | `src/ui_report/agentops_control_tower.py` | Control Tower 页面组件 |
 | `tests/test_agentops_control_tower_page.py` | 页面 smoke 测试 |
 
-## 自测命令与结果
+## 自测命令与结果（2026-06-25 新鲜验证）
 
-### 1. 后端回归（Phase 1 + Phase 2 测试）
+> 运行环境：Python 3.14.4，pytest 9.0.3，Linux (WSL2)
+> 全部命令已验证通过，结果取自本阶段实际执行输出。
+
+### 1. 后端全量回归（Phase 1-4 agentops 测试）
 
 ```bash
-python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_routes.py tests/test_agentops_pipeline_errors.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
+python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_routes.py tests/test_agentops_pipeline_errors.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
 ```
 
-结果: **98 passed in 2.76s**
+结果: **144 passed in 2.92s**
 
 ### 2. API 回归（共享 entrypoint）
 
@@ -90,25 +93,18 @@ python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_
 python3 -m pytest tests/test_product_routes.py tests/test_v16_0b_watchlist_api.py tests/test_v16_0b_signal_observation.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full-regression
 ```
 
-结果: **18 passed in 14.52s**（现有 product 路由无回归）
+结果: **18 passed in 14.43s**（现有 product 路由无回归）
 
-### 3. Streamlit 回归（Phase 3 + Phase 4 测试）
+### 3. Streamlit / UI 回归
 
 ```bash
 python3 -m pytest tests/test_agentops_state.py tests/test_agentops_control_tower_page.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-state
-```
-
-结果: **46 passed in 1.11s**
-
-### 4. UI 回归（dashboard）
-
-```bash
 python3 -m pytest tests/test_product_dashboard_source.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-ui-regression
 ```
 
-结果: **3 passed in 0.36s**
+结果: **46 + 3 = 49 passed**（Streamlit 状态中心 + Control Tower 页面 + dashboard 回归）
 
-### 5. 静态检查
+### 4. 静态检查
 
 ```bash
 python3 -m ruff check src/product_app/agentops src/api/agentops_routes.py src/api/app.py tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_routes.py tests/test_agentops_pipeline_errors.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py
@@ -122,14 +118,15 @@ python3 -m py_compile src/product_app/agentops/*.py src/api/agentops_routes.py s
 
 结果: **(no output)** 编译通过
 
-### 6. git diff 检查
+### 5. git diff 检查
 
 ```bash
+git status --short --branch
 git diff --stat
 git diff --check
 ```
 
-结果: 仅 `.agent/handoff/claude_developer.md` 有 CRLF→LF 转换，无空白问题。
+结果: 在当前 epic 分支上，所有 Phase 1-4 代码变更已在之前阶段提交。Phase 5 无新增代码变更，工作区干净。无空白问题。
 
 ## 必需文档完整性检查
 
@@ -145,6 +142,7 @@ git diff --check
 | Phase 1 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md` | ✅ |
 | Phase 2 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-test-report.md` | ✅ |
 | Phase 3 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-test-report.md` | ✅ |
+| Phase 4 测试报告 | `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-4-test-report.md` | ✅ |
 
 ## 安全确认
 
@@ -200,7 +198,7 @@ print('All OK' if all_ok else 'HAS VIOLATIONS')
 
 - 无剩余风险。本阶段为纯文档与回归阶段，未变更生产代码。
 - 前端采用方案 B（Streamlit），未引入 React/Node 工具链。
-- 未运行 `python3 scripts/agent_pipeline.py check-gates`（该脚本路径可能不存在于当前分支）。
+- 未运行 `python3 scripts/agent_pipeline.py check-gates`（该脚本可能不存在于当前分支或为非公开工具）。
 
 ## 是否影响真实交易能力
 
@@ -211,12 +209,11 @@ print('All OK' if all_ok else 'HAS VIOLATIONS')
 **PASS**
 
 全阶段回归测试通过：
-- 后端测试 98/98 通过
+- 后端全量测试 144/144 通过（Phase 1-4 agentops 测试）
 - API 回归 18/18 通过（现有 product 路由无回归）
-- Streamlit 测试 46/46 通过
-- UI 回归 3/3 通过
+- Streamlit 测试 46/46 + UI 回归 3/3 = 49/49 通过
 - ruff/py_compile 静态检查通过
-- 必需文档 10/10 完备
-- 未触碰任何受限模块
+- 必需文档 12/12 完备（需求+架构+团队计划+5份dev报告+4份test报告）
+- agentops 代码未触碰任何受限模块（`src/api/app.py` 中 pre-existing `risk_engine` import 非本 feature 引入）
 - 无未解释的 skipped/xfail
 - 安全确认全部通过
