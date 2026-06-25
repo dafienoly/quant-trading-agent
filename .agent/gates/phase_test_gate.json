@@ -1,0 +1,46 @@
+{
+  "passed": false,
+  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "checked_stages": [
+    "pm",
+    "architecture",
+    "team_plan",
+    "phase_dev",
+    "phase_test"
+  ],
+  "missing": {},
+  "found": {
+    "pm": [
+      "docs\\requirements\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md"
+    ],
+    "architecture": [
+      "docs\\design\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md"
+    ],
+    "team_plan": [
+      "docs\\dev_plans\\20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md"
+    ],
+    "phase_dev": [
+      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md"
+    ],
+    "phase_test": [
+      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report-r2.md",
+      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md"
+    ]
+  },
+  "reasons": [
+    "invalid_required_stage_reports"
+  ],
+  "invalid": {
+    "phase_test": [
+      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md:blocking_decision:REJECTED",
+      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md:claimed_feedback_missing:feedback/bugs/open/BUG_20260624-agentops-phase-1-missing-implementation.json",
+      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md:claimed_feedback_missing:feedback/bugs/open/BUG_20260624-agentops-phase-1-missing-implementation.md"
+    ]
+  },
+  "decisions": {
+    "phase_dev": "PASS_WITH_NOTES",
+    "phase_test": "REJECTED"
+  },
+  "decision": "REJECTED",
+  "route_back_to": "claude_developer"
+}
