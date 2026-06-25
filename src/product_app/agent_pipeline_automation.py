@@ -189,6 +189,63 @@ class StageDeliveryResult:
     reasons: list[str]
 
 
+@dataclass(frozen=True)
+class StageStartResult:
+    """Lease check that prevents a queued run from executing a stale stage."""
+
+    passed: bool
+    feature_id: str
+    requested_stage: str
+    expected_current_stage: str
+    actual_current_stage: str
+    reasons: list[str]
+
+
+@dataclass(frozen=True)
+class StageTransitionResult:
+    """Composite decision for one stage, including all required gates."""
+
+    passed: bool
+    feature_id: str
+    stage: str
+    current_phase: int
+    report_gate: str
+    report_gate_passed: bool
+    delivery_gate_required: bool
+    delivery_gate_passed: bool
+    report_decision: str
+    decision: str
+    failure_kind: str
+    route_back_to: str
+    reasons: list[str]
+
+
+EXPECTED_CURRENT_STAGE_BY_RUNNER_STAGE: dict[str, str] = {
+    "codex_pm": "pm_pending",
+    "codex_architect": "architecture_pending",
+    "claude_lead_plan": "team_plan_pending",
+    "claude_developer": "phase_dev_pending",
+    "bugfix": "phase_dev_pending",
+    "claude_tester": "phase_test_pending",
+    "claude_lead_review": "claude_lead_review_pending",
+    "codex_reviewer": "codex_review_pending",
+    "codex_acceptance": "acceptance_pending",
+    "postmortem": "postmortem_pending",
+}
+
+REPORT_GATE_BY_RUNNER_STAGE: dict[str, str] = {
+    "codex_pm": "pm",
+    "codex_architect": "architecture",
+    "claude_lead_plan": "team_plan",
+    "claude_developer": "phase_dev",
+    "bugfix": "phase_dev",
+    "claude_tester": "phase_test",
+    "claude_lead_review": "claude_lead_review",
+    "codex_reviewer": "codex_review",
+    "codex_acceptance": "acceptance",
+}
+
+
 def today_slug() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d")
 
@@ -340,6 +397,33 @@ def _extract_claimed_change_paths(text: str) -> list[str]:
     )
 
 
+def _current_phase_is_docs_only(root: Path, *, feature_id: str, current_phase: int) -> bool:
+    """Honor an explicit docs/regression-only phase declared by the team plan."""
+    pattern = REPORT_GLOBS_BY_STAGE["team_plan"][0].format(feature_id=feature_id)
+    plans = sorted(root.glob(pattern))
+    if not plans:
+        return False
+    try:
+        text = plans[-1].read_text(encoding="utf-8")
+    except OSError:
+        return False
+    match = re.search(
+        rf"(?ims)^#{{2,4}}\s*(?:Phase|阶段)\s*{current_phase}\b"
+        rf"(?P<body>.*?)(?=^#{{2,4}}\s*(?:Phase|阶段)\s*\d+\b|\Z)",
+        text,
+    )
+    if not match:
+        return False
+    body = match.group("body")
+    has_no_code_marker = bool(
+        re.search(r"(?i)(无代码变更|no\s+code\s+changes?|docs[- ]only)", body)
+    )
+    has_docs_scope = bool(
+        re.search(r"(?i)(文档|报告|回归|documentation|reports?|regression)", body)
+    )
+    return has_no_code_marker and has_docs_scope
+
+
 def validate_stage_delivery(
     root: Path,
     *,
@@ -354,6 +438,11 @@ def validate_stage_delivery(
     feature_id = str(state.get("feature_id") or "")
     risk_level = str(state.get("risk_level") or "unknown").lower()
     current_phase = int(state.get("team_pipeline", {}).get("current_phase", 1))
+    docs_only_phase = _current_phase_is_docs_only(
+        root,
+        feature_id=feature_id,
+        current_phase=current_phase,
+    )
 
     previous_delivery = root / ".agent" / "gates" / "phase_dev_delivery_gate.json"
     if previous_delivery.exists():
@@ -433,7 +522,7 @@ def validate_stage_delivery(
             path.startswith(_SUBSTANTIVE_PATH_PREFIXES)
             or path in _SUBSTANTIVE_ROOT_FILES
             or (
-                risk_level in {"docs-only", "documentation", "docs"}
+                (risk_level in {"docs-only", "documentation", "docs"} or docs_only_phase)
                 and path.startswith("docs/")
             )
         )
@@ -445,7 +534,7 @@ def validate_stage_delivery(
 
     if not substantive:
         invalid.append("report_only_delivery")
-    if risk_level not in {"docs-only", "documentation", "docs"}:
+    if risk_level not in {"docs-only", "documentation", "docs"} and not docs_only_phase:
         if not implementation:
             invalid.append("missing_implementation_change")
         if not tests:
@@ -644,6 +733,174 @@ def read_state(root: Path) -> dict[str, Any]:
     if task_file.exists():
         return yaml.safe_load(task_file.read_text(encoding="utf-8")) or {}
     return {}
+
+
+def validate_stage_start(root: Path, *, stage: str) -> StageStartResult:
+    """Fail closed unless the persisted pipeline state currently leases *stage*."""
+    if stage not in EXPECTED_CURRENT_STAGE_BY_RUNNER_STAGE:
+        raise ValueError(f"unsupported runner stage: {stage}")
+    state = read_state(root)
+    feature_id = str(state.get("feature_id") or "")
+    expected = EXPECTED_CURRENT_STAGE_BY_RUNNER_STAGE[stage]
+    actual = str(state.get("current_stage") or "")
+    reasons: list[str] = []
+    if not feature_id:
+        reasons.append("missing_feature_id")
+    if actual != expected:
+        reasons.append("stale_or_out_of_order_stage")
+    if not reasons:
+        reasons.append("stage_lease_matches_state")
+    return StageStartResult(
+        passed=len(reasons) == 1 and reasons[0] == "stage_lease_matches_state",
+        feature_id=feature_id,
+        requested_stage=stage,
+        expected_current_stage=expected,
+        actual_current_stage=actual,
+        reasons=reasons,
+    )
+
+
+def evaluate_stage_transition(root: Path, *, stage: str) -> StageTransitionResult:
+    """Combine report and delivery evidence into one authoritative transition."""
+    state = read_state(root)
+    feature_id = str(state.get("feature_id") or "")
+    current_phase = int(state.get("team_pipeline", {}).get("current_phase", 1))
+
+    if stage == "postmortem":
+        return StageTransitionResult(
+            passed=True,
+            feature_id=feature_id,
+            stage=stage,
+            current_phase=current_phase,
+            report_gate="",
+            report_gate_passed=True,
+            delivery_gate_required=False,
+            delivery_gate_passed=True,
+            report_decision="PASS",
+            decision="PASS",
+            failure_kind="",
+            route_back_to="",
+            reasons=["postmortem_has_no_automatic_transition_gate"],
+        )
+    if stage not in REPORT_GATE_BY_RUNNER_STAGE:
+        raise ValueError(f"unsupported runner stage: {stage}")
+
+    report_gate = REPORT_GATE_BY_RUNNER_STAGE[stage]
+    report_payload = _read_gate(root, f"{report_gate}_gate.json") or {}
+    report_matches = report_payload.get("feature_id") == feature_id
+    report_passed = report_matches and report_payload.get("passed") is True
+    report_decision = str(
+        report_payload.get("decision") or ("PASS" if report_passed else "REJECTED")
+    )
+
+    delivery_required = stage in {"claude_developer", "bugfix"}
+    delivery_payload = _read_gate(root, "phase_dev_delivery_gate.json") or {}
+    delivery_matches = (
+        delivery_payload.get("feature_id") == feature_id
+        and int(delivery_payload.get("current_phase", current_phase)) == current_phase
+    )
+    delivery_passed = (
+        not delivery_required
+        or (delivery_matches and delivery_payload.get("passed") is True)
+    )
+
+    passed = report_passed and delivery_passed
+    failure_kind = ""
+    reasons: list[str] = []
+    if not report_passed:
+        failure_kind = "report_gate"
+        reasons.append("report_gate_not_passed")
+    if delivery_required and not delivery_passed:
+        failure_kind = "delivery_gate" if not failure_kind else "report_and_delivery_gate"
+        reasons.append("delivery_gate_not_passed")
+    if passed:
+        reasons.append("all_required_stage_gates_passed")
+
+    route_back = ""
+    if not passed:
+        route_back = {
+            "claude_tester": "claude_developer",
+            "claude_lead_review": "claude_developer",
+            "codex_reviewer": "claude_lead_review",
+            "codex_acceptance": "claude_developer",
+        }.get(stage, "")
+
+    return StageTransitionResult(
+        passed=passed,
+        feature_id=feature_id,
+        stage=stage,
+        current_phase=current_phase,
+        report_gate=report_gate,
+        report_gate_passed=report_passed,
+        delivery_gate_required=delivery_required,
+        delivery_gate_passed=delivery_passed,
+        report_decision=report_decision,
+        decision=report_decision if passed else "REJECTED",
+        failure_kind=failure_kind,
+        route_back_to=route_back,
+        reasons=reasons,
+    )
+
+
+def apply_stage_transition(root: Path, *, stage: str) -> dict[str, Any]:
+    """Commit a previously evaluated transition to pipeline state."""
+    gate = _read_gate(root, "stage_transition_gate.json")
+    state = read_state(root)
+    feature_id = str(state.get("feature_id") or "")
+    if (
+        gate is None
+        or gate.get("feature_id") != feature_id
+        or gate.get("stage") != stage
+    ):
+        return {
+            "updated": False,
+            "stage": stage,
+            "reason": "missing_or_stale_transition_gate",
+        }
+    if stage == "claude_tester":
+        return {
+            "updated": False,
+            "stage": stage,
+            "reason": "phase_test_transition_uses_phase_controller",
+        }
+
+    stage_status_key = REPORT_GATE_BY_RUNNER_STAGE.get(stage)
+    stage_status = dict(state.get("stage_status", {}))
+    if gate.get("passed") is True:
+        next_current_stage = {
+            "codex_pm": "architecture_pending",
+            "codex_architect": "team_plan_pending",
+            "claude_lead_plan": "phase_dev_pending",
+            "claude_developer": "phase_test_pending",
+            "bugfix": "phase_test_pending",
+            "claude_lead_review": "codex_review_pending",
+            "codex_reviewer": "acceptance_pending",
+            "codex_acceptance": "merge_gate_pending",
+            "postmortem": "manual_approval_required",
+        }[stage]
+        if stage_status_key:
+            stage_status[stage_status_key] = "passed"
+    else:
+        route_back = str(gate.get("route_back_to") or "")
+        next_current_stage = {
+            "claude_developer": "phase_dev_pending",
+            "claude_lead_review": "claude_lead_review_pending",
+        }.get(route_back, "manual_approval_required")
+        if stage_status_key:
+            stage_status[stage_status_key] = "pending"
+
+    previous = str(state.get("current_stage") or "")
+    state["current_stage"] = next_current_stage
+    state["stage_status"] = stage_status
+    write_feature_state(root, state)
+    return {
+        "updated": previous != next_current_stage,
+        "stage": stage,
+        "passed": gate.get("passed") is True,
+        "previous_current_stage": previous,
+        "current_stage": next_current_stage,
+        "reason": "stage_transition_committed",
+    }
 
 
 def check_required_reports(

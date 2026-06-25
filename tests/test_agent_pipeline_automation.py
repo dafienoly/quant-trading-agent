@@ -5,11 +5,13 @@ from pathlib import Path
 
 from src.product_app.agent_pipeline_automation import (
     STAGES_WITH_GATES,
+    apply_stage_transition,
     advance_after_phase_test,
     build_feature_state,
     check_required_reports,
     check_state_gate_consistency,
     classify_changed_files,
+    evaluate_stage_transition,
     extract_report_decision,
     normalize_gate_decision,
     read_state,
@@ -19,6 +21,7 @@ from src.product_app.agent_pipeline_automation import (
     sync_state_from_gates,
     sync_team_plan_metadata,
     validate_stage_delivery,
+    validate_stage_start,
     write_feature_state,
     write_handoff,
     write_json,
@@ -292,6 +295,128 @@ def test_github_workflows_use_repository_owned_team_runner():
     assert "Stage gate failed" in stage_runner
 
 
+def test_stage_runner_has_one_dispatch_entry_and_serializes_by_pr():
+    text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
+
+    trigger_block = text.split("permissions:", 1)[0]
+    concurrency_block = text.split("concurrency:", 1)[1].split("defaults:", 1)[0]
+
+    assert "workflow_dispatch:" in trigger_block
+    assert "pull_request:" not in trigger_block
+    assert "github.event.label" not in text
+    assert "github.event.pull_request" not in text
+    assert "agent-stage-pr-${{ inputs.pr_number || github.run_id }}" in concurrency_block
+    assert "cancel-in-progress: false" in concurrency_block
+    assert "validate-stage-start --stage $env:STAGE" in text
+    assert "evaluate-stage-transition --stage $env:STAGE" in text
+    assert "apply-stage-transition --stage $env:STAGE" in text
+
+
+def test_stage_start_rejects_stale_queued_run(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Lease", feature_id="lease")
+    state["current_stage"] = "phase_test_pending"
+    write_feature_state(tmp_path, state)
+
+    result = validate_stage_start(tmp_path, stage="claude_developer")
+
+    assert result.passed is False
+    assert result.expected_current_stage == "phase_dev_pending"
+    assert result.actual_current_stage == "phase_test_pending"
+    assert "stale_or_out_of_order_stage" in result.reasons
+
+
+def test_stage_start_accepts_current_state_lease(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Lease", feature_id="lease")
+    state["current_stage"] = "phase_test_pending"
+    write_feature_state(tmp_path, state)
+
+    result = validate_stage_start(tmp_path, stage="claude_tester")
+
+    assert result.passed is True
+
+
+def test_developer_transition_requires_report_and_delivery_gates(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Atomic", feature_id="atomic")
+    state["current_stage"] = "phase_dev_pending"
+    write_feature_state(tmp_path, state)
+    write_json(
+        tmp_path / ".agent/gates/phase_dev_gate.json",
+        {"passed": True, "feature_id": "atomic", "decision": "PASS"},
+    )
+    write_json(
+        tmp_path / ".agent/gates/phase_dev_delivery_gate.json",
+        {
+            "passed": False,
+            "feature_id": "atomic",
+            "current_phase": 1,
+            "invalid": ["report_only_delivery"],
+        },
+    )
+
+    result = evaluate_stage_transition(tmp_path, stage="claude_developer")
+
+    assert result.passed is False
+    assert result.report_gate_passed is True
+    assert result.delivery_gate_passed is False
+    assert result.failure_kind == "delivery_gate"
+    assert result.route_back_to == ""
+
+
+def test_tester_transition_routes_rejection_to_developer(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Atomic", feature_id="atomic")
+    state["current_stage"] = "phase_test_pending"
+    write_feature_state(tmp_path, state)
+    write_json(
+        tmp_path / ".agent/gates/phase_test_gate.json",
+        {"passed": False, "feature_id": "atomic", "decision": "REJECTED"},
+    )
+
+    result = evaluate_stage_transition(tmp_path, stage="claude_tester")
+
+    assert result.passed is False
+    assert result.failure_kind == "report_gate"
+    assert result.route_back_to == "claude_developer"
+
+
+def test_passing_transition_commits_next_stage_state(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Atomic", feature_id="atomic")
+    write_feature_state(tmp_path, state)
+    write_json(
+        tmp_path / ".agent/gates/stage_transition_gate.json",
+        {
+            "passed": True,
+            "feature_id": "atomic",
+            "stage": "codex_pm",
+        },
+    )
+
+    result = apply_stage_transition(tmp_path, stage="codex_pm")
+
+    assert result["updated"] is True
+    assert read_state(tmp_path)["current_stage"] == "architecture_pending"
+    assert read_state(tmp_path)["stage_status"]["pm"] == "passed"
+
+
+def test_failed_developer_transition_enters_manual_state(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Atomic", feature_id="atomic")
+    state["current_stage"] = "phase_dev_pending"
+    write_feature_state(tmp_path, state)
+    write_json(
+        tmp_path / ".agent/gates/stage_transition_gate.json",
+        {
+            "passed": False,
+            "feature_id": "atomic",
+            "stage": "claude_developer",
+            "route_back_to": "",
+        },
+    )
+
+    result = apply_stage_transition(tmp_path, stage="claude_developer")
+
+    assert result["passed"] is False
+    assert read_state(tmp_path)["current_stage"] == "manual_approval_required"
+
+
 def test_pr_validation_supports_explicit_bot_dispatch():
     text = PR_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
 
@@ -374,6 +499,22 @@ def test_issue_bootstrap_reuses_open_pr_from_remote_branch():
     assert "git switch -C $branch --track origin/$branch" in text
 
 
+def test_issue_bootstrap_commits_pre_pr_stage_transitions():
+    text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
+
+    for stage in ("codex_pm", "codex_architect", "claude_lead_plan"):
+        assert f"evaluate-stage-transition --stage {stage}" in text
+        assert f"apply-stage-transition --stage {stage}" in text
+    assert (
+        "gh workflow run agent-stage-runner.yml --ref $branch "
+        "-f stage=claude_lead_plan"
+    ) not in text
+    assert (
+        "gh workflow run agent-stage-runner.yml --ref $branch "
+        "-f stage=claude_developer -f pr_number=$pr"
+    ) in text
+
+
 def test_stage_runner_validates_dispatched_pr_is_open_and_matches_ref():
     text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
 
@@ -446,6 +587,19 @@ def test_agent_report_runtime_directory_is_ignored_and_untracked():
     gitignore = Path(".gitignore").read_text(encoding="utf-8")
 
     assert ".agent/reports/" in gitignore
+    assert "!feedback/index.json" not in gitignore
+    assert not Path("feedback/index.json").exists()
+
+
+def test_tester_runner_cleans_runtime_feedback_index_before_path_guard():
+    text = TEAM_STAGE_RUNNER.read_text(encoding="utf-8")
+
+    cleanup_pos = text.index("cleanup_tester_runtime_artifacts")
+    call_pos = text.rindex("    cleanup_tester_runtime_artifacts")
+    guard_pos = text.rindex("    verify_tester_did_not_modify_business_code")
+
+    assert cleanup_pos < call_pos < guard_pos
+    assert "rm -f feedback/index.json" in text
 
 
 def test_codex_pm_handoff_only_requests_requirements(tmp_path: Path):
@@ -613,6 +767,49 @@ PASS
 
     assert result.passed is True
     assert result.claimed_files == sorted(paths)
+
+
+def test_developer_delivery_accepts_explicit_docs_only_phase(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] AgentOps",
+        feature_id="agentops",
+        risk_level="product",
+    )
+    state["team_pipeline"]["current_phase"] = 5
+    state["team_pipeline"]["total_phases"] = 5
+    write_feature_state(tmp_path, state)
+    plan = tmp_path / "docs/dev_plans/2026-06-24-agentops-team-plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text(
+        "### Phase 4 — UI\n\n实现页面。\n\n"
+        "### Phase 5 — 文档、报告与回归\n\n"
+        "| Restricted modules | 无代码变更；仅文档与回归。 |\n",
+        encoding="utf-8",
+    )
+    log_path = tmp_path / "docs/log/DEVELOPMENT_LOG.md"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("阶段五回归完成。\n", encoding="utf-8")
+    report = tmp_path / "docs/dev_reports/2026-06-24-agentops-phase-5-dev-report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        "# 第五阶段开发报告\n\n"
+        "## 变更范围\n\n- `docs/log/DEVELOPMENT_LOG.md`\n\n"
+        "## 最终结论\n\nPASS\n",
+        encoding="utf-8",
+    )
+
+    result = validate_stage_delivery(
+        tmp_path,
+        stage="claude_developer",
+        changed_files=[
+            "docs/log/DEVELOPMENT_LOG.md",
+            "docs/dev_reports/2026-06-24-agentops-phase-5-dev-report.md",
+        ],
+    )
+
+    assert result.passed is True
+    assert result.substantive_files == ["docs/log/DEVELOPMENT_LOG.md"]
+    assert result.test_files == []
 
 
 def test_legacy_delivery_gate_is_not_reused_for_later_phase(tmp_path: Path):

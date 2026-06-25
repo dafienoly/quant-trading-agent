@@ -179,6 +179,19 @@ jobs:
             exit 2
           }
 
+      - name: Commit PM stage transition
+        env:
+          DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") { exit 0 }
+          python scripts/agent_pipeline.py check-gates --through-stage pm
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py evaluate-stage-transition --stage codex_pm
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py apply-stage-transition --stage codex_pm
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Prepare Codex B architect handoff
         run: |
           python scripts/agent_pipeline.py write-handoff --stage codex_architect
@@ -203,6 +216,19 @@ jobs:
             exit 2
           }
 
+      - name: Commit architecture stage transition
+        env:
+          DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") { exit 0 }
+          python scripts/agent_pipeline.py check-gates --through-stage architecture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py evaluate-stage-transition --stage codex_architect
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py apply-stage-transition --stage codex_architect
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Prepare OpenCode Team Leader team-plan handoff
         run: |
           python scripts/agent_pipeline.py write-handoff --stage claude_lead_plan
@@ -220,6 +246,19 @@ jobs:
             & .\scripts\run-team-stage.ps1 -Stage claude_lead_plan
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+
+      - name: Commit team-plan stage transition
+        env:
+          DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:DRY_RUN -eq "true" -or $env:DRY_RUN -eq "1") { exit 0 }
+          python scripts/agent_pipeline.py check-gates --through-stage team_plan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py evaluate-stage-transition --stage claude_lead_plan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/agent_pipeline.py apply-stage-transition --stage claude_lead_plan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Commit pipeline bootstrap artifacts
         run: |
@@ -332,7 +371,6 @@ jobs:
           if ("${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}" -eq "true") {
             gh pr edit $pr --add-label "stage:team-plan-pending"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            gh workflow run agent-stage-runner.yml --ref $branch -f stage=claude_lead_plan -f pr_number=$pr
           } else {
             gh pr edit $pr --add-label "stage:team-dev-pending"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

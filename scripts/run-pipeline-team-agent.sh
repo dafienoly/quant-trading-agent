@@ -297,6 +297,14 @@ verify_tester_did_not_modify_business_code() {
   )
 }
 
+cleanup_tester_runtime_artifacts() {
+  if git ls-files --error-unmatch feedback/index.json >/dev/null 2>&1; then
+    git restore --worktree -- feedback/index.json
+  else
+    rm -f feedback/index.json
+  fi
+}
+
 if [[ "$preflight_only" == "true" ]]; then
   case "$stage" in
     claude_lead_plan|claude_lead_review|postmortem)
@@ -348,6 +356,7 @@ case "$stage" in
       exit 2
     fi
     verify_branch_restored
+    cleanup_tester_runtime_artifacts
     verify_tester_did_not_modify_business_code
     write_execution_metadata \
       "opencode" "$OPENCODE_TESTER_MODEL" "$OPENCODE_TESTER_VARIANT" "superpowers"
