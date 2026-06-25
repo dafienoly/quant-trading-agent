@@ -248,6 +248,14 @@ def test_existing_stage_runner_can_preflight_a_pr_branch_without_advancing_pipel
     assert "include-hidden-files: true" in text
 
 
+def test_labeled_stage_runner_checks_out_pr_head_before_agent_commit():
+    text = Path(".github/workflows/agent-stage-runner.yml").read_text(encoding="utf-8")
+
+    assert "if: github.event_name == 'pull_request' || inputs.pr_number != ''" in text
+    assert '$pr = "${{ github.event.pull_request.number || inputs.pr_number }}"' in text
+    assert 'git checkout "$branch"' in text
+
+
 def test_agent_issue_template_uses_current_roles_and_manual_merge():
     text = AGENT_ISSUE_TEMPLATE.read_text(encoding="utf-8")
 
@@ -502,6 +510,7 @@ def test_team_lead_and_developer_handoffs_pin_runtime_contract(tmp_path: Path):
     assert "variant=max" in developer
     assert "build Agent permissions" in developer
     assert "superpowers" in developer
+    assert "final decision exactly `PASS` or `PASS_WITH_NOTES`" in developer
     assert "OpenCode Team Leader" in review
 
 

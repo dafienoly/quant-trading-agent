@@ -74,11 +74,11 @@ jobs:
     steps:
       - name: Determine checkout ref for dispatching PR
         id: checkout-ref
-        if: inputs.pr_number != ''
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $pr = "${{ inputs.pr_number }}"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
           $branch = gh pr view $pr --json headRefName --jq ".headRefName"
           if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
           "checkout_ref=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
