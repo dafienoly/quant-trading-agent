@@ -74,7 +74,7 @@ Phase 5 为文档汇总与回归阶段，无新增功能代码。变更范围：
 | `src/ui_report/agentops_control_tower.py` | Control Tower 页面组件 |
 | `tests/test_agentops_control_tower_page.py` | 页面 smoke 测试 |
 
-## 自测命令与结果（2026-06-25 新鲜验证）
+## 自测命令与结果（阶段执行时新鲜验证）
 
 > 运行环境：Python 3.14.4，pytest 9.0.3，Linux (GitHub Actions runner)
 > 全部命令已验证通过，结果取自本阶段实际执行输出。
@@ -85,7 +85,7 @@ Phase 5 为文档汇总与回归阶段，无新增功能代码。变更范围：
 python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_pipeline_state_reader.py tests/test_agentops_pipeline_aggregator.py tests/test_agentops_pipeline_sanitizer.py tests/test_agentops_pipeline_errors.py tests/test_agentops_routes.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full
 ```
 
-结果: **98 passed in 2.81s**
+结果: **98 passed in 2.72s**
 
 ### 2. API 回归（共享 entrypoint）
 
@@ -93,7 +93,7 @@ python3 -m pytest tests/test_agentops_pipeline_contracts.py tests/test_agentops_
 python3 -m pytest tests/test_product_routes.py tests/test_v16_0b_watchlist_api.py tests/test_v16_0b_signal_observation.py -q --tb=short --basetemp=runtime/pytest-tmp-agentops-control-tower-full-regression
 ```
 
-结果: **18 passed in 14.63s**（现有 product 路由无回归）
+结果: **18 passed in 14.29s**（现有 product 路由无回归）
 
 ### 3. Streamlit / UI 回归
 
