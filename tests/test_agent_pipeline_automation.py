@@ -13,6 +13,7 @@ from src.product_app.agent_pipeline_automation import (
     extract_report_decision,
     normalize_gate_decision,
     read_state,
+    register_stage_failure,
     set_pr_metadata,
     slugify_feature,
     sync_state_from_gates,
@@ -278,11 +279,26 @@ def test_github_workflows_use_repository_owned_team_runner():
     assert '".github",' in stage_runner
     assert '"scripts",' in stage_runner
     assert '"feedback",' not in stage_runner
+    assert "feedback/bugs/open/BUG_" in stage_runner
+    assert "git add -f -- $evidencePath" in stage_runner
     assert "validate-stage-delivery" in stage_runner
     assert "steps.stage-gate.outputs.gate_passed" in stage_runner
     assert "route_back_to" in stage_runner
+    assert "register-stage-failure" in stage_runner
+    assert "retry_allowed" in stage_runner
+    assert "agent-pr-validation.yml" in stage_runner
+    assert "-f pr_number=$pr" in stage_runner
     assert "advance-phase" in stage_runner
     assert "Stage gate failed" in stage_runner
+
+
+def test_pr_validation_supports_explicit_bot_dispatch():
+    text = PR_VALIDATION_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "workflow_dispatch:" in text
+    assert "pr_number:" in text
+    assert "github.event.inputs.pr_number" in text
+    assert "github.event.pull_request.number || github.event.inputs.pr_number" in text
 
 
 def test_feature_state_branch_includes_issue_number_for_restart_isolation():
@@ -599,6 +615,82 @@ PASS
     assert result.claimed_files == sorted(paths)
 
 
+def test_legacy_delivery_gate_is_not_reused_for_later_phase(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] AgentOps",
+        feature_id="agentops",
+        risk_level="product",
+    )
+    state["team_pipeline"]["current_phase"] = 2
+    state["team_pipeline"]["total_phases"] = 3
+    write_feature_state(tmp_path, state)
+    write_json(
+        tmp_path / ".agent/gates/phase_dev_delivery_gate.json",
+        {
+            "passed": True,
+            "feature_id": "agentops",
+            "substantive_files": ["src/product_app/agentops/phase_one.py"],
+            "test_files": ["tests/test_agentops_phase_one.py"],
+        },
+    )
+    report = tmp_path / "docs/dev_reports/2026-06-24-agentops-phase-2-dev-report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("## 变更范围\n\n仅报告。\n\n## 最终结论\n\nPASS\n", encoding="utf-8")
+
+    result = validate_stage_delivery(
+        tmp_path,
+        stage="claude_developer",
+        changed_files=[str(report.relative_to(tmp_path))],
+    )
+
+    assert result.passed is False
+    assert "report_only_delivery" in result.invalid
+
+
+def test_developer_delivery_uses_latest_report_revision(tmp_path: Path):
+    state = build_feature_state(
+        title="[Feature] AgentOps",
+        feature_id="agentops",
+        risk_level="product",
+    )
+    write_feature_state(tmp_path, state)
+    implementation = tmp_path / "src/product_app/agentops/observation.py"
+    test_file = tmp_path / "tests/test_agentops_observation.py"
+    implementation.parent.mkdir(parents=True, exist_ok=True)
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    implementation.write_text("VALUE = 1\n", encoding="utf-8")
+    test_file.write_text("def test_value():\n    assert True\n", encoding="utf-8")
+    report_dir = tmp_path / "docs/dev_reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    (report_dir / "2026-06-24-agentops-phase-1-dev-report.md").write_text(
+        "## 变更范围\n\n- `src/product_app/agentops/missing.py`\n",
+        encoding="utf-8",
+    )
+    revised_report = report_dir / "2026-06-24-agentops-phase-1-dev-report-r2.md"
+    revised_report.write_text(
+        "## 变更范围\n\n"
+        "- `src/product_app/agentops/observation.py`\n"
+        "- `tests/test_agentops_observation.py`\n",
+        encoding="utf-8",
+    )
+
+    result = validate_stage_delivery(
+        tmp_path,
+        stage="claude_developer",
+        changed_files=[
+            "src/product_app/agentops/observation.py",
+            "tests/test_agentops_observation.py",
+            str(revised_report.relative_to(tmp_path)),
+        ],
+    )
+
+    assert result.passed is True
+    assert result.claimed_files == [
+        "src/product_app/agentops/observation.py",
+        "tests/test_agentops_observation.py",
+    ]
+
+
 def test_phase_test_rejected_decision_fails_gate(tmp_path: Path):
     feature_id = "agentops"
     files = {
@@ -637,12 +729,15 @@ def test_latest_phase_test_report_can_close_older_rejection(tmp_path: Path):
         "docs/design/2026-06-24-agentops-architecture.md": _valid_architecture(feature_id),
         "docs/dev_plans/2026-06-24-agentops-team-plan.md": "### Phase 1\n",
         "docs/dev_reports/2026-06-24-agentops-phase-1-dev-report.md": "## 最终结论\n\nPASS\n",
-        "docs/test_reports/2026-06-24-agentops-phase-1-test-report-r1.md": (
+        "docs/test_reports/2026-06-24-agentops-phase-1-test-report.md": (
             "## Feedback Bug 文件\n\n"
             "`feedback/bugs/open/BUG_OLD.md`\n\n"
             "## 最终结论\n\nREJECTED\n"
         ),
         "docs/test_reports/2026-06-24-agentops-phase-1-test-report-r2.md": (
+            "## 最终结论\n\nREJECTED\n"
+        ),
+        "docs/test_reports/2026-06-24-agentops-phase-1-test-report-r3.md": (
             "## 最终结论\n\nPASS\n"
         ),
     }
@@ -702,6 +797,76 @@ def test_team_plan_phase_count_and_intermediate_phase_advance(tmp_path: Path):
     synced = sync_state_from_gates(tmp_path)
     assert synced["updated"] is False
     assert read_state(tmp_path)["current_stage"] == "phase_dev_pending"
+
+
+def test_phase_advance_migrates_missing_team_plan_metadata(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Multi", feature_id="multi")
+    state["team_pipeline"].pop("total_phases")
+    state["team_pipeline"].pop("completed_phases")
+    write_feature_state(tmp_path, state)
+    plan = tmp_path / "docs/dev_plans/2026-06-24-multi-team-plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text(
+        "\n".join(f"### Phase {number}" for number in range(1, 6)),
+        encoding="utf-8",
+    )
+    write_json(
+        tmp_path / ".agent/gates/phase_test_gate.json",
+        {
+            "passed": True,
+            "feature_id": "multi",
+            "found": {"phase_test": ["docs/test_reports/phase-1.md"]},
+        },
+    )
+
+    result = advance_after_phase_test(tmp_path)
+
+    assert result["advanced"] is True
+    assert result["next_stage"] == "claude_developer"
+    assert result["current_phase"] == 2
+    assert result["total_phases"] == 5
+    assert read_state(tmp_path)["team_pipeline"]["completed_phases"] == [1]
+
+
+def test_phase_advance_fails_closed_when_team_plan_has_no_phase_headings(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Multi", feature_id="multi")
+    write_feature_state(tmp_path, state)
+    plan = tmp_path / "docs/dev_plans/2026-06-24-multi-team-plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text("# Team Plan\n\nNo deterministic phases.\n", encoding="utf-8")
+    write_json(
+        tmp_path / ".agent/gates/phase_test_gate.json",
+        {"passed": True, "feature_id": "multi"},
+    )
+
+    result = advance_after_phase_test(tmp_path)
+
+    assert result["advanced"] is False
+    assert result["next_stage"] == ""
+    assert result["reason"] == "team_plan_phase_metadata_unavailable"
+
+
+def test_phase_test_failure_stops_after_retry_budget(tmp_path: Path):
+    state = build_feature_state(title="[Feature] Retry", feature_id="retry")
+    write_feature_state(tmp_path, state)
+    gate = {
+        "passed": False,
+        "feature_id": "retry",
+        "decision": "REJECTED",
+        "invalid": {"phase_test": ["blocking_decision:REJECTED"]},
+    }
+    write_json(tmp_path / ".agent/gates/phase_test_gate.json", gate)
+
+    first = register_stage_failure(tmp_path, stage="phase_test")
+    second = register_stage_failure(tmp_path, stage="phase_test")
+    third = register_stage_failure(tmp_path, stage="phase_test")
+
+    assert first["retry_allowed"] is True
+    assert second["retry_allowed"] is True
+    assert third["retry_allowed"] is False
+    assert third["route_back_to"] == ""
+    assert third["reason"] == "phase_test_retry_budget_exhausted"
+    assert read_state(tmp_path)["team_pipeline"]["phase_test_attempts"]["1"] == 3
 
 
 def test_stale_feature_gate_does_not_pollute_current_state(tmp_path: Path):

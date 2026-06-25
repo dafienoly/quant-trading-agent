@@ -757,7 +757,9 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
         and "run-team-stage.ps1" in workflow
         and "validate-stage-delivery" in workflow
         and "route_back_to" in workflow
-        and '"feedback",' in workflow
+        and "feedback/bugs/open/BUG_" in workflow
+        and "git add -f -- $evidencePath" in workflow
+        and '"feedback",' not in workflow
         and "CLAUDE_TESTER_AGENT_COMMAND" not in workflow
         and "CLAUDE_LEAD_AGENT_COMMAND" not in workflow
     )

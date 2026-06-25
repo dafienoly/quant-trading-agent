@@ -271,6 +271,17 @@ jobs:
           python scripts/agent_pipeline.py sync-state-from-gates
           $syncStatus = $LASTEXITCODE
 
+          $retryAllowed = $true
+          if (-not $gatePassed -and $gate -eq "phase_test") {
+            $failureJson = python scripts/agent_pipeline.py register-stage-failure --stage phase_test | Out-String
+            if ($LASTEXITCODE -ne 0) {
+              $retryAllowed = $false
+            } else {
+              $failureResult = $failureJson | ConvertFrom-Json
+              $retryAllowed = $failureResult.retry_allowed -eq $true
+            }
+          }
+
           $nextStage = ""
           if ($gatePassed -and $env:STAGE -eq "claude_tester") {
             $phaseJson = python scripts/agent_pipeline.py advance-phase | Out-String
@@ -288,6 +299,7 @@ jobs:
           "next_stage=$nextStage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "gate_status=$gateStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "sync_status=$syncStatus" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "retry_allowed=$($retryAllowed.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           exit 0
 
       - name: Commit stage artifacts
@@ -295,6 +307,26 @@ jobs:
           $ErrorActionPreference = "Stop"
           git config user.name "agent-pipeline-bot"
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
+
+          $changedTestReports = git status --porcelain=v1 --untracked-files=all -- docs/test_reports
+          foreach ($line in $changedTestReports) {
+            if ($line.Length -lt 4) { continue }
+            $reportPath = $line.Substring(3).Trim().Trim('"')
+            if (-not (Test-Path $reportPath)) { continue }
+            $reportText = Get-Content $reportPath -Raw -Encoding utf8
+            $matches = [regex]::Matches(
+              $reportText,
+              'feedback/bugs/open/BUG_[A-Za-z0-9_.-]+\.(?:md|json)'
+            )
+            foreach ($match in $matches) {
+              $evidencePath = $match.Value.Replace('\', '/')
+              if (Test-Path $evidencePath) {
+                git add -f -- $evidencePath
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              }
+            }
+          }
+
           foreach ($path in @(
             ".agent",
             ".github",
@@ -320,6 +352,18 @@ jobs:
             git push
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+
+      - name: Dispatch explicit PR validation
+        if: github.event_name == 'pull_request' || inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+          $branch = gh pr view $pr --json headRefName --jq ".headRefName"
+          if ($LASTEXITCODE -ne 0 -or -not $branch) { exit 2 }
+          gh workflow run agent-pr-validation.yml --ref $branch -f pr_number=$pr
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Advance PR label for next automated stage
         if: github.event_name == 'pull_request' || inputs.pr_number != ''
@@ -369,6 +413,11 @@ jobs:
             }
 
             Remove-StageLabels
+            $retryAllowed = "${{ steps.stage-gate.outputs.retry_allowed }}" -eq "true"
+            if (-not $retryAllowed) {
+              $routeBack = ""
+              Write-Host "Automatic retry budget exhausted; routing to manual approval."
+            }
             switch ($routeBack) {
               "claude_developer" {
                 Add-NextLabel "stage:team-dev-pending"

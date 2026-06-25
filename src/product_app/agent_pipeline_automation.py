@@ -180,6 +180,7 @@ class StageDeliveryResult:
     passed: bool
     feature_id: str
     stage: str
+    current_phase: int
     changed_files: list[str]
     substantive_files: list[str]
     test_files: list[str]
@@ -358,11 +359,28 @@ def validate_stage_delivery(
     if previous_delivery.exists():
         try:
             prev = json.loads(previous_delivery.read_text(encoding="utf-8"))
-            if prev.get("feature_id") == feature_id and prev.get("passed"):
+            phase_test_gate = _read_gate(root, "phase_test_gate.json") or {}
+            rejected_current_phase = (
+                phase_test_gate.get("decision") == "REJECTED"
+                and int(phase_test_gate.get("current_phase", current_phase)) == current_phase
+            )
+            previous_phase = prev.get("current_phase")
+            same_phase = (
+                int(previous_phase) == current_phase
+                if previous_phase is not None
+                else current_phase == 1
+            )
+            if (
+                prev.get("feature_id") == feature_id
+                and prev.get("passed")
+                and same_phase
+                and not rejected_current_phase
+            ):
                 return StageDeliveryResult(
                     passed=True,
                     feature_id=feature_id,
                     stage=stage,
+                    current_phase=current_phase,
                     changed_files=prev.get("changed_files", []),
                     substantive_files=prev.get("substantive_files", []),
                     test_files=prev.get("test_files", []),
@@ -394,7 +412,12 @@ def validate_stage_delivery(
     else:
         phase_marker = f"phase-{current_phase}"
         phase_reports = [path for path in reports if phase_marker in path.name]
-        report_path = phase_reports[-1] if phase_reports else reports[-1]
+        candidate_reports = phase_reports or reports
+        selected_reports = _select_reports_for_validation(
+            "phase_dev",
+            [normalize_path(str(path.relative_to(root))) for path in candidate_reports],
+        )
+        report_path = root / selected_reports[-1]
         report_text = report_path.read_text(encoding="utf-8")
         claimed = _extract_claimed_change_paths(report_text)
         for path in claimed:
@@ -435,6 +458,7 @@ def validate_stage_delivery(
         passed=passed,
         feature_id=feature_id,
         stage=stage,
+        current_phase=current_phase,
         changed_files=changed,
         substantive_files=substantive,
         test_files=tests,
@@ -545,9 +569,11 @@ def build_feature_state(
         "default_team_id": "hybrid-team-a",
         "max_parallel_teams": 3,
         "max_codex_review_attempts": 3,
+        "max_phase_test_attempts": 3,
         "current_phase": 1,
         "total_phases": 1,
         "completed_phases": [],
+        "phase_test_attempts": {},
         "all_phases_tested": False,
         "codex_review_attempts": 0,
     }
@@ -731,15 +757,24 @@ def _read_stage_decision(root: Path, *, stage: str, paths: list[str]) -> str | N
 def _select_reports_for_validation(stage: str, paths: list[str]) -> list[str]:
     """Validate current evidence while retaining older rejected reports."""
     if stage in {"phase_dev", "phase_test"}:
-        latest_by_phase: dict[int, str] = {}
+        latest_by_phase: dict[int, tuple[int, str]] = {}
         unnumbered: list[str] = []
-        for path in sorted(paths):
-            match = re.search(r"phase-(\d+)", Path(path).name, re.IGNORECASE)
+        for path in paths:
+            name = Path(path).name
+            match = re.search(r"phase-(\d+)", name, re.IGNORECASE)
             if match:
-                latest_by_phase[int(match.group(1))] = path
+                revision_match = re.search(r"-r(\d+)\.md$", name, re.IGNORECASE)
+                revision = int(revision_match.group(1)) if revision_match else 0
+                phase = int(match.group(1))
+                previous = latest_by_phase.get(phase)
+                if previous is None or (revision, path) > previous:
+                    latest_by_phase[phase] = (revision, path)
             else:
                 unnumbered.append(path)
-        return [*unnumbered[-1:], *[latest_by_phase[key] for key in sorted(latest_by_phase)]]
+        return [
+            *sorted(unnumbered)[-1:],
+            *[latest_by_phase[key][1] for key in sorted(latest_by_phase)],
+        ]
     if stage in {"claude_lead_review", "codex_review", "acceptance"}:
         return sorted(paths)[-1:]
     return paths
@@ -783,14 +818,21 @@ def sync_team_plan_metadata(root: Path, *, feature_id: str) -> dict[str, Any]:
             text,
         )
     }
-    total_phases = max(phase_numbers) if phase_numbers else 1
+    if not phase_numbers:
+        return {
+            "updated": False,
+            "total_phases": None,
+            "reason": "team_plan_phase_headings_missing",
+        }
+    total_phases = max(phase_numbers)
     state = read_state(root)
     team = dict(state.get("team_pipeline", {}))
-    old_value = int(team.get("total_phases", 1))
+    old_value = team.get("total_phases")
+    had_completed_phases = "completed_phases" in team
     team["total_phases"] = total_phases
     team.setdefault("completed_phases", [])
     state["team_pipeline"] = team
-    if old_value == total_phases and "completed_phases" in state.get("team_pipeline", {}):
+    if old_value == total_phases and had_completed_phases:
         return {"updated": False, "total_phases": total_phases, "reason": "unchanged"}
     write_feature_state(root, state)
     return {"updated": True, "total_phases": total_phases, "reason": "team_plan_parsed"}
@@ -800,6 +842,15 @@ def advance_after_phase_test(root: Path) -> dict[str, Any]:
     """Record a passing phase test and choose the next deterministic stage."""
     state = read_state(root)
     feature_id = str(state.get("feature_id") or "")
+    metadata = sync_team_plan_metadata(root, feature_id=feature_id)
+    if metadata.get("total_phases") is None:
+        return {
+            "advanced": False,
+            "next_stage": "",
+            "all_phases_tested": False,
+            "reason": "team_plan_phase_metadata_unavailable",
+        }
+    state = read_state(root)
     gate = _read_gate(root, "phase_test_gate.json")
     if (
         gate is None
@@ -815,12 +866,15 @@ def advance_after_phase_test(root: Path) -> dict[str, Any]:
 
     team = dict(state.get("team_pipeline", {}))
     current_phase = int(team.get("current_phase", 1))
-    total_phases = max(int(team.get("total_phases", 1)), 1)
+    total_phases = int(metadata["total_phases"])
     completed = sorted(
         set(int(value) for value in team.get("completed_phases", []) if int(value) > 0)
         | {current_phase}
     )
     team["completed_phases"] = completed
+    attempts = dict(team.get("phase_test_attempts", {}))
+    attempts.pop(str(current_phase), None)
+    team["phase_test_attempts"] = attempts
 
     if current_phase < total_phases:
         next_phase = current_phase + 1
@@ -866,6 +920,59 @@ def advance_after_phase_test(root: Path) -> dict[str, Any]:
         "total_phases": total_phases,
         "all_phases_tested": True,
         "reason": "all_phases_tested",
+    }
+
+
+def register_stage_failure(root: Path, *, stage: str) -> dict[str, Any]:
+    """Record a failed stage and stop automatic phase-test retry loops."""
+    if stage != "phase_test":
+        return {
+            "retry_allowed": False,
+            "route_back_to": "",
+            "reason": "unsupported_stage_failure",
+        }
+
+    state = read_state(root)
+    feature_id = str(state.get("feature_id") or "")
+    team = dict(state.get("team_pipeline", {}))
+    current_phase = int(team.get("current_phase", 1))
+    max_attempts = max(int(team.get("max_phase_test_attempts", 3)), 1)
+    attempts = dict(team.get("phase_test_attempts", {}))
+    attempt = int(attempts.get(str(current_phase), 0)) + 1
+    attempts[str(current_phase)] = attempt
+    team["phase_test_attempts"] = attempts
+    team["max_phase_test_attempts"] = max_attempts
+    state["team_pipeline"] = team
+
+    retry_allowed = attempt < max_attempts
+    state["current_stage"] = (
+        "phase_dev_pending" if retry_allowed else "manual_approval_required"
+    )
+    write_feature_state(root, state)
+
+    gate_path = root / GATES_DIR / "phase_test_gate.json"
+    gate = _read_gate(root, "phase_test_gate.json") or {}
+    gate.update(
+        {
+            "feature_id": feature_id,
+            "current_phase": current_phase,
+            "attempt": attempt,
+            "max_attempts": max_attempts,
+            "retry_allowed": retry_allowed,
+            "route_back_to": "claude_developer" if retry_allowed else "",
+        }
+    )
+    write_json(gate_path, gate)
+    return {
+        "retry_allowed": retry_allowed,
+        "route_back_to": gate["route_back_to"],
+        "attempt": attempt,
+        "max_attempts": max_attempts,
+        "reason": (
+            "phase_test_retry_allowed"
+            if retry_allowed
+            else "phase_test_retry_budget_exhausted"
+        ),
     }
 
 
