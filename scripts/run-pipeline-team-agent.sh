@@ -267,8 +267,13 @@ verify_branch_restored() {
   local ending_branch
   ending_branch="$(git branch --show-current)"
   if [[ "$ending_branch" != "$starting_branch" ]]; then
-    echo "Agent left the repository on branch '$ending_branch'; expected '$starting_branch'." >&2
-    exit 2
+    echo "Agent left the repository on branch '$ending_branch'; expected '$starting_branch'. Attempting auto-restore." >&2
+    if git checkout "$starting_branch" 2>/dev/null; then
+      echo "Auto-restored to '$starting_branch'." >&2
+    else
+      echo "Auto-restore failed; failing closed." >&2
+      exit 2
+    fi
   fi
 }
 
