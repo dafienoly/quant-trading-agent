@@ -1,5 +1,33 @@
 # agentops-control-tower-foundationpipeline-api-re PM Acceptance
 
+## 变更范围
+
+本次验收覆盖 AgentOps Pipeline 观测契约、只读聚合 API、Streamlit 状态中心、Control Tower 页面、五个开发与测试阶段，以及最终 Lead Review 和 Codex Review。同步验收最终报告门禁与用户入口修复：最终验证只检查 `acceptance_gate.json` 指定的权威验收报告，Merge Gate 会把验收报告、最新测试报告、Codex Review、用户指南和 API/UI 入口发布到 PR 正文。用户可从 `/product/agentops` 只读 API 与 Dashboard 的 AgentOps Control Tower 页面检查交付结果。
+
+## 测试命令
+
+```bash
+python3 -m pytest tests/test_agentops_pipeline_*.py tests/test_agentops_routes.py tests/test_agentops_state.py tests/test_agentops_control_tower_page.py tests/test_product_routes.py tests/test_v16_0b_*.py tests/test_product_dashboard_source.py -q --tb=line --basetemp=runtime/pytest-tmp-agentops-control-tower-all
+python3 -m ruff check src/product_app/agentops src/api/agentops_routes.py src/api/app.py tests/test_agentops_*.py
+python3 -m py_compile src/product_app/agentops/*.py src/api/agentops_routes.py src/api/app.py src/ui_report/agentops_state.py src/ui_report/agentops_control_tower.py
+git diff --check
+python -m pytest tests/test_validate_pr_reports.py tests/test_agent_pipeline_acceptance_entry.py tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_regression.py -q
+python scripts/agent_pipeline_regression.py --strict
+python scripts/validate_pr_reports.py --base origin/main --head HEAD --strict --json
+```
+
+## 测试结果
+
+Phase 5 Test Engineer 复验结果为 `PASS`：AgentOps 与 Product 聚焦回归 `165 passed`，后端单元测试 `98 passed`，API 回归 `18 passed`，Streamlit 状态中心与 Control Tower `46 passed`，Dashboard UI 回归 `3 passed`。Pipeline 验收入口修复聚焦测试为 `128 passed`，严格回归为 `8/8 gates passed`，当前 PR 最终报告门禁返回 `passed=true` 且 `issues=[]`。全项目扩展回归中的 6 个失败均由运行环境缺少 `socksio` 引起，已记录为非阻断环境备注。
+
+## 安全确认
+
+本功能只提供 Pipeline 状态读取、聚合、展示与错误可见性，不提供 approve、rerun、merge、下单、撤单或交易审批动作。未修改风险、执行、股票池和 Broker 模块；未暴露 `LEVEL_3_AUTO`；未启用真实交易；main 仍须人工审阅和手动合并。
+
+## 最终结论
+
+`ACCEPTED_WITH_NOTES`。功能主流程、只读边界、异常可见性和用户界面均通过验收。非阻断备注为 `risk_level=unknown`、历史文档日期命名差异，以及运行环境缺少 `socksio`。
+
 ## Acceptance Scope
 
 本次验收对象为 Feature `agentops-control-tower-foundationpipeline-api-re`：

@@ -143,6 +143,32 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+      - name: Publish user acceptance entry to PR body
+        if: inputs.pr_number != '' || github.event.pull_request.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pr = "${{ github.event.pull_request.number || inputs.pr_number }}"
+          $sha = git rev-parse HEAD
+          $actionsUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          New-Item -ItemType Directory -Force -Path .agent/reports | Out-Null
+          python scripts/agent_pipeline_acceptance_entry.py `
+            --repository "${{ github.repository }}" `
+            --ref $sha `
+            --actions-url $actionsUrl `
+            --output .agent/reports/pr_acceptance_entry.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $entry = Get-Content .agent/reports/pr_acceptance_entry.md -Raw -Encoding utf8
+          $body = gh pr view $pr --repo "${{ github.repository }}" --json body --jq ".body"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pattern = '(?s)\r?\n?<!-- agent-user-acceptance:start -->.*?<!-- agent-user-acceptance:end -->'
+          $baseBody = [regex]::Replace([string]$body, $pattern, '').TrimEnd()
+          $newBody = "$baseBody`n`n$entry"
+          gh pr edit $pr --repo "${{ github.repository }}" --body $newBody
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Require manual approval when gate fails
         if: steps.classify.outputs.status != '0'
         env:
@@ -228,5 +254,6 @@ jobs:
             .agent/reports/pipeline_dashboard.html
             .agent/gates/*.json
             .agent/changed_files.txt
+            .agent/reports/pr_acceptance_entry.md
           if-no-files-found: error
           retention-days: 14

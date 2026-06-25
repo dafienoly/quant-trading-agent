@@ -173,6 +173,62 @@ def test_pipeline_final_stage_requires_strict_acceptance_report(tmp_path: Path):
     assert any("future-acceptance.md" in issue for issue in data["issues"])
 
 
+def test_pipeline_final_stage_uses_gate_selected_acceptance(tmp_path: Path):
+    repo = tmp_path / "pipeline-final-selected"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, capture_output=True)
+    (repo / "src" / "main.py").write_text("# base")
+    _git_commit_all(repo, "base")
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
+    (repo / "src" / "change.py").write_text("# change")
+    state = repo / ".agent" / "state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(json.dumps({"feature_id": "x", "current_stage": "merge_gate_pending"}))
+    selected = "docs/acceptance/2026-06-25-x-acceptance.md"
+    gate = repo / ".agent" / "gates" / "acceptance_gate.json"
+    gate.parent.mkdir(parents=True)
+    gate.write_text(
+        json.dumps(
+            {
+                "passed": True,
+                "decision": "ACCEPTED",
+                "acceptance_artifact": selected,
+            }
+        )
+    )
+    _write_report(
+        repo / "docs" / "dev_reports" / "phase-1-dev-report.md",
+        "# 第一阶段开发报告\n\n## 实现范围\n\n"
+        "完成真实功能、异常处理、用户入口和失败关闭逻辑，并保留可复现测试证据。\n\n"
+        "## 自测命令与结果\n\npytest 全部通过，静态检查和差异检查均无问题。\n\n"
+        "## 最终结论\n\nPASS，可以进入下一阶段验证。\n",
+    )
+    _write_report(
+        repo / "docs" / "acceptance" / "2026-06-24-x-acceptance.md",
+        "# 旧占位验收\n\n## 变更范围\n\n",
+    )
+    _write_report(
+        repo / selected,
+        "# 最终验收\n\n## 变更范围\n\n覆盖真实功能、异常路径和用户入口。\n\n"
+        "## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过。\n\n"
+        "## 安全确认\n\n不涉及真实交易，不自动合并 main。\n\n"
+        "## 最终结论\n\nACCEPTED\n",
+    )
+    _git_commit_all(repo, "feature")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--head", "feature", "--strict", "--json"],
+        capture_output=True, text=True, cwd=repo, timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stdout
+    data = json.loads(proc.stdout)
+    assert data["report_files"][selected]["profile"] == "pipeline_final_acceptance"
+    assert "docs/acceptance/2026-06-24-x-acceptance.md" not in data["report_files"]
+
+
 # -- content checks ---------------------------------------------------------
 
 def test_empty_report_rejected(tmp_path: Path):
