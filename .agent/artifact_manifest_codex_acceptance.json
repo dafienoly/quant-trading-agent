@@ -6,12 +6,12 @@
     "artifacts":  {
                       "architecture":  {
                                            "path":  "docs/design/2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md",
-                                           "source":  ".agent\\gates\\acceptance_gate.json found.architecture",
+                                           "source":  ".agent\\gates\\codex_review_gate.json found.architecture",
                                            "exists":  true
                                        },
                       "team_plan":  {
                                         "path":  "docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md",
-                                        "source":  ".agent\\gates\\acceptance_gate.json found.team_plan",
+                                        "source":  ".agent\\gates\\codex_review_gate.json found.team_plan",
                                         "exists":  true
                                     },
                       "codex_review":  {
@@ -20,23 +20,23 @@
                                            "exists":  true
                                        },
                       "phase_test":  {
-                                         "path":  "docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md",
-                                         "source":  ".agent\\gates\\acceptance_gate.json found.phase_test",
+                                         "path":  "docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report-r2.md",
+                                         "source":  ".agent\\gates\\codex_review_gate.json found.phase_test",
                                          "exists":  true
                                      },
                       "phase_dev":  {
                                         "path":  "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md",
-                                        "source":  ".agent\\gates\\acceptance_gate.json found.phase_dev",
+                                        "source":  ".agent\\gates\\codex_review_gate.json found.phase_dev",
                                         "exists":  true
                                     },
                       "requirements":  {
                                            "path":  "docs/requirements/2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md",
-                                           "source":  ".agent\\gates\\acceptance_gate.json found.pm",
+                                           "source":  ".agent\\gates\\codex_review_gate.json found.pm",
                                            "exists":  true
                                        },
                       "claude_lead_review":  {
                                                  "path":  "docs/review/20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md",
-                                                 "source":  ".agent\\gates\\acceptance_gate.json found.claude_lead_review",
+                                                 "source":  ".agent\\gates\\codex_review_gate.json found.claude_lead_review",
                                                  "exists":  true
                                              }
                   }
