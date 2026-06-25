@@ -538,7 +538,8 @@ def test_main_merge_gate_never_auto_merges():
     assert "Require manual approval for non-auto-merge changes" in text
     assert "[System.IO.File]::WriteAllText($changedFilesPath" in text
     assert "Publish final acceptance status on PR head" in text
-    assert 'context="Pipeline 最终验收"' in text
+    assert "UGlwZWxpbmUg5pyA57uI6aqM5pS2" in text
+    assert "-f context=$context" in text
     assert "statuses: write" in text
 
 
