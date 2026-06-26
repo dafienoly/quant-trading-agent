@@ -114,6 +114,7 @@ jobs:
           git config user.email "agent-pipeline-bot@users.noreply.github.com"
           $branch = "${{ steps.init.outputs.epic_branch }}"
           $reuseRemoteBranch = $false
+          $localBranchExists = $false
 
           $existingPrRaw = $null
           $ErrorActionPreference = "Continue"
@@ -143,6 +144,11 @@ jobs:
             }
           }
 
+          git show-ref --verify --quiet "refs/heads/$branch"
+          if ($LASTEXITCODE -eq 0) {
+            $localBranchExists = $true
+          }
+
           if ($reuseRemoteBranch) {
             git fetch origin $branch
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -152,7 +158,10 @@ jobs:
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             }
           } else {
-            git switch -c $branch
+            if ($localBranchExists) {
+              Write-Host "Local branch '$branch' already exists on self-hosted runner; resetting it to current HEAD."
+            }
+            git switch -C $branch
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
