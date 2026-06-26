@@ -6,8 +6,10 @@
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from time import monotonic
 from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 from loguru import logger
@@ -127,6 +129,7 @@ class DataProviderHub:
     ) -> None:
         self._providers = providers
         self._circuit_breaker = circuit_breaker or ProviderCircuitBreaker()
+        self._health_state: dict[tuple[str, DataCapability], dict[str, Any]] = {}
 
     @property
     def circuit_breaker(self) -> ProviderCircuitBreaker:
@@ -151,13 +154,17 @@ class DataProviderHub:
             ProviderResult: 包含数据、状态和降级链信息
         """
         fallback_chain: list[str] = []
+        request_id = str(uuid4())
+        request_started = datetime.now(timezone.utc)
 
         for provider in self._providers:
             provider_name = provider.name
+            health_key = (provider_name, capability)
 
             # 跳过熔断打开的 provider
             if self._circuit_breaker.is_open(provider_name, capability):
                 fallback_chain.append(f"{provider_name}: circuit_open")
+                self._health_state.setdefault(health_key, {})["status"] = "CIRCUIT_OPEN"
                 logger.info(
                     "Skipping provider=%s capability=%s (circuit open)",
                     provider_name,
@@ -176,6 +183,14 @@ class DataProviderHub:
                 error_msg = str(exc) or type(exc).__name__
                 fallback_chain.append(f"{provider_name}: {error_msg}")
                 self._circuit_breaker.record_failure(provider_name, capability)
+                self._health_state[health_key] = {
+                    **self._health_state.get(health_key, {}),
+                    "status": "ERROR",
+                    "last_error_at": datetime.now(timezone.utc).isoformat(),
+                    "latency_ms": elapsed_ms,
+                    "row_count": 0,
+                    "error": error_msg,
+                }
                 logger.warning(
                     "Provider=%s capability=%s raised %s: %s (%.0fms)",
                     provider_name,
@@ -190,6 +205,14 @@ class DataProviderHub:
             if data is None or (isinstance(data, pd.DataFrame) and data.empty):
                 fallback_chain.append(f"{provider_name}: empty_data")
                 self._circuit_breaker.record_failure(provider_name, capability)
+                self._health_state[health_key] = {
+                    **self._health_state.get(health_key, {}),
+                    "status": "ERROR",
+                    "last_error_at": datetime.now(timezone.utc).isoformat(),
+                    "latency_ms": elapsed_ms,
+                    "row_count": 0,
+                    "error": "empty_data",
+                }
                 logger.warning(
                     "Provider=%s capability=%s returned empty data (%.0fms)",
                     provider_name,
@@ -207,6 +230,15 @@ class DataProviderHub:
                         f"{provider_name}: missing_fields({','.join(missing)})"
                     )
                     self._circuit_breaker.record_failure(provider_name, capability)
+                    self._health_state[health_key] = {
+                        **self._health_state.get(health_key, {}),
+                        "status": "ERROR",
+                        "last_error_at": datetime.now(timezone.utc).isoformat(),
+                        "latency_ms": elapsed_ms,
+                        "row_count": len(data),
+                        "field_coverage": coverage,
+                        "error": f"missing_fields({','.join(missing)})",
+                    }
                     logger.warning(
                         "Provider=%s capability=%s missing fields: %s (%.0fms)",
                         provider_name,
@@ -219,6 +251,22 @@ class DataProviderHub:
             # 成功
             fallback_chain.append(f"{provider_name}: ok")
             self._circuit_breaker.record_success(provider_name, capability)
+            completed_at = datetime.now(timezone.utc)
+            self._health_state[health_key] = {
+                "status": "OK",
+                "last_success_at": completed_at.isoformat(),
+                "last_error_at": self._health_state.get(health_key, {}).get(
+                    "last_error_at", ""
+                ),
+                "latency_ms": elapsed_ms,
+                "row_count": len(data),
+                "field_coverage": (
+                    validate_required_fields(data, required_fields)
+                    if required_fields
+                    else {}
+                ),
+                "error": "",
+            }
             logger.info(
                 "Provider=%s capability=%s succeeded (%d rows, %.0fms)",
                 provider_name,
@@ -235,6 +283,9 @@ class DataProviderHub:
                 error="",
                 elapsed_ms=elapsed_ms,
                 fallback_chain=fallback_chain,
+                request_id=request_id,
+                started_at=request_started.isoformat(),
+                completed_at=completed_at.isoformat(),
             )
 
         # 所有 provider 均失败
@@ -252,6 +303,9 @@ class DataProviderHub:
             error="all_providers_failed",
             elapsed_ms=0.0,
             fallback_chain=fallback_chain,
+            request_id=request_id,
+            started_at=request_started.isoformat(),
+            completed_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def get_health(self, capability: DataCapability) -> list[ProviderHealth]:
@@ -261,24 +315,27 @@ class DataProviderHub:
             provider_name = provider.name
             is_open = self._circuit_breaker.is_open(provider_name, capability)
             failure_count = self._circuit_breaker.get_failure_count(provider_name, capability)
+            state = self._health_state.get((provider_name, capability), {})
 
             if is_open:
                 status = "CIRCUIT_OPEN"
             elif failure_count > 0:
                 status = "ERROR"
             else:
-                status = "OK"
+                status = str(state.get("status") or "UNKNOWN")
 
             health_list.append(
                 ProviderHealth(
                     provider=provider_name,
                     capability=capability,
                     status=status,
-                    latency_ms=0.0,
-                    row_count=0,
-                    field_coverage={},
-                    last_success_at="",
-                    error="",
+                    latency_ms=float(state.get("latency_ms") or 0.0),
+                    row_count=int(state.get("row_count") or 0),
+                    field_coverage=dict(state.get("field_coverage") or {}),
+                    last_success_at=str(state.get("last_success_at") or ""),
+                    last_error_at=str(state.get("last_error_at") or ""),
+                    rate_limit_status="normal",
+                    error=str(state.get("error") or ""),
                 )
             )
         return health_list

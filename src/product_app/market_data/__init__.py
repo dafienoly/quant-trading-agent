@@ -19,6 +19,31 @@ from src.data_gateway.realtime_provider import AkShareRealtimeProvider, normaliz
 from src.product_app.demo_data import DEMO_STOCKS, get_demo_quotes, is_demo_mode
 from src.product_app.feedback import get_feedback_service
 
+# Re-export new module symbols
+from src.product_app.market_data.contracts import (
+    AuthRequirement,
+    CachePolicy,
+    DataQualityMetadata,
+    FallbackEligibility,
+    FreshnessPolicy,
+    ItemError,
+    MarketBar,
+    MarketDataProviderContract,
+    MarketQuote,
+    MultiSymbolQuoteResult,
+    ProviderAttempt,
+    ProviderErrorCategory,
+    QualityStatus,
+    RateLimitPolicy,
+    TimeoutPolicy,
+)
+from src.product_app.market_data.errors import MarketDataUnavailableError, redact_secret, safe_error_summary
+from src.product_app.market_data.quality import CallerContext, QualityGate
+from src.product_app.market_data.audit import AuditRecorder, MarketDataAuditEvent
+from src.product_app.market_data.cache import CachedEntry, MarketDataCache
+from src.product_app.market_data.health import ProviderHealthAggregator
+from src.product_app.market_data.relay import MarketDataRelay
+
 
 def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -219,3 +244,44 @@ def fetch_product_quotes(
             "messages": [str(exc)],
             "bug_id": bug_id,
         }
+
+
+__all__ = [
+    "now_text",
+    "is_trading_hours",
+    "default_symbols",
+    "parse_symbols",
+    "build_realtime_provider",
+    "records_from_frame",
+    "demo_quote_records",
+    "write_data_feedback",
+    "fetch_product_quotes",
+    # New contract symbols
+    "AuthRequirement",
+    "CachePolicy",
+    "CallerContext",
+    "DataQualityMetadata",
+    "FallbackEligibility",
+    "FreshnessPolicy",
+    "ItemError",
+    "MarketBar",
+    "MarketDataProviderContract",
+    "MarketDataUnavailableError",
+    "MarketQuote",
+    "MultiSymbolQuoteResult",
+    "ProviderAttempt",
+    "ProviderErrorCategory",
+    "QualityGate",
+    "QualityStatus",
+    "RateLimitPolicy",
+    "TimeoutPolicy",
+    "redact_secret",
+    "safe_error_summary",
+    # Phase 3 symbols
+    "AuditRecorder",
+    "MarketDataAuditEvent",
+    "CachedEntry",
+    "MarketDataCache",
+    "ProviderHealthAggregator",
+    "MarketDataRelay",
+]
