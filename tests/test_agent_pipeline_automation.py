@@ -200,6 +200,11 @@ def test_team_stage_runner_forces_requested_models_effort_and_skills():
     assert "PIPELINE_RUNTIME_OK" in text
     assert "--preflight-only" in text
     assert "PREFLIGHT_TIMEOUT_SECONDS" in text
+    assert "LEAD_STAGE_TIMEOUT_SECONDS" in text
+    assert "TESTER_STAGE_TIMEOUT_SECONDS" in text
+    assert "DEVELOPER_STAGE_TIMEOUT_SECONDS" in text
+    assert "run_stage_with_timeout" in text
+    assert "timed out after" in text
     assert "timeout --signal=TERM --kill-after=10s" in text
     assert text.count("--format json") == 4
 
