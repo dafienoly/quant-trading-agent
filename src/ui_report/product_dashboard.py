@@ -802,6 +802,29 @@ def render_live_data() -> None:
     st.subheader(t("live_data"))
     st.caption(t("live_data_caption"))
 
+    # ── V16.2 Market Data Relay Health ───────────────────────────
+    st.markdown(f"**{t('market_relay_health')}**")
+    relay_health = _get("/product/market/health")
+    if relay_health:
+        relay_rows = []
+        for item in relay_health.get("payload", []):
+            relay_rows.append(
+                {
+                    t("provider"): item.get("provider_name", ""),
+                    t("status"): item.get("status", "unknown"),
+                    t("latency_ms"): item.get("latency_ms", 0),
+                    t("last_success_at"): item.get("last_success_at", ""),
+                    t("last_error_at"): item.get("last_error_at", ""),
+                    t("signal_blocking"): (
+                        item.get("status") not in ("ok", "degraded")
+                    ),
+                    t("message"): item.get("error_summary", ""),
+                }
+            )
+        st.dataframe(_df(relay_rows), hide_index=True)
+    else:
+        _banner("warn", t("market_relay_unavailable"))
+
     # ── Provider Diagnosis ───────────────────────────────────────
     with st.expander(t("provider_diagnosis"), expanded=False):
         if st.button(t("run_diagnosis"), key="live_diagnose_btn"):

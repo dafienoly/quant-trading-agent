@@ -33,6 +33,12 @@ def create_app(
     from src.api.agentops_routes import router as agentops_router
     app.include_router(agentops_router, prefix="/product/agentops", tags=["agentops"])
 
+    # 注册 Market Data 路由：契约观测端点与统一 Relay 端点共享 /product/market 前缀
+    from src.api.market_data_routes import router as market_data_router
+    app.include_router(market_data_router, prefix="/product/market", tags=["market"])
+    from src.api.market_routes import router as market_relay_router
+    app.include_router(market_relay_router, prefix="/product/market", tags=["market-relay"])
+
     @app.get("/health")
     def health() -> dict:
         return {
