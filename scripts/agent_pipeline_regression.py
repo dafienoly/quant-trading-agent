@@ -728,6 +728,9 @@ def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
         "run-team-stage.ps1",
         "-Stage claude_lead_plan",
         "Run OpenCode GLM 5.2 team-plan",
+        'git show-ref --verify --quiet "refs/heads/$branch"',
+        "Local branch '$branch' already exists on self-hosted runner; resetting it to current HEAD.",
+        "git switch -C $branch",
     )
     missing = [marker for marker in team_markers if marker not in text]
     checks.append(CheckResult(

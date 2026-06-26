@@ -504,6 +504,15 @@ def test_issue_bootstrap_reuses_open_pr_from_remote_branch():
     assert "git switch -C $branch --track origin/$branch" in text
 
 
+def test_issue_bootstrap_resets_stale_local_epic_branch_before_recreate():
+    text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
+
+    assert 'git show-ref --verify --quiet "refs/heads/$branch"' in text
+    assert "Local branch '$branch' already exists on self-hosted runner; resetting it to current HEAD." in text
+    assert "git switch -C $branch" in text
+    assert "git switch -c $branch" not in text
+
+
 def test_issue_bootstrap_commits_pre_pr_stage_transitions():
     text = Path(".github/workflows/agent-issue-bootstrap.yml").read_text(encoding="utf-8")
 
