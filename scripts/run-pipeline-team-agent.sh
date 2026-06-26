@@ -25,11 +25,23 @@ OPENCODE_TESTER_VARIANT="max"
 OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"
 OPENCODE_DEVELOPER_VARIANT="max"
 PREFLIGHT_TIMEOUT_SECONDS="${AGENT_PREFLIGHT_TIMEOUT_SECONDS:-180}"
+LEAD_STAGE_TIMEOUT_SECONDS="${AGENT_LEAD_STAGE_TIMEOUT_SECONDS:-1200}"
+TESTER_STAGE_TIMEOUT_SECONDS="${AGENT_TESTER_STAGE_TIMEOUT_SECONDS:-1800}"
+DEVELOPER_STAGE_TIMEOUT_SECONDS="${AGENT_DEVELOPER_STAGE_TIMEOUT_SECONDS:-2400}"
 
-if ! [[ "$PREFLIGHT_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "AGENT_PREFLIGHT_TIMEOUT_SECONDS must be a positive integer." >&2
-  exit 2
-fi
+require_positive_integer() {
+  local value="$1"
+  local name="$2"
+  if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "$name must be a positive integer." >&2
+    exit 2
+  fi
+}
+
+require_positive_integer "$PREFLIGHT_TIMEOUT_SECONDS" "AGENT_PREFLIGHT_TIMEOUT_SECONDS"
+require_positive_integer "$LEAD_STAGE_TIMEOUT_SECONDS" "AGENT_LEAD_STAGE_TIMEOUT_SECONDS"
+require_positive_integer "$TESTER_STAGE_TIMEOUT_SECONDS" "AGENT_TESTER_STAGE_TIMEOUT_SECONDS"
+require_positive_integer "$DEVELOPER_STAGE_TIMEOUT_SECONDS" "AGENT_DEVELOPER_STAGE_TIMEOUT_SECONDS"
 
 case "$stage" in
   claude_lead_plan|claude_lead_review|postmortem|claude_developer|bugfix|claude_tester)
@@ -306,6 +318,24 @@ cleanup_tester_runtime_artifacts() {
   fi
 }
 
+run_stage_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+  set +e
+  timeout --signal=TERM --kill-after=10s "${timeout_seconds}s" "$@"
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    if [[ -s "$stderr_file" ]]; then
+      cat "$stderr_file" >&2
+    fi
+    if [[ $status -eq 124 || $status -eq 137 ]]; then
+      echo "OpenCode stage '$stage' timed out after ${timeout_seconds}s." >&2
+    fi
+  fi
+  return "$status"
+}
+
 if [[ "$preflight_only" == "true" ]]; then
   case "$stage" in
     claude_lead_plan|claude_lead_review|postmortem)
@@ -329,15 +359,15 @@ write_stage_prompt >"$prompt_file"
 case "$stage" in
   claude_lead_plan|claude_lead_review|postmortem)
     require_opencode_runtime "$OPENCODE_LEAD_MODEL"
-    if ! opencode run \
-       --model "$OPENCODE_LEAD_MODEL" \
-       --variant "$OPENCODE_LEAD_VARIANT" \
-       --agent build \
-       --format json \
-       --dir "$repo_root" \
-       --title "pipeline-${stage}" \
-       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
-      cat "$stderr_file" >&2
+    if ! run_stage_with_timeout "$LEAD_STAGE_TIMEOUT_SECONDS" \
+      opencode run \
+      --model "$OPENCODE_LEAD_MODEL" \
+      --variant "$OPENCODE_LEAD_VARIANT" \
+      --agent build \
+      --format json \
+      --dir "$repo_root" \
+      --title "pipeline-${stage}" \
+      "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
       exit 2
     fi
     write_execution_metadata \
@@ -345,7 +375,8 @@ case "$stage" in
     ;;
   claude_tester)
     require_opencode_runtime "$OPENCODE_TESTER_MODEL"
-    if ! opencode run \
+    if ! run_stage_with_timeout "$TESTER_STAGE_TIMEOUT_SECONDS" \
+      opencode run \
       --model "$OPENCODE_TESTER_MODEL" \
       --variant "$OPENCODE_TESTER_VARIANT" \
       --agent build \
@@ -353,7 +384,6 @@ case "$stage" in
       --dir "$repo_root" \
       --title "pipeline-${stage}" \
       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
-      cat "$stderr_file" >&2
       exit 2
     fi
     verify_branch_restored
@@ -366,7 +396,8 @@ case "$stage" in
     require_opencode_runtime "$OPENCODE_DEVELOPER_MODEL"
     echo "Prompt file size: $(wc -c < "$prompt_file") bytes"
     echo "Handoff file size: $(wc -c < "$handoff") bytes"
-    if ! opencode run \
+    if ! run_stage_with_timeout "$DEVELOPER_STAGE_TIMEOUT_SECONDS" \
+      opencode run \
       --model "$OPENCODE_DEVELOPER_MODEL" \
       --variant "$OPENCODE_DEVELOPER_VARIANT" \
       --agent build \
@@ -374,8 +405,7 @@ case "$stage" in
       --dir "$repo_root" \
       --title "pipeline-${stage}" \
       "$(cat "$prompt_file")" >"$stdout_file" 2>"$stderr_file"; then
-      echo "OpenCode Developer exited non-zero. stderr:" >&2
-      cat "$stderr_file" >&2
+      echo "OpenCode Developer exited non-zero." >&2
       exit 2
     fi
     echo "OpenCode Developer completed. stdout lines: $(wc -l < "$stdout_file"), stderr lines: $(wc -l < "$stderr_file")"
