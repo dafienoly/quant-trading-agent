@@ -131,6 +131,14 @@ class DataProviderHub:
         self._circuit_breaker = circuit_breaker or ProviderCircuitBreaker()
         self._health_state: dict[tuple[str, DataCapability], dict[str, Any]] = {}
 
+    @staticmethod
+    def _fallback_reason(fallback_chain: list[str]) -> str:
+        reasons = [
+            entry for entry in fallback_chain
+            if not entry.endswith(": ok")
+        ]
+        return "; ".join(reasons)
+
     @property
     def circuit_breaker(self) -> ProviderCircuitBreaker:
         return self._circuit_breaker
@@ -266,6 +274,10 @@ class DataProviderHub:
                     else {}
                 ),
                 "error": "",
+                "fallback_activation_count": self._health_state.get(
+                    health_key, {}
+                ).get("fallback_activation_count", 0)
+                + (1 if len(fallback_chain) > 1 else 0),
             }
             logger.info(
                 "Provider=%s capability=%s succeeded (%d rows, %.0fms)",
@@ -286,6 +298,8 @@ class DataProviderHub:
                 request_id=request_id,
                 started_at=request_started.isoformat(),
                 completed_at=completed_at.isoformat(),
+                fallback_used=len(fallback_chain) > 1,
+                fallback_reason=self._fallback_reason(fallback_chain),
             )
 
         # 所有 provider 均失败
@@ -306,6 +320,8 @@ class DataProviderHub:
             request_id=request_id,
             started_at=request_started.isoformat(),
             completed_at=datetime.now(timezone.utc).isoformat(),
+            fallback_used=False,
+            fallback_reason="",
         )
 
     def get_health(self, capability: DataCapability) -> list[ProviderHealth]:
@@ -336,6 +352,9 @@ class DataProviderHub:
                     last_error_at=str(state.get("last_error_at") or ""),
                     rate_limit_status="normal",
                     error=str(state.get("error") or ""),
+                    fallback_activation_count=int(
+                        state.get("fallback_activation_count") or 0
+                    ),
                 )
             )
         return health_list

@@ -162,13 +162,17 @@ def _service(tmp_path, now):
     return service, live, clock
 
 
-def test_live_stock_quote_is_complete_and_cache_fallback_blocks_signal(tmp_path):
+def test_live_stock_quote_is_complete_and_cache_fallback_exposes_usage_fields(tmp_path):
     now = datetime(2026, 6, 25, 2, 0, tzinfo=timezone.utc)
     service, live, _ = _service(tmp_path, now)
 
     live_result = service.get_stock_quotes(["600000.SH"], usage=DataUsage.SIGNAL)
     live.failed = True
     cached = service.get_stock_quotes(["600000.SH"], usage=DataUsage.DISPLAY)
+    signal_cached = service.get_stock_quotes(
+        ["600000.SH"],
+        usage=DataUsage.SIGNAL,
+    )
     execution = service.get_stock_quotes(
         ["600000.SH"],
         usage=DataUsage.EXECUTION,
@@ -176,9 +180,21 @@ def test_live_stock_quote_is_complete_and_cache_fallback_blocks_signal(tmp_path)
 
     assert live_result.quality_status.value == "complete"
     assert live_result.blocking_for_signal is False
+    assert live_result.requested_usage == "signal"
+    assert live_result.cache_status == "write_through"
+    assert live_result.fallback_used is False
     assert cached.cached is True
+    assert cached.fallback_used is True
+    assert cached.fallback_reason == "local_cache_fallback"
+    assert cached.cache_status == "hit"
+    assert cached.requested_usage == "display"
     assert cached.blocking_for_signal is True
+    assert signal_cached.cached is True
+    assert signal_cached.blocking_reason == "cache_fallback_not_eligible_for_signal"
+    assert signal_cached.requested_usage == "signal"
     assert execution.quality_status.value == "unavailable"
+    assert execution.cache_status == "not_allowed"
+    assert execution.blocking_reason == "live_complete_data_required_for_execution"
 
 
 def test_cached_quote_becomes_stale(tmp_path):
@@ -204,6 +220,8 @@ def test_manual_fixture_is_mock_and_signal_blocked(tmp_path):
     assert result.mock is True
     assert result.quality_status.value == "mock"
     assert result.blocking_for_signal is True
+    assert result.fallback_used is False
+    assert result.fallback_reason == "mock_fixture_provider"
 
 
 def test_bars_calendar_health_and_sources_have_unified_envelope(tmp_path):

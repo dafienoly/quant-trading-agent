@@ -173,6 +173,7 @@ class MarketDataRelayService:
         usage: DataUsage = DataUsage.DISPLAY,
     ) -> MarketDataEnvelope:
         normalized = self._normalize_symbols(symbols)
+        started_at = self._now().isoformat()
         started = monotonic()
         try:
             result = self._live_data_service.get_realtime_quotes(
@@ -190,6 +191,9 @@ class MarketDataRelayService:
                 live_ok=False,
                 warnings=[],
                 errors=[f"live_data_service_error:{type(exc).__name__}"],
+                started_at=started_at,
+                completed_at=self._now().isoformat(),
+                requested_usage=usage,
             )
         latency_ms = (monotonic() - started) * 1000.0
         payload = self._quote_payload(result.get("quotes", []))
@@ -203,6 +207,9 @@ class MarketDataRelayService:
             live_ok=result.get("data_status") != "FAILED" and bool(payload),
             warnings=list(result.get("fallback_chain") or []),
             errors=self._live_errors(result),
+            started_at=started_at,
+            completed_at=self._now().isoformat(),
+            requested_usage=usage,
         )
 
     def get_index_quotes(
@@ -263,8 +270,11 @@ class MarketDataRelayService:
             return self._unavailable(
                 MarketDataType.STOCK_BARS,
                 ["V16.2 仅支持 daily frequency"],
+                requested_usage=usage,
+                blocking_reason="unsupported_frequency_for_signal_workflow",
             )
         normalized = normalize_quote_symbol(symbol)
+        started_at = self._now().isoformat()
         if asset_type == "stock":
             started = monotonic()
             try:
@@ -286,6 +296,9 @@ class MarketDataRelayService:
                     warnings=[],
                     errors=[f"live_data_service_error:{type(exc).__name__}"],
                     realtime=False,
+                    started_at=started_at,
+                    completed_at=self._now().isoformat(),
+                    requested_usage=usage,
                 )
             latency_ms = (monotonic() - started) * 1000.0
             rows = list(live.get("daily_bars") or [])
@@ -301,6 +314,9 @@ class MarketDataRelayService:
                 warnings=list(live.get("fallback_chain") or []),
                 errors=self._live_errors(live),
                 realtime=False,
+                started_at=started_at,
+                completed_at=self._now().isoformat(),
+                requested_usage=usage,
             )
 
         mapping = {
@@ -319,6 +335,8 @@ class MarketDataRelayService:
             return self._unavailable(
                 MarketDataType.STOCK_BARS,
                 [f"不支持的 asset_type: {asset_type}"],
+                requested_usage=usage,
+                blocking_reason="unsupported_asset_type_for_signal_workflow",
             )
         capability, method, data_type = mapping[asset_type]
         result = self._relay_hub.fetch_with_fallback(
@@ -342,6 +360,9 @@ class MarketDataRelayService:
             warnings=result.fallback_chain,
             errors=[result.error] if result.error else [],
             realtime=False,
+            started_at=result.started_at,
+            completed_at=result.completed_at,
+            requested_usage=usage,
         )
 
     def get_calendar(
@@ -371,6 +392,9 @@ class MarketDataRelayService:
             warnings=result.fallback_chain,
             errors=[result.error] if result.error else [],
             realtime=False,
+            started_at=result.started_at,
+            completed_at=result.completed_at,
+            requested_usage=usage,
         )
 
     def _fetch_special_quotes(
@@ -405,6 +429,9 @@ class MarketDataRelayService:
             live_ok=result.status == "ok" and bool(payload),
             warnings=result.fallback_chain,
             errors=[result.error] if result.error else [],
+            started_at=result.started_at,
+            completed_at=result.completed_at,
+            requested_usage=usage,
         )
 
     def _complete_or_fallback(
@@ -420,17 +447,40 @@ class MarketDataRelayService:
         warnings: list[str],
         errors: list[str],
         realtime: bool = True,
+        started_at: str = "",
+        completed_at: str = "",
+        requested_usage: DataUsage | None = None,
     ) -> MarketDataEnvelope:
         cache_key = self._cache.make_key(data_type.value, identity)
-        quality = self._quality_for_payload(payload, realtime=realtime)
+        quality = self._quality_for_payload(
+            payload,
+            realtime=realtime,
+            warnings=warnings,
+            errors=errors,
+        )
         is_mock = provider_name == "manual_fixture"
         if is_mock and live_ok:
             quality = DataQualityStatus.MOCK
         stale = quality == DataQualityStatus.STALE
+        fallback_used = self._is_provider_fallback(warnings)
+        fallback_reason = self._fallback_reason(
+            warnings=warnings,
+            errors=errors,
+            is_mock=is_mock,
+            cached=False,
+        )
+        blocking_for_signal, blocking_reason = self._signal_blocking_decision(
+            quality=quality,
+            usage=usage,
+            cached=False,
+            is_mock=is_mock,
+            fallback_used=fallback_used,
+        )
         if live_ok and quality in {
             DataQualityStatus.COMPLETE,
             DataQualityStatus.STALE,
             DataQualityStatus.INCOMPLETE,
+            DataQualityStatus.INCONSISTENT,
             DataQualityStatus.MOCK,
         }:
             envelope = MarketDataEnvelope(
@@ -444,10 +494,18 @@ class MarketDataRelayService:
                 stale=stale,
                 mock=is_mock,
                 quality_status=quality,
-                blocking_for_signal=quality != DataQualityStatus.COMPLETE,
+                blocking_for_signal=blocking_for_signal,
                 payload=payload,
                 warnings=warnings,
                 errors=errors,
+                fallback_used=fallback_used,
+                fallback_reason=fallback_reason,
+                cache_status="skip" if is_mock or quality != DataQualityStatus.COMPLETE else "write_through",
+                blocking_reason=blocking_reason,
+                provider_chain=list(warnings),
+                started_at=started_at,
+                completed_at=completed_at,
+                requested_usage=(requested_usage or usage).value,
             )
             if quality == DataQualityStatus.COMPLETE and not is_mock:
                 try:
@@ -459,6 +517,7 @@ class MarketDataRelayService:
                             *envelope.warnings,
                             "本地缓存写入失败，实时数据仍可使用",
                         ],
+                        cache_status="write_through_failed",
                     )
             return envelope
 
@@ -474,6 +533,9 @@ class MarketDataRelayService:
                     data_type=data_type,
                     warnings=[*warnings, "实时数据不可用，已使用本地缓存"],
                     errors=errors,
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    requested_usage=usage,
                 )
         return self._unavailable(
             data_type,
@@ -481,6 +543,16 @@ class MarketDataRelayService:
             warnings=warnings,
             provider_name=provider_name,
             latency_ms=latency_ms,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+            cache_status="not_allowed" if usage == DataUsage.EXECUTION else "miss",
+            blocking_reason=blocking_reason or self._fallback_blocking_reason(
+                usage=usage,
+                fallback_used=fallback_used,
+            ),
+            started_at=started_at,
+            completed_at=completed_at,
+            requested_usage=usage,
         )
 
     def _quality_for_payload(
@@ -488,7 +560,12 @@ class MarketDataRelayService:
         payload: Any,
         *,
         realtime: bool,
+        warnings: list[str] | None = None,
+        errors: list[str] | None = None,
     ) -> DataQualityStatus:
+        detail = " ".join([*(warnings or []), *(errors or [])]).lower()
+        if "inconsistent" in detail or "conflict" in detail:
+            return DataQualityStatus.INCONSISTENT
         if not payload:
             return DataQualityStatus.UNAVAILABLE
         if isinstance(payload, dict) and "bars" in payload:
@@ -528,6 +605,9 @@ class MarketDataRelayService:
         data_type: MarketDataType,
         warnings: list[str],
         errors: list[str],
+        started_at: str = "",
+        completed_at: str = "",
+        requested_usage: DataUsage = DataUsage.DISPLAY,
     ) -> MarketDataEnvelope:
         fetched_at = str(cached.get("fetched_at") or "")
         parsed = _parse_timestamp(fetched_at)
@@ -557,6 +637,20 @@ class MarketDataRelayService:
             payload=cached.get("payload"),
             warnings=warnings,
             errors=errors,
+            fallback_used=True,
+            fallback_reason="local_cache_fallback",
+            cache_status="stale_hit" if stale else "hit",
+            blocking_reason=(
+                "mock_fixture_not_eligible_for_signal"
+                if cached.get("mock")
+                else "stale_cache_not_eligible_for_signal"
+                if stale
+                else "cache_fallback_not_eligible_for_signal"
+            ),
+            provider_chain=list(warnings),
+            started_at=started_at,
+            completed_at=completed_at,
+            requested_usage=requested_usage.value,
         )
 
     def _unavailable(
@@ -567,6 +661,13 @@ class MarketDataRelayService:
         warnings: list[str] | None = None,
         provider_name: str = "",
         latency_ms: float = 0.0,
+        fallback_used: bool = False,
+        fallback_reason: str = "",
+        cache_status: str = "miss",
+        blocking_reason: str = "market_data_unavailable",
+        started_at: str = "",
+        completed_at: str = "",
+        requested_usage: DataUsage = DataUsage.DISPLAY,
     ) -> MarketDataEnvelope:
         return MarketDataEnvelope(
             request_id=str(uuid4()),
@@ -583,6 +684,14 @@ class MarketDataRelayService:
             payload=[],
             warnings=warnings or [],
             errors=errors,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+            cache_status=cache_status,
+            blocking_reason=blocking_reason,
+            provider_chain=list(warnings or []),
+            started_at=started_at,
+            completed_at=completed_at,
+            requested_usage=requested_usage.value,
         )
 
     def _static_envelope(
@@ -603,6 +712,7 @@ class MarketDataRelayService:
             quality_status=DataQualityStatus.COMPLETE,
             blocking_for_signal=False,
             payload=payload,
+            cache_status="skip",
         )
 
     @staticmethod
@@ -714,7 +824,96 @@ class MarketDataRelayService:
             latency_ms=health.latency_ms,
             rate_limit_status=health.rate_limit_status,
             error_summary=health.error,
+            field_coverage=health.field_coverage,
+            fallback_activation_count=health.fallback_activation_count,
         )
+
+    @staticmethod
+    def _is_provider_fallback(warnings: list[str]) -> bool:
+        has_success = any(item.endswith(": ok") for item in warnings)
+        has_failure = any(not item.endswith(": ok") for item in warnings)
+        return has_success and has_failure
+
+    @staticmethod
+    def _fallback_reason(
+        *,
+        warnings: list[str],
+        errors: list[str],
+        is_mock: bool,
+        cached: bool,
+    ) -> str:
+        if cached:
+            return "local_cache_fallback"
+        if is_mock:
+            return "mock_fixture_provider"
+        reasons = [item for item in warnings if not item.endswith(": ok")]
+        if reasons:
+            return "; ".join(reasons)
+        if errors:
+            return "; ".join(errors)
+        return ""
+
+    @staticmethod
+    def _signal_blocking_decision(
+        *,
+        quality: DataQualityStatus,
+        usage: DataUsage,
+        cached: bool,
+        is_mock: bool,
+        fallback_used: bool,
+    ) -> tuple[bool, str]:
+        target = (
+            "execution"
+            if usage == DataUsage.EXECUTION
+            else "signal"
+        )
+        if is_mock or quality == DataQualityStatus.MOCK:
+            return True, f"mock_fixture_not_eligible_for_{target}"
+        if cached:
+            return True, f"cache_fallback_not_eligible_for_{target}"
+        if quality == DataQualityStatus.STALE:
+            return True, f"stale_data_not_eligible_for_{target}"
+        if quality == DataQualityStatus.INCOMPLETE:
+            return True, f"incomplete_data_not_eligible_for_{target}"
+        if quality == DataQualityStatus.INCONSISTENT:
+            return True, "inconsistent_data_requires_manual_review"
+        if quality == DataQualityStatus.UNAVAILABLE:
+            return (
+                True,
+                "live_complete_data_required_for_execution"
+                if usage == DataUsage.EXECUTION
+                else "live_complete_data_required_for_signal"
+                if usage == DataUsage.SIGNAL
+                else "market_data_unavailable",
+            )
+        if fallback_used and usage in {
+            DataUsage.DISPLAY,
+            DataUsage.ANALYSIS,
+            DataUsage.SIGNAL,
+            DataUsage.EXECUTION,
+        }:
+            return True, f"provider_fallback_not_eligible_for_{target}"
+        return False, ""
+
+    @staticmethod
+    def _fallback_blocking_reason(
+        *,
+        usage: DataUsage,
+        fallback_used: bool,
+    ) -> str:
+        if usage == DataUsage.EXECUTION:
+            return (
+                "cache_fallback_not_allowed_for_execution"
+                if fallback_used
+                else "live_complete_data_required_for_execution"
+            )
+        if usage == DataUsage.SIGNAL:
+            return (
+                "cache_fallback_not_eligible_for_signal"
+                if fallback_used
+                else "live_complete_data_required_for_signal"
+            )
+        return "market_data_unavailable"
 
 
 _RELAY_SERVICE: MarketDataRelayService | None = None
