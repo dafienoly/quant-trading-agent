@@ -5,13 +5,18 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .pipeline_contracts import (
+    AgentOpsHealth,
     AgentOpsPipelineObservation,
+    ControlTowerReadiness,
+    ControlTowerViewStatus,
     DataQualityInfo,
     DataQualityStatus,
     DocumentStatus,
     ErrorInfo,
+    PipelineInstanceSummary,
     PipelineStageInfo,
     PipelineStageStatus,
+    ReadinessStatus,
     RoleInfo,
     SafetyInfo,
 )
@@ -33,6 +38,9 @@ STATE_DIR = os.path.join(
     "..",
     ".agent",
 )
+
+
+_FINAL_STAGE_NAMES = {"acceptance", "merge_gate", "completed", "manual_approval"}
 
 
 def normalize_stage_statuses(
@@ -78,6 +86,123 @@ def build_required_doc_list(state: dict[str, Any]) -> list[dict[str, Any]]:
     return docs
 
 
+def _doc_status_value(value: object) -> str:
+    if isinstance(value, DocumentStatus):
+        return value.value
+    return str(value or "")
+
+
+def _count_docs(doc_statuses: list[dict[str, Any]], status: DocumentStatus) -> int:
+    return sum(1 for doc in doc_statuses if _doc_status_value(doc.get("status")) == status.value)
+
+
+def _missing_doc_paths(doc_statuses: list[dict[str, Any]]) -> list[str]:
+    missing_statuses = {DocumentStatus.MISSING.value, DocumentStatus.UNREADABLE.value}
+    return [
+        str(doc.get("path") or doc.get("kind") or "unknown")
+        for doc in doc_statuses
+        if _doc_status_value(doc.get("status")) in missing_statuses
+    ]
+
+
+def _stage_counts(stages: list[PipelineStageInfo]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for stage in stages:
+        key = stage.status.value
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _stage_names_with_status(
+    stages: list[PipelineStageInfo],
+    status: PipelineStageStatus,
+) -> list[str]:
+    return [stage.name for stage in stages if stage.status == status]
+
+
+def _build_pipeline_summary(
+    state: dict[str, Any],
+    stages: list[PipelineStageInfo],
+    required_docs: list[dict[str, Any]],
+) -> PipelineInstanceSummary:
+    feature_id = str(state.get("feature_id") or "")
+    issue_number = int(state.get("issue_number") or 0)
+    instance_id = str(
+        state.get("pipeline_instance_id")
+        or state.get("feature_id")
+        or (f"issue-{issue_number}" if issue_number else "")
+    )
+    return PipelineInstanceSummary(
+        instance_id=instance_id,
+        feature_id=feature_id,
+        issue_number=issue_number,
+        title=str(state.get("title") or ""),
+        current_stage=str(state.get("current_stage") or ""),
+        risk_level=str(state.get("risk_level") or ""),
+        stage_counts=_stage_counts(stages),
+        required_docs_total=len(required_docs),
+        required_docs_present=_count_docs(required_docs, DocumentStatus.PRESENT),
+        required_docs_missing=_count_docs(required_docs, DocumentStatus.MISSING),
+        required_docs_unreadable=_count_docs(required_docs, DocumentStatus.UNREADABLE),
+        handoff_count=len(state.get("_handoff_files") or []),
+        readonly=True,
+    )
+
+
+def _build_readiness(
+    *,
+    safety: SafetyInfo,
+    data_quality: DataQualityInfo,
+    stages: list[PipelineStageInfo],
+    required_docs: list[dict[str, Any]],
+) -> ControlTowerReadiness:
+    missing_docs = _missing_doc_paths(required_docs)
+    failed_stages = _stage_names_with_status(stages, PipelineStageStatus.FAILED)
+    blocked_stages = _stage_names_with_status(stages, PipelineStageStatus.BLOCKED)
+    in_progress_stages = _stage_names_with_status(stages, PipelineStageStatus.IN_PROGRESS)
+    blockers = [*safety.blockers]
+    if failed_stages:
+        blockers.append("Failed stages: " + ", ".join(failed_stages))
+    if blocked_stages:
+        blockers.append("Blocked stages: " + ", ".join(blocked_stages))
+
+    warnings = [*safety.warnings]
+    if data_quality.status == DataQualityStatus.INCOMPLETE and missing_docs:
+        warnings.append("Required documents are incomplete")
+
+    if data_quality.status in {DataQualityStatus.UNAVAILABLE, DataQualityStatus.UNPARSABLE}:
+        status = ReadinessStatus.UNKNOWN
+        next_action = "Restore readable .agent pipeline state before judging readiness."
+        confidence = "low"
+    elif blockers:
+        status = ReadinessStatus.BLOCKED
+        next_action = blockers[0]
+        confidence = "high"
+    elif missing_docs or data_quality.status == DataQualityStatus.INCOMPLETE:
+        status = ReadinessStatus.INCOMPLETE
+        next_action = "Complete required pipeline documents before advancing."
+        confidence = "medium"
+    elif in_progress_stages:
+        status = ReadinessStatus.INCOMPLETE
+        next_action = "Wait for in-progress stage to finish or inspect its handoff/report."
+        confidence = "medium"
+    else:
+        status = ReadinessStatus.READY
+        next_action = "Review current artifacts and continue to the next approved stage."
+        confidence = "high"
+
+    return ControlTowerReadiness(
+        status=status,
+        next_action=next_action,
+        blockers=blockers,
+        warnings=warnings,
+        missing_docs=missing_docs,
+        failed_stages=failed_stages,
+        in_progress_stages=in_progress_stages,
+        confidence=confidence,
+    )
+
+
 def evaluate_data_quality(
     read_result: Any,
     doc_statuses: list[dict[str, Any]],
@@ -94,10 +219,10 @@ def evaluate_data_quality(
             unparsable_sources=[".agent/state.json"],
         )
     missing = [
-            d.get("path", d.get("kind", "unknown"))
-            for d in doc_statuses
-            if d.get("status") in (DocumentStatus.MISSING, DocumentStatus.UNREADABLE)
-        ]
+        d.get("path", d.get("kind", "unknown"))
+        for d in doc_statuses
+        if d.get("status") in (DocumentStatus.MISSING, DocumentStatus.UNREADABLE)
+    ]
     if missing:
         return DataQualityInfo(
             status=DataQualityStatus.INCOMPLETE,
@@ -142,7 +267,7 @@ def evaluate_safety(
 
 def _read_state_files(
     state_dir: str, target: ResolvedTarget
-) -> tuple[dict[str, Any], list[ErrorInfo]]:
+) -> tuple[dict[str, Any], list[ErrorInfo], Any]:
     errors: list[ErrorInfo] = []
 
     state_json_path = os.path.join(state_dir, "state.json")
@@ -158,18 +283,16 @@ def _read_state_files(
             )
         )
 
-    # Read current_task.yaml for extra context
     task_path = os.path.join(state_dir, "current_task.yaml")
     task_result = read_pipeline_state(task_path, required=False)
     if task_result.state and not state.get("current_stage"):
         state["current_stage"] = task_result.state.get("current_stage")
 
-    # Read handoff files for stage context
     handoff_dir = os.path.join(state_dir, "handoff")
     handoff_files = read_handoff_files(handoff_dir)
     state["_handoff_files"] = handoff_files
 
-    return state, errors
+    return state, errors, read_result
 
 
 def _check_feature_match(
@@ -182,6 +305,36 @@ def _check_feature_match(
     return False
 
 
+def get_agentops_health() -> AgentOpsHealth:
+    state_dir = os.path.abspath(STATE_DIR)
+    state_json_path = os.path.join(state_dir, "state.json")
+    read_result = read_pipeline_state(state_json_path, required=False)
+    notes: list[str] = []
+    sources = [sanitize_repo_relative_path(state_json_path)]
+
+    if read_result.not_found:
+        status = ControlTowerViewStatus.EMPTY
+        notes.append("No .agent/state.json found; AgentOps is available but has no active pipeline state.")
+    elif read_result.unparsable:
+        status = ControlTowerViewStatus.ERROR
+        notes.append(".agent/state.json is not readable as structured state.")
+    else:
+        status = ControlTowerViewStatus.READY
+        notes.append("AgentOps readonly routes are available.")
+
+    return AgentOpsHealth(
+        readonly=True,
+        status=status,
+        available_routes=[
+            "/product/agentops/health",
+            "/product/agentops/pipelines/{feature_id}",
+            "/product/agentops/pipelines/by-issue/{issue_number}",
+        ],
+        observed_sources=sources,
+        notes=notes,
+    )
+
+
 def get_pipeline_observation(
     feature_id: str | None = None,
     issue_number: int | None = None,
@@ -192,7 +345,7 @@ def get_pipeline_observation(
         raise ParameterError("feature_id or issue_number is required")
 
     state_dir = os.path.abspath(STATE_DIR)
-    state, errors = _read_state_files(state_dir, target)
+    state, errors, read_result = _read_state_files(state_dir, target)
 
     if not state or (_check_feature_match(state, target) is False):
         raise FeatureNotFoundError(
@@ -229,11 +382,7 @@ def get_pipeline_observation(
         doc["status"] = doc_status
 
     data_quality = evaluate_data_quality(
-        read_result=type("obj", (), {
-            "not_found": False,
-            "unparsable": False,
-            "partial": False,
-        })(),
+        read_result=read_result,
         doc_statuses=required_docs,
         stages=stages,
     )
@@ -248,13 +397,22 @@ def get_pipeline_observation(
         doc_statuses=required_docs,
         data_quality=data_quality,
     )
+    summary = _build_pipeline_summary(state, stages, required_docs)
+    readiness = _build_readiness(
+        safety=safety,
+        data_quality=data_quality,
+        stages=stages,
+        required_docs=required_docs,
+    )
 
     return AgentOpsPipelineObservation(
-        contract_version="agentops.pipeline_observation.v1",
+        contract_version="agentops.pipeline_observation.v2",
         generated_at=datetime.now(timezone.utc),
         feature=feature,
         issue=issue,
         branch=branch,
+        pipeline_instance=summary,
+        readiness=readiness,
         stages=stages,
         roles=roles,
         required_docs=required_docs,

@@ -48,6 +48,13 @@ class ControlTowerViewStatus(str, Enum):
     BLOCKED = "blocked"
 
 
+class ReadinessStatus(str, Enum):
+    READY = "ready"
+    BLOCKED = "blocked"
+    INCOMPLETE = "incomplete"
+    UNKNOWN = "unknown"
+
+
 class ErrorInfo(BaseModel):
     code: str = ""
     message: str = ""
@@ -83,12 +90,51 @@ class DataQualityInfo(BaseModel):
     stale_sources: list[str] = Field(default_factory=list)
 
 
+class PipelineInstanceSummary(BaseModel):
+    instance_id: str = ""
+    feature_id: str = ""
+    issue_number: int = 0
+    title: str = ""
+    current_stage: str = ""
+    risk_level: str = ""
+    stage_counts: dict[str, int] = Field(default_factory=dict)
+    required_docs_total: int = 0
+    required_docs_present: int = 0
+    required_docs_missing: int = 0
+    required_docs_unreadable: int = 0
+    handoff_count: int = 0
+    readonly: bool = True
+
+
+class ControlTowerReadiness(BaseModel):
+    status: ReadinessStatus = ReadinessStatus.UNKNOWN
+    next_action: str = ""
+    blockers: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    missing_docs: list[str] = Field(default_factory=list)
+    failed_stages: list[str] = Field(default_factory=list)
+    in_progress_stages: list[str] = Field(default_factory=list)
+    confidence: str = "low"
+
+
+class AgentOpsHealth(BaseModel):
+    contract_version: str = "agentops.health.v1"
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    readonly: bool = True
+    status: ControlTowerViewStatus = ControlTowerViewStatus.EMPTY
+    available_routes: list[str] = Field(default_factory=list)
+    observed_sources: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class AgentOpsPipelineObservation(BaseModel):
-    contract_version: str = "agentops.pipeline_observation.v1"
+    contract_version: str = "agentops.pipeline_observation.v2"
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     feature: dict[str, Any]
     issue: dict[str, Any]
     branch: dict[str, Any]
+    pipeline_instance: PipelineInstanceSummary = Field(default_factory=PipelineInstanceSummary)
+    readiness: ControlTowerReadiness = Field(default_factory=ControlTowerReadiness)
     stages: list[PipelineStageInfo] = Field(default_factory=list)
     roles: list[RoleInfo] = Field(default_factory=list)
     required_docs: list[dict[str, Any]] = Field(default_factory=list)
