@@ -815,6 +815,11 @@ def render_live_data() -> None:
                     t("latency_ms"): item.get("latency_ms", 0),
                     t("last_success_at"): item.get("last_success_at", ""),
                     t("last_error_at"): item.get("last_error_at", ""),
+                    "Fallback 次数": item.get("fallback_activation_count", 0),
+                    "字段覆盖": ", ".join(
+                        f"{key}:{'Y' if value else 'N'}"
+                        for key, value in (item.get("field_coverage") or {}).items()
+                    ),
                     t("signal_blocking"): (
                         item.get("status") not in ("ok", "degraded")
                     ),

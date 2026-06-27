@@ -28,6 +28,14 @@ class FakeRelay:
             quality_status=DataQualityStatus.MOCK,
             blocking_for_signal=True,
             payload=[],
+            fallback_used=True,
+            fallback_reason="local_cache_fallback",
+            cache_status="stale_hit",
+            blocking_reason="cache_fallback_not_eligible_for_signal",
+            provider_chain=["eastmoney: timeout", "local_cache: ok"],
+            started_at="2026-06-25T09:59:59+08:00",
+            completed_at="2026-06-25T10:00:00+08:00",
+            requested_usage="display",
         )
 
     def get_health(self):
@@ -85,6 +93,14 @@ def test_market_routes_return_unified_envelope(monkeypatch):
     for body in results:
         assert body["request_id"] == "req"
         assert body["blocking_for_signal"] is True
+        assert body["fallback_used"] is True
+        assert body["fallback_reason"] == "local_cache_fallback"
+        assert body["cache_status"] == "stale_hit"
+        assert body["blocking_reason"] == "cache_fallback_not_eligible_for_signal"
+        assert body["provider_chain"] == ["eastmoney: timeout", "local_cache: ok"]
+        assert body["requested_usage"] == "display"
+        assert body["started_at"]
+        assert body["completed_at"]
 
 
 def test_market_routes_are_registered_and_usage_enum_fails_closed():
@@ -117,3 +133,5 @@ def test_dashboard_contains_market_relay_health_entry():
 
     assert "/product/market/health" in text
     assert "market_relay_health" in text
+    assert "Fallback 次数" in text
+    assert "字段覆盖" in text

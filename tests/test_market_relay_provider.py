@@ -12,6 +12,20 @@ from src.data_gateway.provider_contracts import DataCapability
 from src.data_gateway.provider_hub import DataProviderHub
 
 
+class BrokenCalendarProvider:
+    name = "broken_calendar"
+
+    def get_trade_dates(self, start_date, end_date):
+        raise RuntimeError("timeout")
+
+
+class BackupCalendarProvider:
+    name = "backup_calendar"
+
+    def get_trade_dates(self, start_date, end_date):
+        return pd.DataFrame([{"trade_date": "20260625"}])
+
+
 def test_manual_fixture_provider_requires_explicit_test_mode():
     with pytest.raises(RuntimeError, match="test_mode"):
         ManualFixtureProvider({})
@@ -145,3 +159,31 @@ def test_provider_hub_health_tracks_success_and_error():
     assert after.status == "OK"
     assert after.last_success_at
     assert after.row_count == 1
+
+
+def test_provider_hub_marks_fallback_success_and_health_count():
+    hub = DataProviderHub([BrokenCalendarProvider(), BackupCalendarProvider()])
+
+    result = hub.fetch_with_fallback(
+        DataCapability.TRADE_CALENDAR,
+        "get_trade_dates",
+        "20260601",
+        "20260630",
+        required_fields=["trade_date"],
+    )
+    health = {
+        item.provider: item
+        for item in hub.get_health(DataCapability.TRADE_CALENDAR)
+    }
+
+    assert result.status == "ok"
+    assert result.provider == "backup_calendar"
+    assert result.fallback_used is True
+    assert result.fallback_reason == "broken_calendar: timeout"
+    assert result.fallback_chain == [
+        "broken_calendar: timeout",
+        "backup_calendar: ok",
+    ]
+    assert health["broken_calendar"].status == "ERROR"
+    assert health["backup_calendar"].fallback_activation_count == 1
+    assert health["backup_calendar"].field_coverage == {"trade_date": True}

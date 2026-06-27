@@ -144,6 +144,8 @@ class DataSourceHealth:
     latency_ms: float = 0.0
     rate_limit_status: str = "unknown"
     error_summary: str = ""
+    field_coverage: dict[str, bool] = field(default_factory=dict)
+    fallback_activation_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return _json_value(asdict(self))
@@ -165,6 +167,14 @@ class MarketDataEnvelope:
     payload: Any
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    fallback_used: bool = False
+    fallback_reason: str = ""
+    cache_status: str = "miss"
+    blocking_reason: str = ""
+    provider_chain: list[str] = field(default_factory=list)
+    started_at: str = ""
+    completed_at: str = ""
+    requested_usage: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return _json_value(asdict(self))
@@ -187,6 +197,8 @@ class ProviderResult:
     request_id: str = ""
     started_at: str = ""
     completed_at: str = ""
+    fallback_used: bool = False
+    fallback_reason: str = ""
 
 
 @dataclass
@@ -202,6 +214,7 @@ class ProviderHealth:
     last_error_at: str = ""
     rate_limit_status: str = "unknown"
     error: str = ""
+    fallback_activation_count: int = 0
 
 
 class LiveDataProvider(Protocol):
