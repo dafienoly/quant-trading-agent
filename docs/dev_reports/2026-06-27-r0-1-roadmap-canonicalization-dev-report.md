@@ -4,7 +4,7 @@
 
 本次开发围绕 Roadmap 入口收敛，不修改运行时代码。
 
-## 代码与文档改动
+新增和更新范围：
 
 | 文件 | 说明 |
 | --- | --- |
@@ -12,6 +12,10 @@
 | `docs/roadmap/README.md` | 新增 Roadmap 目录优先级说明 |
 | `docs/requirements/2026-06-27-r0-1-roadmap-canonicalization-requirements.md` | R0.1 需求文档 |
 | `docs/design/2026-06-27-r0-1-roadmap-canonicalization-architecture.md` | R0.1 架构文档 |
+| `docs/dev_reports/2026-06-27-r0-1-roadmap-canonicalization-dev-report.md` | R0.1 开发报告 |
+| `docs/test_reports/2026-06-27-r0-1-roadmap-canonicalization-test-report.md` | R0.1 测试报告 |
+| `docs/review/2026-06-27-r0-1-roadmap-canonicalization-review.md` | R0.1 review |
+| `docs/acceptance/2026-06-27-r0-1-roadmap-canonicalization-acceptance.md` | R0.1 验收报告 |
 | `tests/test_roadmap_canonicalization.py` | Roadmap 静态守护测试 |
 
 ## 关键设计
@@ -37,17 +41,37 @@
 python -m pytest tests/test_roadmap_canonicalization.py -q
 python -m py_compile tests/test_roadmap_canonicalization.py
 git diff --check
+python scripts/validate_pr_reports.py --base origin/main --head HEAD --strict --json
 ```
 
-## 预期结果
+## 测试结果
+
+本 PR 的 GitHub 轻量验证已经触发。首次失败原因是报告治理脚本要求 dev report 与 acceptance report 包含固定章节：
 
 ```text
-tests/test_roadmap_canonicalization.py::test_canonical_roadmap_entrypoint_exists PASSED
-tests/test_roadmap_canonicalization.py::test_roadmap_directory_readme_defines_priority PASSED
-tests/test_roadmap_canonicalization.py::test_canonical_roadmap_keeps_core_constraints PASSED
-tests/test_roadmap_canonicalization.py::test_compatibility_roadmap_still_preserves_detailed_route PASSED
-tests/test_roadmap_canonicalization.py::test_roadmap_priority_keeps_single_source_of_truth_language PASSED
+变更范围
+测试命令
+测试结果
+安全确认
+最终结论
 ```
+
+本次更新已补齐该报告结构。预期重新运行后：
+
+```text
+python -m pytest tests/test_roadmap_canonicalization.py -q  # 5 passed
+python -m py_compile tests/test_roadmap_canonicalization.py  # passed
+git diff --check  # passed
+validate_pr_reports.py --strict  # passed
+```
+
+## 安全确认
+
+1. 仅修改 `docs/**` 与 `tests/test_roadmap_canonicalization.py`。
+2. 未修改运行时业务模块。
+3. 未修改 Market Data Relay / Provider / Risk / Strategy / Execution / Broker / Account 相关模块。
+4. 未新增 API、UI 或任何执行能力。
+5. 未改变人工合并策略。
 
 ## 剩余风险
 
