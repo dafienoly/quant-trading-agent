@@ -8,8 +8,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Path
 from fastapi.responses import JSONResponse
 
-from src.product_app.agentops.pipeline_aggregator import get_pipeline_observation
-from src.product_app.agentops.pipeline_contracts import AgentOpsPipelineObservation
+from src.product_app.agentops.pipeline_aggregator import (
+    get_agentops_health,
+    get_pipeline_observation,
+)
+from src.product_app.agentops.pipeline_contracts import (
+    AgentOpsHealth,
+    AgentOpsPipelineObservation,
+)
 from src.product_app.agentops.pipeline_errors import (
     ERROR_CODE_MAP,
     AgentOpsError,
@@ -58,6 +64,20 @@ def _error_response(exc: AgentOpsError | Exception) -> JSONResponse:
             }
         },
     )
+
+
+@router.get(
+    "/health",
+    response_model=AgentOpsHealth,
+    summary="Get readonly AgentOps Control Tower health",
+)
+def get_health() -> AgentOpsHealth | dict:
+    try:
+        return get_agentops_health()
+    except AgentOpsError as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
 
 
 @router.get(
