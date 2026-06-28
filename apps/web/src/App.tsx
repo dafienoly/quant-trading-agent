@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getOpsSummary, getQualitySummary, getRuntimeProfile, OpsSummary, QualitySummary, RuntimeProfile } from './api/agentops';
-import { ContextDisplay } from './api/contextSelectors';
-import { AdapterStatusCard } from './components/AdapterStatusCard';
+import { AdapterStatusPanel } from './components/AdapterStatusPanel';
 import { OpsSummaryCard, QualitySummaryCard, RuntimeProfileCard } from './components/AgentOpsCards';
 import './styles.css';
 
@@ -15,10 +14,6 @@ export function App() {
   const [runtime, setRuntime] = useState<RuntimeProfile | null>(null);
   const [quality, setQuality] = useState<QualitySummary | null>(null);
   const [error, setError] = useState('');
-  const adapterDisplay = useMemo<ContextDisplay>(
-    () => ({ status: 'pending', sourceName: 'adapter', configured: false, readonly: true }),
-    [],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +57,7 @@ export function App() {
           <OpsSummaryCard summary={summary} />
           <RuntimeProfileCard runtime={runtime} defaultStage={DEFAULT_STAGE} />
           <QualitySummaryCard quality={quality} />
-          <AdapterStatusCard display={adapterDisplay} />
+          <AdapterStatusPanel />
         </section>
       )}
     </main>
