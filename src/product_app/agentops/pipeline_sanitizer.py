@@ -10,6 +10,7 @@ _TOKEN_PATTERN = re.compile(
 _ENV_VAR_PATTERN = re.compile(r"([A-Z_]{3,})=([^\s]{4,})")
 # Match traceback file lines
 _TRACEBACK_PATTERN = re.compile(r'\s*File\s+".*?",\s*line\s+\d+,')
+_WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(r"\b[A-Za-z]:\\[^\s]+")
 
 
 def sanitize_repo_relative_path(path: str | None) -> str:
@@ -62,6 +63,7 @@ def sanitize_error_message(message: str) -> str:
             sanitized.append("<traceback omitted>")
             continue
         line = redact_secrets(line)
+        line = _WINDOWS_ABSOLUTE_PATH_PATTERN.sub("<path>", line)
         # Redact absolute path segments (Unix /path and Windows X:\path)
         line = re.sub(
             r"(?:/[a-zA-Z0-9_.\-]+)+(?=[\s]|$)",
