@@ -5,9 +5,12 @@ Only registers GET endpoints. No write operations.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Path
 from fastapi.responses import JSONResponse
 
+from src.product_app.agent_runtime import resolve_agent_runtime
 from src.product_app.agentops.pipeline_aggregator import (
     get_agentops_health,
     get_pipeline_observation,
@@ -25,6 +28,8 @@ from src.product_app.agentops.pipeline_errors import (
     PipelineStateUnparsableError,
 )
 from src.product_app.agentops.pipeline_sanitizer import sanitize_error_message
+from src.product_app.ops_summary import build_ops_summary
+from src.product_app.quality_index import build_quality_summary
 
 router = APIRouter()
 
@@ -41,6 +46,14 @@ def _get_error_status(exc: AgentOpsError) -> int:
         if isinstance(exc, exc_type):
             return status
     return 500
+
+
+def _model_dump_json_safe(value: Any) -> dict[str, Any]:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return value
+    return {"value": value}
 
 
 def _error_response(exc: AgentOpsError | Exception) -> JSONResponse:
@@ -74,6 +87,47 @@ def _error_response(exc: AgentOpsError | Exception) -> JSONResponse:
 def get_health() -> AgentOpsHealth | dict:
     try:
         return get_agentops_health()
+    except AgentOpsError as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@router.get(
+    "/summary",
+    summary="Get readonly AgentOps operations summary",
+)
+def get_ops_summary() -> dict:
+    try:
+        return _model_dump_json_safe(build_ops_summary())
+    except AgentOpsError as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@router.get(
+    "/runtime/{stage}",
+    summary="Get readonly Agent runtime profile by stage",
+)
+def get_runtime_profile(
+    stage: str = Path(..., description="Agent pipeline stage id"),
+) -> dict:
+    try:
+        return _model_dump_json_safe(resolve_agent_runtime(stage))
+    except AgentOpsError as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@router.get(
+    "/quality",
+    summary="Get readonly AgentOps quality summary",
+)
+def get_quality_summary() -> dict:
+    try:
+        return _model_dump_json_safe(build_quality_summary())
     except AgentOpsError as e:
         return _error_response(e)
     except Exception as e:
