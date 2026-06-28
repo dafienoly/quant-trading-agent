@@ -1,0 +1,3 @@
+# Scope
+
+Frontend shell only.
