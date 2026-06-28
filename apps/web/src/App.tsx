@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getOpsSummary, getQualitySummary, getRuntimeProfile, OpsSummary, QualitySummary, RuntimeProfile } from './api/agentops';
+import { ContextDisplay } from './api/contextSelectors';
+import { AdapterStatusCard } from './components/AdapterStatusCard';
 import { OpsSummaryCard, QualitySummaryCard, RuntimeProfileCard } from './components/AgentOpsCards';
 import './styles.css';
 
@@ -13,6 +15,10 @@ export function App() {
   const [runtime, setRuntime] = useState<RuntimeProfile | null>(null);
   const [quality, setQuality] = useState<QualitySummary | null>(null);
   const [error, setError] = useState('');
+  const adapterDisplay = useMemo<ContextDisplay>(
+    () => ({ status: 'pending', sourceName: 'adapter', configured: false, readonly: true }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +45,7 @@ export function App() {
       <section className="hero">
         <p className="eyebrow">V16.1 AgentOps Control Tower</p>
         <h1>Agent Pipeline Center</h1>
-        <p>Readonly frontend foundation for AgentOps summary, runtime profile, and quality summary.</p>
+        <p>Readonly frontend foundation for AgentOps summary, runtime profile, quality summary, and adapter status.</p>
       </section>
 
       {state === 'loading' && <section className="card">Loading AgentOps data...</section>}
@@ -56,6 +62,7 @@ export function App() {
           <OpsSummaryCard summary={summary} />
           <RuntimeProfileCard runtime={runtime} defaultStage={DEFAULT_STAGE} />
           <QualitySummaryCard quality={quality} />
+          <AdapterStatusCard display={adapterDisplay} />
         </section>
       )}
     </main>
