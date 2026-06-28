@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getOpsSummary, getQualitySummary, getRuntimeProfile, OpsSummary, QualitySummary, RuntimeProfile } from './api/agentops';
+import { ContextDisplay } from './api/contextSelectors';
+import { AdapterStatusCard } from './components/AdapterStatusCard';
+import { OpsSummaryCard, QualitySummaryCard, RuntimeProfileCard } from './components/AgentOpsCards';
 import './styles.css';
 
 const DEFAULT_STAGE = 'codex_pm';
@@ -12,6 +15,10 @@ export function App() {
   const [runtime, setRuntime] = useState<RuntimeProfile | null>(null);
   const [quality, setQuality] = useState<QualitySummary | null>(null);
   const [error, setError] = useState('');
+  const adapterDisplay = useMemo<ContextDisplay>(
+    () => ({ status: 'pending', sourceName: 'adapter', configured: false, readonly: true }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +45,7 @@ export function App() {
       <section className="hero">
         <p className="eyebrow">V16.1 AgentOps Control Tower</p>
         <h1>Agent Pipeline Center</h1>
-        <p>Readonly frontend foundation for AgentOps summary, runtime profile, and quality summary.</p>
+        <p>Readonly frontend foundation for AgentOps summary, runtime profile, quality summary, and adapter status.</p>
       </section>
 
       {state === 'loading' && <section className="card">Loading AgentOps data...</section>}
@@ -52,33 +59,10 @@ export function App() {
 
       {state === 'ready' && (
         <section className="grid">
-          <article className="card">
-            <h2>Ops Summary</h2>
-            <p className="status">{summary?.overall_status ?? 'unknown'}</p>
-            <p>Readonly: {String(summary?.readonly ?? true)}</p>
-            <ul>
-              {(summary?.sections ?? []).map((section) => (
-                <li key={section.name}>
-                  <strong>{section.name}</strong>: {section.status} - {section.note}
-                </li>
-              ))}
-            </ul>
-          </article>
-
-          <article className="card">
-            <h2>Runtime Profile</h2>
-            <p>Stage: {runtime?.stage ?? DEFAULT_STAGE}</p>
-            <p>Mode: {runtime?.mode ?? 'unknown'}</p>
-            <p>Provider: {runtime?.provider ?? 'unknown'}</p>
-            <p>Command env: {runtime?.command_env_var ?? 'n/a'}</p>
-          </article>
-
-          <article className="card">
-            <h2>Quality Summary</h2>
-            <p>Total: {quality?.total_count ?? 0}</p>
-            <p>Open: {quality?.open_count ?? 0}</p>
-            <p>Resolved: {quality?.resolved_count ?? 0}</p>
-          </article>
+          <OpsSummaryCard summary={summary} />
+          <RuntimeProfileCard runtime={runtime} defaultStage={DEFAULT_STAGE} />
+          <QualitySummaryCard quality={quality} />
+          <AdapterStatusCard display={adapterDisplay} />
         </section>
       )}
     </main>
