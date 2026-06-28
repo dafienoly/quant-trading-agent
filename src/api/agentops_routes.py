@@ -28,6 +28,7 @@ from src.product_app.agentops.pipeline_errors import (
     PipelineStateUnparsableError,
 )
 from src.product_app.agentops.pipeline_sanitizer import sanitize_error_message
+from src.product_app.agentops.remote_context import build_remote_context_snapshot
 from src.product_app.ops_summary import build_ops_summary
 from src.product_app.quality_index import build_quality_summary
 
@@ -128,6 +129,19 @@ def get_runtime_profile(
 def get_quality_summary() -> dict:
     try:
         return _model_dump_json_safe(build_quality_summary())
+    except AgentOpsError as e:
+        return _error_response(e)
+    except Exception as e:
+        return _error_response(e)
+
+
+@router.get(
+    "/remote",
+    summary="Get readonly AgentOps remote context snapshot",
+)
+def get_remote_context() -> dict:
+    try:
+        return _model_dump_json_safe(build_remote_context_snapshot())
     except AgentOpsError as e:
         return _error_response(e)
     except Exception as e:
