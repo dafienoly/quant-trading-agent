@@ -63,3 +63,9 @@ stage_status:
   claude_lead_review: pending
   codex_review: pending
   acceptance: pending
+pr_number: 123
+pr_url: https://github.com/dafienoly/quant-trading-agent/pull/123
+pull_request:
+  number: 123
+  url: https://github.com/dafienoly/quant-trading-agent/pull/123
+  head_ref: epic/20260629-bug-auto-fix-system-governance-issue-122
