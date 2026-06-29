@@ -1,0 +1,96 @@
+version: 1
+feature_id: bug-auto-fix-system-governance
+
+allowed_fix_types:
+  documentation_low_risk:
+    path_patterns:
+      - "docs/**/*.md"
+      - "*.md"
+    allowed_change_kinds:
+      - typo
+      - formatting
+      - link_fix
+      - heading_fix
+    required_tests:
+      - "git diff --check"
+
+  test_fixture_low_risk:
+    path_patterns:
+      - "tests/**/fixtures/**"
+      - "tests/**/*fixture*"
+      - "tests/**/*.py"
+    allowed_change_kinds:
+      - fixture_update
+      - assertion_correction
+      - temp_dir_isolation
+    forbidden_if_touches_restricted_module: true
+    required_tests:
+      - "related pytest scope"
+      - "git diff --check"
+
+  non_behavioral_lint:
+    path_patterns:
+      - "**/*.py"
+    allowed_change_kinds:
+      - import_sort
+      - typing_only
+      - unused_import
+      - dead_code_non_runtime
+    forbidden_paths:
+      - "src/**"
+    required_tests:
+      - "ruff check touched files"
+      - "py_compile touched src files when applicable"
+      - "git diff --check"
+
+restricted_paths:
+  - "src/risk_engine/**"
+  - "src/execution_engine/**"
+  - "src/data_gateway/**"
+  - "src/backtest_engine/**"
+  - "src/factor_engine/**"
+  - "src/strategy_engine/**"
+  - "src/product_app/agentops/**"
+  - "src/product_app/market_data/**"
+  - "src/product_app/tools/**"
+  - "src/product_app/model_gateway/**"
+  - "src/product_app/decisions/**"
+  - "src/product_app/position_sizing/**"
+  - "src/product_app/backtests/**"
+  - "src/product_app/risk_sentinel/**"
+  - "src/product_app/fundamental/**"
+  - "src/product_app/alpha/**"
+  - "src/product_app/paper_trading/**"
+  - "src/product_app/broker_shadow/**"
+  - "src/api/**"
+  - "src/ui_report/**"
+  - "config/**"
+  - ".github/workflows/**"
+  - "scripts/deploy/**"
+  - "**/.env"
+  - "**/.env.*"
+
+manual_approval_required_for:
+  - restricted-module
+  - live-trading
+  - risk-policy-change
+  - execution-policy-change
+  - main-merge-when-auto-merge-gate-fails
+  - codex-review-fails-three-times
+  - secret-like-content
+  - insufficient-evidence
+
+required_evidence_fields:
+  - feature_id
+  - issue_number
+  - run_id
+  - branch
+  - base_branch
+  - stage
+  - candidate_files
+  - change_summary
+  - touched_files
+  - test_commands
+  - test_results
+  - review_status
+  - audit_artifact_path

@@ -1,9 +1,9 @@
 {
   "passed": true,
-  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
-  "requested_stage": "codex_acceptance",
-  "expected_current_stage": "acceptance_pending",
-  "actual_current_stage": "acceptance_pending",
+  "feature_id": "bug-auto-fix-system-governance",
+  "requested_stage": "claude_developer",
+  "expected_current_stage": "phase_dev_pending",
+  "actual_current_stage": "phase_dev_pending",
   "reasons": [
     "stage_lease_matches_state"
   ]

@@ -1,17 +1,18 @@
 {
-  "passed": true,
+  "passed": false,
   "feature_id": "bug-auto-fix-system-governance",
-  "stage": "claude_lead_plan",
+  "stage": "claude_developer",
   "current_phase": 1,
-  "report_gate": "team_plan",
-  "report_gate_passed": true,
-  "delivery_gate_required": false,
-  "delivery_gate_passed": true,
+  "report_gate": "phase_dev",
+  "report_gate_passed": false,
+  "delivery_gate_required": true,
+  "delivery_gate_passed": false,
   "report_decision": "PASS",
-  "decision": "PASS",
-  "failure_kind": "",
+  "decision": "REJECTED",
+  "failure_kind": "report_and_delivery_gate",
   "route_back_to": "",
   "reasons": [
-    "all_required_stage_gates_passed"
+    "report_gate_not_passed",
+    "delivery_gate_not_passed"
   ]
 }

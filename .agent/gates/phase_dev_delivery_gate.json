@@ -1,18 +1,25 @@
 {
   "passed": false,
-  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "feature_id": "bug-auto-fix-system-governance",
   "stage": "claude_developer",
-  "current_phase": 5,
+  "current_phase": 1,
   "changed_files": [
-    "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md"
+    ".agent/gates/stage_start_gate.json",
+    ".agent/handoff/claude_developer.md",
+    "docs/pipeline/bug_auto_fix_governance_policy.yaml",
+    "scripts/pipeline/bug_auto_fix_governance.py",
+    "tests/pipeline/test_bug_auto_fix_governance.py"
   ],
-  "substantive_files": [],
-  "test_files": [],
+  "substantive_files": [
+    "scripts/pipeline/bug_auto_fix_governance.py",
+    "tests/pipeline/test_bug_auto_fix_governance.py"
+  ],
+  "test_files": [
+    "tests/pipeline/test_bug_auto_fix_governance.py"
+  ],
   "claimed_files": [],
   "invalid": [
-    "report_only_delivery",
-    "missing_implementation_change",
-    "missing_test_change"
+    "missing_phase_dev_report"
   ],
   "reasons": [
     "stage_delivery_invalid"
