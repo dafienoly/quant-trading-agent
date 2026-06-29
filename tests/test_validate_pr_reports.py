@@ -138,6 +138,33 @@ def test_pipeline_in_progress_uses_stage_report_profile(tmp_path: Path):
     assert "docs/acceptance/future-acceptance.md" not in data["report_files"]
 
 
+def test_pipeline_in_progress_requires_stage_report(tmp_path: Path):
+    repo = tmp_path / "pipeline-progress-missing-report"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, capture_output=True)
+    (repo / "src" / "main.py").write_text("# base")
+    _git_commit_all(repo, "base")
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
+    (repo / "src" / "change.py").write_text("# change")
+    state = repo / ".agent" / "state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(json.dumps({"feature_id": "x", "current_stage": "phase_test_pending"}))
+    _git_commit_all(repo, "feature")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--head", "feature", "--strict", "--json"],
+        capture_output=True, text=True, cwd=repo, timeout=30,
+    )
+
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)
+    assert data["pipeline_in_progress"] is True
+    assert data["reports_present"] is False
+    assert "no development report file in diff" in data["issues"]
+
+
 def test_pipeline_final_stage_requires_strict_acceptance_report(tmp_path: Path):
     repo = tmp_path / "pipeline-final"
     (repo / "src").mkdir(parents=True)
@@ -150,7 +177,15 @@ def test_pipeline_final_stage_requires_strict_acceptance_report(tmp_path: Path):
     (repo / "src" / "change.py").write_text("# change")
     state = repo / ".agent" / "state.json"
     state.parent.mkdir(parents=True)
-    state.write_text(json.dumps({"feature_id": "x", "current_stage": "manual_approval_required"}))
+    state.write_text(
+        json.dumps(
+            {
+                "feature_id": "x",
+                "current_stage": "manual_approval_required",
+                "stage_status": {"acceptance": "passed"},
+            }
+        )
+    )
     _write_report(
         repo / "docs" / "features" / "x" / "phase-1-dev-report.md",
         "# 功能说明\n\n## 变更范围\n\n实现了完整功能和异常处理。\n\n## 测试命令\n\npytest\n\n"
@@ -171,6 +206,48 @@ def test_pipeline_final_stage_requires_strict_acceptance_report(tmp_path: Path):
     data = json.loads(proc.stdout)
     assert data["pipeline_in_progress"] is False
     assert any("future-acceptance.md" in issue for issue in data["issues"])
+
+
+def test_manual_approval_before_acceptance_still_uses_stage_report_profile(tmp_path: Path):
+    repo = tmp_path / "pipeline-manual-midstream"
+    (repo / "src").mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, capture_output=True)
+    (repo / "src" / "main.py").write_text("# base")
+    _git_commit_all(repo, "base")
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
+    (repo / "src" / "change.py").write_text("# change")
+    state = repo / ".agent" / "state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(
+        json.dumps(
+            {
+                "feature_id": "x",
+                "current_stage": "manual_approval_required",
+                "stage_status": {"phase_dev": "pending", "acceptance": "pending"},
+            }
+        )
+    )
+    _write_report(
+        repo / "docs" / "features" / "x" / "phase-1-dev-report.md",
+        "# 第一阶段开发报告\n\n"
+        "## 实现范围\n\n本阶段完成真实功能实现，并补充异常路径、失败关闭路径和可复现测试证据。\n\n"
+        "## 自测命令与结果\n\n`pytest tests/test_example.py -q`，全部通过。\n\n"
+        "## 最终结论\n\nPASS\n",
+    )
+    _git_commit_all(repo, "feature")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base", "main", "--head", "feature", "--strict", "--json"],
+        capture_output=True, text=True, cwd=repo, timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stdout
+    data = json.loads(proc.stdout)
+    assert data["pipeline_in_progress"] is True
+    assert data["reports_required"] is False
+    assert data["report_files"]["docs/features/x/phase-1-dev-report.md"]["profile"] == "pipeline_stage"
 
 
 def test_pipeline_final_stage_uses_gate_selected_acceptance(tmp_path: Path):

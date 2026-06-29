@@ -372,7 +372,7 @@ def test_developer_transition_requires_report_and_delivery_gates(tmp_path: Path)
     assert result.report_gate_passed is True
     assert result.delivery_gate_passed is False
     assert result.failure_kind == "delivery_gate"
-    assert result.route_back_to == ""
+    assert result.route_back_to == "claude_developer"
 
 
 def test_tester_transition_routes_rejection_to_developer(tmp_path: Path):
@@ -410,7 +410,7 @@ def test_passing_transition_commits_next_stage_state(tmp_path: Path):
     assert read_state(tmp_path)["stage_status"]["pm"] == "passed"
 
 
-def test_failed_developer_transition_enters_manual_state(tmp_path: Path):
+def test_failed_developer_transition_routes_back_to_developer(tmp_path: Path):
     state = build_feature_state(title="[Feature] Atomic", feature_id="atomic")
     state["current_stage"] = "phase_dev_pending"
     write_feature_state(tmp_path, state)
@@ -420,14 +420,14 @@ def test_failed_developer_transition_enters_manual_state(tmp_path: Path):
             "passed": False,
             "feature_id": "atomic",
             "stage": "claude_developer",
-            "route_back_to": "",
+            "route_back_to": "claude_developer",
         },
     )
 
     result = apply_stage_transition(tmp_path, stage="claude_developer")
 
     assert result["passed"] is False
-    assert read_state(tmp_path)["current_stage"] == "manual_approval_required"
+    assert read_state(tmp_path)["current_stage"] == "phase_dev_pending"
 
 
 def test_pr_validation_supports_explicit_bot_dispatch():

@@ -872,6 +872,8 @@ def evaluate_stage_transition(root: Path, *, stage: str) -> StageTransitionResul
     route_back = ""
     if not passed:
         route_back = {
+            "claude_developer": "claude_developer",
+            "bugfix": "claude_developer",
             "claude_tester": "claude_developer",
             "claude_lead_review": "claude_developer",
             "codex_reviewer": "claude_lead_review",

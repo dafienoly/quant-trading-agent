@@ -37,8 +37,6 @@ REJECT_PATTERNS = (
 MIN_CHINESE_CHARS = 30
 FINAL_PIPELINE_STAGES = {
     "merge_gate_pending",
-    "manual_approval_required",
-    "manual_approval_required_pending",
     "completed",
 }
 
@@ -211,6 +209,19 @@ def _pipeline_lifecycle(root: Path) -> tuple[bool, bool, str]:
     except (OSError, json.JSONDecodeError):
         return True, False, "invalid"
     current_stage = str(state.get("current_stage") or "")
+    if current_stage in {"manual_approval_required", "manual_approval_required_pending"}:
+        stage_status = state.get("stage_status", {})
+        acceptance_status = str(stage_status.get("acceptance") or "")
+        gate_path = root / ".agent" / "gates" / "acceptance_gate.json"
+        acceptance_gate_passed = False
+        if gate_path.exists():
+            try:
+                gate = json.loads(gate_path.read_text(encoding="utf-8"))
+                acceptance_gate_passed = gate.get("passed") is True
+            except (OSError, json.JSONDecodeError):
+                acceptance_gate_passed = False
+        final_manual_gate = acceptance_status == "passed" or acceptance_gate_passed
+        return True, not final_manual_gate, current_stage
     return True, current_stage not in FINAL_PIPELINE_STAGES, current_stage
 
 
@@ -294,6 +305,8 @@ def validate_reports(
     accept_reports = _find_new_or_modified(files, _is_acceptance_report_path, root)
 
     if pipeline_mode and pipeline_in_progress:
+        if not dev_reports:
+            result["issues"].append("no development report file in diff")
         for f in dev_reports:
             issues = check_stage_report_content(root / f, require_chinese=True)
             if issues:
@@ -306,7 +319,7 @@ def validate_reports(
             }
         result["reports_present"] = bool(dev_reports)
         result["reports_required"] = False
-        result["passed"] = len(result["issues"]) == 0
+        result["passed"] = len(result["issues"]) == 0 and result["reports_present"]
         return result
 
     if pipeline_mode:
