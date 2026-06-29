@@ -61,7 +61,7 @@ Developer branches must contain:
 
 - code changes;
 - focused tests;
-- a development report in `docs/dev_reports/`;
+- a development report in `docs/features/<feature-id>/`;
 - exact self-test commands and results.
 
 Developer branches merge back into the epic branch, not directly into `main`.
@@ -166,10 +166,10 @@ branch has not been shared.
 
 | Stage | Required report |
 |---|---|
-| Developer branch ready | `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md` |
-| Test branch verification complete | `docs/test_reports/YYYY-MM-DD-<feature>-test-report.md` |
-| Review complete | `docs/review/YYYY-MM-DD-<feature>-architecture-review.md` |
-| Acceptance complete | `docs/acceptance/YYYY-MM-DD-<feature>-acceptance.md` |
+| Developer branch ready | `docs/features/<feature-id>/phase-<n>-dev-report.md` |
+| Test branch verification complete | `docs/features/<feature-id>/phase-<n>-test-report.md` |
+| Review complete | `docs/features/<feature-id>/codex-review-r1.md` |
+| Acceptance complete | `docs/features/<feature-id>/acceptance.md` |
 
 Reports are part of the branch deliverable. A branch is not ready just because
 tests pass.

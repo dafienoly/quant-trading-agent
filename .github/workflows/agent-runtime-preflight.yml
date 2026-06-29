@@ -35,11 +35,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Probe OpenCode GLM 5.2 Team Leader
+      - name: Probe OpenCode DeepSeek V4 Pro max Team Leader
         if: inputs.role == 'all' || inputs.role == 'lead'
         run: .\scripts\run-team-stage.ps1 -Stage claude_lead_plan -PreflightOnly
 
-      - name: Probe OpenCode DeepSeek V4 Pro max Test Engineer
+      - name: Probe OpenCode DeepSeek V4 Flash max Test Engineer
         if: inputs.role == 'all' || inputs.role == 'tester'
         run: .\scripts\run-team-stage.ps1 -Stage claude_tester -PreflightOnly
 

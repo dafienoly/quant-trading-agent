@@ -9,14 +9,14 @@ pipeline.
 |---|---|---|---|---|
 | `stage:pm-pending` | Codex A PM | requirements document | `stage:arch-pending` | stays pending |
 | `stage:arch-pending` | Codex B Architect | architecture document | `stage:team-plan-pending` | `stage:pm-pending` |
-| `stage:team-plan-pending` | OpenCode GLM 5.2 lead | phase plan | `stage:team-dev-pending` | `stage:arch-pending` |
+| `stage:team-plan-pending` | OpenCode DeepSeek V4 Pro max lead | phase plan | `stage:team-dev-pending` | `stage:arch-pending` |
 | `stage:team-dev-pending` | OpenCode DeepSeek V4 Flash max developer | phase code, tests, dev report, delivery gate | `stage:team-test-pending` | stays pending |
-| `stage:team-test-pending` | OpenCode DeepSeek V4 Pro max tester | phase test report | `stage:team-dev-pending` or `stage:claude-lead-review-pending` | `stage:team-dev-pending` |
-| `stage:claude-lead-review-pending` | OpenCode GLM 5.2 lead | team lead review | `stage:codex-review-pending` | `stage:team-dev-pending` |
+| `stage:team-test-pending` | OpenCode DeepSeek V4 Flash max tester | phase test report | `stage:team-dev-pending` or `stage:claude-lead-review-pending` | `stage:team-dev-pending` |
+| `stage:claude-lead-review-pending` | OpenCode DeepSeek V4 Pro max lead | team lead review | `stage:codex-review-pending` | `stage:team-dev-pending` |
 | `stage:fix-pending` | BugFix Agent | fix branch/report/regression tests | `stage:team-test-pending` | `stage:blocked` |
 | `stage:codex-review-pending` | Codex B Reviewer | final architecture review | `stage:pm-acceptance-pending` | `stage:team-plan-pending`, `stage:team-dev-pending`, or `stage:postmortem-pending` |
 | `stage:pm-acceptance-pending` | Codex A Acceptance | acceptance report | `stage:merge-ready` | `stage:arch-pending` |
-| `stage:postmortem-pending` | OpenCode GLM 5.2 lead | three-strike postmortem | `stage:blocked` or user-approved restart | stays pending |
+| `stage:postmortem-pending` | OpenCode DeepSeek V4 Pro max lead | three-strike postmortem | `stage:blocked` or user-approved restart | stays pending |
 | `stage:merge-ready` | Merge Gate | auto-merge gate JSON | merged or manual approval | `stage:manual-approval-required` |
 
 ## Terminal States

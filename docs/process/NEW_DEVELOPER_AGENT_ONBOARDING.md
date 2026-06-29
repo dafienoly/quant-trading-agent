@@ -19,9 +19,9 @@ reading every historical document first.
 3. `docs/design/AGENTS.md`
 4. `docs/policy/RISK_POLICY.md`
 5. `docs/policy/EXECUTION_POLICY.md`
-6. 本次任务对应的 `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-7. 本次任务对应的 `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-8. 如果是修复验收问题，再读对应的 `docs/acceptance/`、`docs/review/`、`docs/test_reports/`、`docs/dev_reports/`
+6. 本次任务对应的 `docs/features/<feature-id>/requirements.md`
+7. 本次任务对应的 `docs/features/<feature-id>/architecture.md`
+8. 如果是修复验收问题，再读对应的 `docs/features/<feature-id>/`
 
 你必须永远遵守的系统不变量：
 1. 默认不能真实自动下单。
@@ -54,7 +54,7 @@ reading every historical document first.
 7. 如果改了前端，启动页面并做浏览器 smoke。
 8. 如果改了数据源，必须验证异常路径和 fail-closed 行为。
 9. 如果改了风控、执行、订单、信号，必须增加负向测试。
-10. 写开发报告到 `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md`。
+10. 写开发报告到 `docs/features/<feature-id>/phase-<n>-dev-report.md`。
 
 最低自测命令模板：
 ```powershell
@@ -85,9 +85,9 @@ git diff --check
 - 任何数据异常、风控失败或执行异常，都不能被包装成虚假的成功。
 
 如果你接到具体阶段或具体功能任务，请优先阅读本次任务对应的：
-- `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-- `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-- 如果是修复或复测，再读对应的 `docs/acceptance/`、`docs/review/`、`docs/test_reports/`、`docs/dev_reports/`
+- `docs/features/<feature-id>/requirements.md`
+- `docs/features/<feature-id>/architecture.md`
+- 如果是修复或复测，再读对应的 `docs/features/<feature-id>/`
 
 本阶段的特殊验收目标、特定脚本、特定数据文件、特定接口 smoke 要求，必须以当前架构设计文档为准，不要写入或依赖本通用提示词。
 
@@ -107,7 +107,7 @@ Use this map when the new engineer asks "what should I read first?"
 | 5 | `docs/policy/EXECUTION_POLICY.md` | Defines order, confirmation, and live execution constraints. |
 | 6 | `docs/design/DATA_CONTRACTS.md` | Defines market data contracts, units, timestamps, price adjustment rules, and metadata fields. |
 | 7 | `docs/policy/FACTOR_RESEARCH_GUIDE.md` | Defines factor categories, factor admission rules, and LLM boundaries. |
-| 8 | Current `docs/requirements/` and `docs/design/` files | These are the actual task instructions. |
+| 8 | Current `docs/features/<feature-id>/` files | These are the actual task instructions. |
 
 Historical audit, review, dev, and test reports should be read only when they are
 directly related to the assigned feature or bug fix.

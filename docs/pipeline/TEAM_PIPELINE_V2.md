@@ -7,11 +7,11 @@ It extends the Issue-driven pipeline without weakening any trading-safety rule.
 
 - `Codex A` 是产品经理和最终验收角色。
 - `Codex B` 是架构师和最终架构 Review 角色。
-- `OpenCode Lead` 使用 `opencode-go/glm-5.2`，负责阶段拆分、组内总
+- `OpenCode Lead` 使用 `opencode-go/deepseek-v4-pro`，负责阶段拆分、组内总
   Review 和失败复盘。
 - `OpenCode Developer` 使用 `opencode-go/deepseek-v4-flash`、
   `variant=max`、build Agent 完整开发权限和 `superpowers`，负责阶段开发和 BugFix。
-- `OpenCode Test Engineer` 使用 `opencode-go/deepseek-v4-pro`、
+- `OpenCode Test Engineer` 使用 `opencode-go/deepseek-v4-flash`、
   `variant=max` 和 `superpowers`，负责阶段测试。
 - 阶段测试通过后，如果还有后续阶段，必须回到 `OpenCode Developer` 继续开发
   下一阶段。
@@ -27,9 +27,9 @@ It extends the Issue-driven pipeline without weakening any trading-safety rule.
 |---|---|---|
 | Codex A | Product Manager / PM Acceptance | Requirements, user-facing acceptance, final delivery notes |
 | Codex B | Architect / Final Reviewer | Architecture, module boundaries, final code review, safety review |
-| OpenCode Lead | Small-team Lead | GLM 5.2 phase breakdown, coordination, internal review, postmortem |
+| OpenCode Lead | Small-team Lead | DeepSeek V4 Pro max phase breakdown, coordination, internal review, postmortem |
 | OpenCode Developer | Phase Developer / BugFix | DeepSeek V4 Flash max implementation with build Agent and superpowers |
-| OpenCode Test Engineer | Phase Tester | DeepSeek V4 Pro max verification from a temporary test branch |
+| OpenCode Test Engineer | Phase Tester | DeepSeek V4 Flash max verification from a temporary test branch |
 
 Codex A and Codex B are judgment gates. The OpenCode team
 handles the high-frequency implementation loop.
@@ -40,9 +40,9 @@ handles the high-frequency implementation loop.
 User Issue
   -> Codex A requirements
   -> Codex B architecture
-  -> OpenCode GLM 5.2 team phase plan
+  -> OpenCode DeepSeek V4 Pro max team phase plan
   -> OpenCode DeepSeek V4 Flash max phase development
-  -> OpenCode DeepSeek V4 Pro max phase testing
+  -> OpenCode DeepSeek V4 Flash max phase testing
   -> if current phase fails: OpenCode Developer fixes current phase
   -> if current phase passes and more phases remain: OpenCode Developer starts next phase
   -> if all phases pass: OpenCode Lead review
@@ -56,7 +56,7 @@ after all phase tests pass.
 
 ## Phase Contract
 
-Each phase in `docs/dev_plans/*team-plan.md` must include:
+Each phase in `docs/features/<feature-id>/team-plan.md` must include:
 
 - phase ID, title, and branch name;
 - files or modules in scope;
@@ -72,16 +72,16 @@ Each phase in `docs/dev_plans/*team-plan.md` must include:
 
 | Stage | Required evidence |
 |---|---|
-| Codex A PM | `docs/requirements/*requirements.md` |
-| Codex B Architecture | `docs/design/*architecture.md` |
-| OpenCode Lead Team Plan | `docs/dev_plans/*team-plan.md` |
-| OpenCode Phase Dev | `docs/dev_reports/*phase-*dev-report.md` plus `.agent/gates/phase_dev_delivery_gate.json` |
-| OpenCode Phase Test | `docs/test_reports/*phase-*test-report.md` |
-| OpenCode Lead Review | `docs/review/*opencode-lead-review.md` |
-| Codex B Review | `docs/review/*codex-review*.md` |
-| Codex A Acceptance | `docs/acceptance/*acceptance.md` |
-| User-facing Feature | `docs/user_guides/*user-guide.md` when applicable |
-| Failed Team Loop | `docs/postmortems/*r3-failure.md` |
+| Codex A PM | `docs/features/<feature-id>/requirements.md` |
+| Codex B Architecture | `docs/features/<feature-id>/architecture.md` |
+| OpenCode Lead Team Plan | `docs/features/<feature-id>/team-plan.md` |
+| OpenCode Phase Dev | `docs/features/<feature-id>/phase-<n>-dev-report.md` plus `.agent/gates/phase_dev_delivery_gate.json` |
+| OpenCode Phase Test | `docs/features/<feature-id>/phase-<n>-test-report.md` |
+| OpenCode Lead Review | `docs/features/<feature-id>/opencode-lead-review.md` |
+| Codex B Review | `docs/features/<feature-id>/codex-review-r1.md` |
+| Codex A Acceptance | `docs/features/<feature-id>/acceptance.md` |
+| User-facing Feature | `docs/features/<feature-id>/user-guide.md` when applicable |
+| Failed Team Loop | `docs/features/<feature-id>/r3-failure.md` |
 
 No stage is complete if its evidence exists only in chat.
 

@@ -85,8 +85,8 @@ def test_non_docs_pr_passes_with_reports(tmp_path: Path):
     _git_commit_all(repo, "base")
     subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo, capture_output=True)
     (repo / "src" / "change.py").write_text("# change")
-    _write_report(repo / "docs" / "dev_reports" / "feature-dev.md", "# 功能说明\n\n## 变更范围\n\n修改了脚本内容检查逻辑，增加了 Markdown 章节正文验证和中文字符数检查。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过，所有测试用例均验证正确。\n\n## 安全确认\n\n无交易模块变更，不修改 Merge Gate，不自动合并 main。\n\n## 最终结论\n\nACCEPTED\n")
-    _write_report(repo / "docs" / "acceptance" / "feature-accept.md", "# 验收报告\n\n## 变更范围\n\n与功能说明一致，覆盖了错误处理和边界情况。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过，验证结果正确。\n\n## 安全确认\n\n无交易模块变更，不修改 Merge Gate。\n\n## 最终结论\n\nACCEPTED\n")
+    _write_report(repo / "docs" / "features" / "feature" / "phase-1-dev-report.md", "# 功能说明\n\n## 变更范围\n\n修改了脚本内容检查逻辑，增加了 Markdown 章节正文验证和中文字符数检查。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过，所有测试用例均验证正确。\n\n## 安全确认\n\n无交易模块变更，不修改 Merge Gate，不自动合并 main。\n\n## 最终结论\n\nACCEPTED\n")
+    _write_report(repo / "docs" / "features" / "feature" / "acceptance.md", "# 验收报告\n\n## 变更范围\n\n与功能说明一致，覆盖了错误处理和边界情况。\n\n## 测试命令\n\npytest\n\n## 测试结果\n\n全部通过，验证结果正确。\n\n## 安全确认\n\n无交易模块变更，不修改 Merge Gate。\n\n## 最终结论\n\nACCEPTED\n")
     _git_commit_all(repo, "feature")
 
     proc = subprocess.run(
@@ -113,7 +113,7 @@ def test_pipeline_in_progress_uses_stage_report_profile(tmp_path: Path):
     state.parent.mkdir(parents=True)
     state.write_text(json.dumps({"feature_id": "x", "current_stage": "phase_test_pending"}))
     _write_report(
-        repo / "docs" / "dev_reports" / "phase-1-dev-report.md",
+        repo / "docs" / "features" / "x" / "phase-1-dev-report.md",
         "# 第一阶段开发报告\n\n"
         "## 实现范围\n\n本阶段完成真实功能实现，并补充异常路径、失败关闭路径和可复现测试证据。\n\n"
         "## 自测命令与结果\n\n`pytest tests/test_example.py -q`，全部通过。\n\n"
@@ -134,7 +134,7 @@ def test_pipeline_in_progress_uses_stage_report_profile(tmp_path: Path):
     data = json.loads(proc.stdout)
     assert data["pipeline_mode"] is True
     assert data["pipeline_in_progress"] is True
-    assert data["report_files"]["docs/dev_reports/phase-1-dev-report.md"]["profile"] == "pipeline_stage"
+    assert data["report_files"]["docs/features/x/phase-1-dev-report.md"]["profile"] == "pipeline_stage"
     assert "docs/acceptance/future-acceptance.md" not in data["report_files"]
 
 
@@ -152,7 +152,7 @@ def test_pipeline_final_stage_requires_strict_acceptance_report(tmp_path: Path):
     state.parent.mkdir(parents=True)
     state.write_text(json.dumps({"feature_id": "x", "current_stage": "manual_approval_required"}))
     _write_report(
-        repo / "docs" / "dev_reports" / "feature-dev.md",
+        repo / "docs" / "features" / "x" / "phase-1-dev-report.md",
         "# 功能说明\n\n## 变更范围\n\n实现了完整功能和异常处理。\n\n## 测试命令\n\npytest\n\n"
         "## 测试结果\n\n测试通过。\n\n## 安全确认\n\n不涉及真实交易。\n\n## 最终结论\n\nPASS\n",
     )
@@ -186,7 +186,7 @@ def test_pipeline_final_stage_uses_gate_selected_acceptance(tmp_path: Path):
     state = repo / ".agent" / "state.json"
     state.parent.mkdir(parents=True)
     state.write_text(json.dumps({"feature_id": "x", "current_stage": "merge_gate_pending"}))
-    selected = "docs/acceptance/2026-06-25-x-acceptance.md"
+    selected = "docs/features/x/acceptance.md"
     gate = repo / ".agent" / "gates" / "acceptance_gate.json"
     gate.parent.mkdir(parents=True)
     gate.write_text(
@@ -199,7 +199,7 @@ def test_pipeline_final_stage_uses_gate_selected_acceptance(tmp_path: Path):
         )
     )
     _write_report(
-        repo / "docs" / "dev_reports" / "phase-1-dev-report.md",
+        repo / "docs" / "features" / "x" / "phase-1-dev-report.md",
         "# 第一阶段开发报告\n\n## 实现范围\n\n"
         "完成真实功能、异常处理、用户入口和失败关闭逻辑，并保留可复现测试证据。\n\n"
         "## 自测命令与结果\n\npytest 全部通过，静态检查和差异检查均无问题。\n\n"

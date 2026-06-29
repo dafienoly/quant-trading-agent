@@ -1,6 +1,7 @@
 """Tests for issue-driven Agent pipeline automation helpers."""
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from src.product_app.agent_pipeline_automation import (
@@ -166,6 +167,13 @@ def test_feature_state_contains_team_pipeline_defaults():
         issue_number=12,
     )
 
+    assert state["required_docs"]["feature_folder"] == "docs/features/agent-pipeline"
+    assert state["required_docs"]["requirements"] == "docs/features/agent-pipeline/requirements.md"
+    assert state["required_docs"]["team_plan"] == "docs/features/agent-pipeline/team-plan.md"
+    assert (
+        state["required_docs"]["phase_dev_report_pattern"]
+        == "docs/features/agent-pipeline/phase-<n>-dev-report.md"
+    )
     assert state["team_pipeline"]["mode"] == "opencode_lead_deepseek_dev_test"
     assert state["team_pipeline"]["total_phases"] == 1
     assert state["team_pipeline"]["completed_phases"] == []
@@ -184,8 +192,8 @@ def test_feature_state_contains_team_pipeline_defaults():
 def test_team_stage_runner_forces_requested_models_effort_and_skills():
     text = TEAM_STAGE_RUNNER.read_text(encoding="utf-8")
 
-    assert 'OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"' in text
-    assert 'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"' in text
+    assert 'OPENCODE_LEAD_MODEL="opencode-go/deepseek-v4-pro"' in text
+    assert 'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-flash"' in text
     assert 'OPENCODE_TESTER_VARIANT="max"' in text
     assert 'OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"' in text
     assert 'OPENCODE_DEVELOPER_VARIANT="max"' in text
@@ -614,7 +622,14 @@ def test_agent_report_runtime_directory_is_ignored_and_untracked():
 
     assert ".agent/reports/" in gitignore
     assert "!feedback/index.json" not in gitignore
-    assert not Path("feedback/index.json").exists()
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "feedback/index.json"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert tracked.returncode != 0
 
 
 def test_tester_runner_cleans_runtime_feedback_index_before_path_guard():
@@ -656,7 +671,7 @@ def test_claude_tester_handoff_routes_back_to_developer_until_all_phases_pass(tm
     handoff = write_handoff(tmp_path, "claude_tester").read_text(encoding="utf-8")
 
     assert "OpenCode Test Engineer" in handoff
-    assert "opencode-go/deepseek-v4-pro" in handoff
+    assert "opencode-go/deepseek-v4-flash" in handoff
     assert "variant=max" in handoff
     assert "superpowers" in handoff
     assert "route back to OpenCode Developer for the next phase unless all phases are complete" in handoff
@@ -676,7 +691,7 @@ def test_team_lead_and_developer_handoffs_pin_runtime_contract(tmp_path: Path):
     review = write_handoff(tmp_path, "claude_lead_review").read_text(encoding="utf-8")
 
     assert "OpenCode Team Leader" in lead
-    assert "opencode-go/glm-5.2" in lead
+    assert "opencode-go/deepseek-v4-pro" in lead
     assert "OpenCode Developer" in developer
     assert "opencode-go/deepseek-v4-flash" in developer
     assert "variant=max" in developer
@@ -688,10 +703,10 @@ def test_team_lead_and_developer_handoffs_pin_runtime_contract(tmp_path: Path):
 def test_required_report_gate_finds_feature_reports(tmp_path: Path):
     feature_id = "agent-pipeline"
     files = {
-        "docs/requirements/2026-06-12-agent-pipeline-requirements.md": _valid_requirements(feature_id),
-        "docs/design/2026-06-12-agent-pipeline-architecture.md": _valid_architecture(feature_id),
-        "docs/dev_plans/2026-06-12-agent-pipeline-team-plan.md": "ok",
-        "docs/dev_reports/2026-06-12-agent-pipeline-phase-1-dev-report.md": (
+        "docs/features/agent-pipeline/requirements.md": _valid_requirements(feature_id),
+        "docs/features/agent-pipeline/architecture.md": _valid_architecture(feature_id),
+        "docs/features/agent-pipeline/team-plan.md": "ok",
+        "docs/features/agent-pipeline/phase-1-dev-report.md": (
             "## 变更范围\n\n`src/example.py`\n\n## 最终结论\n\nPASS\n"
         ),
     }
@@ -804,7 +819,7 @@ def test_developer_delivery_accepts_explicit_docs_only_phase(tmp_path: Path):
     state["team_pipeline"]["current_phase"] = 5
     state["team_pipeline"]["total_phases"] = 5
     write_feature_state(tmp_path, state)
-    plan = tmp_path / "docs/dev_plans/2026-06-24-agentops-team-plan.md"
+    plan = tmp_path / "docs/features/agentops/team-plan.md"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(
         "### Phase 4 — UI\n\n实现页面。\n\n"
@@ -815,7 +830,7 @@ def test_developer_delivery_accepts_explicit_docs_only_phase(tmp_path: Path):
     log_path = tmp_path / "docs/log/DEVELOPMENT_LOG.md"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text("阶段五回归完成。\n", encoding="utf-8")
-    report = tmp_path / "docs/dev_reports/2026-06-24-agentops-phase-5-dev-report.md"
+    report = tmp_path / "docs/features/agentops/phase-5-dev-report.md"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
         "# 第五阶段开发报告\n\n"
@@ -829,7 +844,7 @@ def test_developer_delivery_accepts_explicit_docs_only_phase(tmp_path: Path):
         stage="claude_developer",
         changed_files=[
             "docs/log/DEVELOPMENT_LOG.md",
-            "docs/dev_reports/2026-06-24-agentops-phase-5-dev-report.md",
+            "docs/features/agentops/phase-5-dev-report.md",
         ],
     )
 
@@ -990,7 +1005,7 @@ def test_lead_changes_requested_decision_fails_gate(tmp_path: Path):
 def test_team_plan_phase_count_and_intermediate_phase_advance(tmp_path: Path):
     state = build_feature_state(title="[Feature] Multi", feature_id="multi")
     write_feature_state(tmp_path, state)
-    plan = tmp_path / "docs/dev_plans/2026-06-24-multi-team-plan.md"
+    plan = tmp_path / "docs/features/multi/team-plan.md"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text("### Phase 1\n\n### Phase 2\n\n### Phase 3\n", encoding="utf-8")
 
@@ -1002,7 +1017,7 @@ def test_team_plan_phase_count_and_intermediate_phase_advance(tmp_path: Path):
         {
             "passed": True,
             "feature_id": "multi",
-            "found": {"phase_test": ["docs/test_reports/phase-1.md"]},
+            "found": {"phase_test": ["docs/features/multi/phase-1-test-report.md"]},
         },
     )
     result = advance_after_phase_test(tmp_path)
@@ -1027,7 +1042,7 @@ def test_phase_advance_migrates_missing_team_plan_metadata(tmp_path: Path):
     state["team_pipeline"].pop("total_phases")
     state["team_pipeline"].pop("completed_phases")
     write_feature_state(tmp_path, state)
-    plan = tmp_path / "docs/dev_plans/2026-06-24-multi-team-plan.md"
+    plan = tmp_path / "docs/features/multi/team-plan.md"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text(
         "\n".join(f"### Phase {number}" for number in range(1, 6)),
@@ -1038,7 +1053,7 @@ def test_phase_advance_migrates_missing_team_plan_metadata(tmp_path: Path):
         {
             "passed": True,
             "feature_id": "multi",
-            "found": {"phase_test": ["docs/test_reports/phase-1.md"]},
+            "found": {"phase_test": ["docs/features/multi/phase-1-test-report.md"]},
         },
     )
 
@@ -1054,7 +1069,7 @@ def test_phase_advance_migrates_missing_team_plan_metadata(tmp_path: Path):
 def test_phase_advance_fails_closed_when_team_plan_has_no_phase_headings(tmp_path: Path):
     state = build_feature_state(title="[Feature] Multi", feature_id="multi")
     write_feature_state(tmp_path, state)
-    plan = tmp_path / "docs/dev_plans/2026-06-24-multi-team-plan.md"
+    plan = tmp_path / "docs/features/multi/team-plan.md"
     plan.parent.mkdir(parents=True, exist_ok=True)
     plan.write_text("# Team Plan\n\nNo deterministic phases.\n", encoding="utf-8")
     write_json(

@@ -39,13 +39,13 @@ to: tester
 feature_id: example-feature
 epic_branch: epic/20260612-example-feature
 working_branch: feat/example-feature/provider
-requirements_doc: docs/requirements/2026-06-12-example-feature-requirements.md
-architecture_doc: docs/design/2026-06-12-example-feature-architecture.md
-dev_report: docs/dev_reports/2026-06-12-example-feature-dev-report.md
-team_plan: docs/dev_plans/2026-06-12-example-feature-team-plan.md
+requirements_doc: docs/features/example-feature/requirements.md
+architecture_doc: docs/features/example-feature/architecture.md
+dev_report: docs/features/example-feature/phase-1-dev-report.md
+team_plan: docs/features/example-feature/team-plan.md
 phase_id: phase-1
-phase_dev_report: docs/dev_reports/2026-06-12-example-feature-phase-1-dev-report.md
-phase_test_report: docs/test_reports/2026-06-12-example-feature-phase-1-test-report.md
+phase_dev_report: docs/features/example-feature/phase-1-dev-report.md
+phase_test_report: docs/features/example-feature/phase-1-test-report.md
 changed_files:
   - src/data_gateway/providers/example.py
   - tests/test_example_provider.py

@@ -54,14 +54,17 @@
 
 所有新阶段或完整功能必须使用以下目录。目录不存在时由负责 Agent 创建。
 
+自本轮流程整理起，canonical 布局改为 `docs/features/<feature-id>/` 聚合目录。旧的 `docs/requirements/`、`docs/design/`、`docs/dev_reports/`、`docs/test_reports/`、`docs/review/`、`docs/acceptance/` 只保留给历史文档与兼容读取，新功能默认不要再按角色散落写入。
+
 | 目录 | 文件命名 | 负责人 | 内容 |
 |---|---|---|---|
-| `docs/requirements/` | `YYYY-MM-DD-<feature>-requirements.md` | Product Manager Agent | 需求、功能点、验收标准 |
-| `docs/design/` | `YYYY-MM-DD-<feature>-architecture.md` | Architect Agent | 架构设计、模块边界、接口、伪代码 |
-| `docs/dev_reports/` | `YYYY-MM-DD-<feature>-dev-report.md` | Developer Agent | 实现说明、自测结果、风险说明 |
-| `docs/test_reports/` | `YYYY-MM-DD-<feature>-test-report.md` | Test Engineer Agent | 测试范围、用例、结果、Bug 清单 |
-| `docs/review/` | `YYYY-MM-DD-<feature>-architecture-review.md` | Architect Reviewer | 代码 Review 结论、阻断项 |
-| `docs/acceptance/` | `YYYY-MM-DD-<feature>-acceptance.md` | PM Acceptance Agent | 产品验收结果、未满足需求 |
+| `docs/features/<feature-id>/` | `requirements.md` | Product Manager Agent | 需求、功能点、验收标准 |
+| `docs/features/<feature-id>/` | `architecture.md` | Architect Agent | 架构设计、模块边界、接口、伪代码 |
+| `docs/features/<feature-id>/` | `team-plan.md` | OpenCode Lead | 多阶段计划、阶段边界、交付顺序 |
+| `docs/features/<feature-id>/` | `phase-<n>-dev-report.md` | Developer Agent | 实现说明、自测结果、风险说明 |
+| `docs/features/<feature-id>/` | `phase-<n>-test-report.md` | Test Engineer Agent | 测试范围、用例、结果、Bug 清单 |
+| `docs/features/<feature-id>/` | `opencode-lead-review.md` / `codex-review-r1.md` | Lead / Architect Reviewer | 阶段总审查与最终代码 Review 结论 |
+| `docs/features/<feature-id>/` | `acceptance.md` | PM Acceptance Agent | 产品验收结果、未满足需求 |
 | `feedback/bugs/open/` | `BUG_*.md` + `BUG_*.json` | Test / Runtime / Feedback Service | 可修复缺陷 |
 | `docs/log/` | 更新现有日志 | 阶段负责人 | 阶段完成、测试结果、版本历史 |
 
@@ -130,7 +133,7 @@ Product Manager Agent。
 
 ### 必须产出
 
-`docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
+`docs/features/<feature-id>/requirements.md`
 
 ### 文档必须包含
 
@@ -174,7 +177,7 @@ Architect Agent。
 
 ### 必须产出
 
-`docs/design/YYYY-MM-DD-<feature>-architecture.md`
+`docs/features/<feature-id>/architecture.md`
 
 ### 文档必须包含
 
@@ -220,7 +223,7 @@ Developer Agent。
 ### 必须产出
 
 1. 代码和测试。
-2. `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md`。
+2. `docs/features/<feature-id>/phase-<n>-dev-report.md`。
 
 ### 开发顺序
 
@@ -276,7 +279,7 @@ Test Engineer Agent。
 
 ### 必须产出
 
-`docs/test_reports/YYYY-MM-DD-<feature>-test-report.md`
+`docs/features/<feature-id>/phase-<n>-test-report.md`
 
 ### 测试报告必须包含
 
@@ -333,7 +336,7 @@ BugFix Developer Agent 或原 Developer Agent。
 
 更新开发报告或新增：
 
-`docs/dev_reports/YYYY-MM-DD-<feature>-fix-report.md`
+`docs/features/<feature-id>/phase-<n>-dev-report.md` 或 `docs/features/<feature-id>/fix-report.md`
 
 ---
 
@@ -366,7 +369,7 @@ Architect Reviewer。
 
 ### Review 输出
 
-`docs/review/YYYY-MM-DD-<feature>-architecture-review.md`
+`docs/features/<feature-id>/codex-review-r1.md`
 
 结论必须为以下之一：
 
@@ -403,7 +406,7 @@ PM 必须从用户视角逐项验收，不得只看测试通过：
 
 ### 验收输出
 
-`docs/acceptance/YYYY-MM-DD-<feature>-acceptance.md`
+`docs/features/<feature-id>/acceptance.md`
 
 结论必须为：
 
@@ -487,7 +490,7 @@ PM 必须从用户视角逐项验收，不得只看测试通过：
 ### PM Agent
 
 ```text
-请基于用户目标输出需求文档，保存到 docs/requirements/YYYY-MM-DD-<feature>-requirements.md。
+请基于用户目标输出需求文档，保存到 docs/features/<feature-id>/requirements.md。
 必须包含功能点列表、每个功能点预期行为、验收标准、非目标、安全约束、测试建议。
 不得写代码实现方案。
 ```
@@ -495,7 +498,7 @@ PM 必须从用户视角逐项验收，不得只看测试通过：
 ### Architect Agent
 
 ```text
-请基于需求文档输出架构设计，保存到 docs/design/YYYY-MM-DD-<feature>-architecture.md。
+请基于需求文档输出架构设计，保存到 docs/features/<feature-id>/architecture.md。
 必须包含模块边界、数据流、接口、技术选型、伪代码、错误处理、安全影响和测试策略。
 不得绕过 Risk Agent、人工确认或系统不变量。
 ```
@@ -505,14 +508,14 @@ PM 必须从用户视角逐项验收，不得只看测试通过：
 ```text
 请基于需求文档和架构设计进行 TDD 开发。
 先写失败测试，再实现代码，最后按 docs/policy/SELF_TEST_CHECKLIST.md 自测。
-完成后输出 docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md。
+完成后输出 docs/features/<feature-id>/phase-<n>-dev-report.md。
 ```
 
 ### Test Engineer Agent
 
 ```text
 请基于需求文档、架构设计和开发报告进行完整测试。
-输出 docs/test_reports/YYYY-MM-DD-<feature>-test-report.md。
+输出 docs/features/<feature-id>/phase-<n>-test-report.md。
 所有阻断 Bug 必须包含复现步骤、期望结果、实际结果和建议等级。
 ```
 
@@ -520,7 +523,7 @@ PM 必须从用户视角逐项验收，不得只看测试通过：
 
 ```text
 请对照需求、架构、开发报告、测试报告和 diff 做代码 Review。
-输出 docs/review/YYYY-MM-DD-<feature>-architecture-review.md。
+输出 docs/features/<feature-id>/codex-review-r1.md。
 结论只能是 APPROVED、APPROVED_WITH_NOTES、CHANGES_REQUESTED 或 BLOCKED。
 ```
 
@@ -528,7 +531,7 @@ PM 必须从用户视角逐项验收，不得只看测试通过：
 
 ```text
 请从用户视角对照需求文档做功能性全量验收。
-输出 docs/acceptance/YYYY-MM-DD-<feature>-acceptance.md。
+输出 docs/features/<feature-id>/acceptance.md。
 逐项确认功能点是否满足验收标准，并记录未完成事项。
 ```
 

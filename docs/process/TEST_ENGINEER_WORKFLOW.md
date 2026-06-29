@@ -142,7 +142,7 @@ git switch "$BASE_BRANCH"
 Create or update:
 
 ```text
-docs/test_reports/YYYY-MM-DD-<feature>-test-report.md
+docs/features/<feature-id>/phase-<n>-test-report.md
 ```
 
 The report must include:
@@ -204,10 +204,10 @@ Use this prompt when assigning a feature to a Test Engineer Agent.
 1. docs/process/AGENT_DEVELOPMENT_PIPELINE.md
 2. docs/process/TEST_ENGINEER_WORKFLOW.md
 3. docs/policy/SELF_TEST_CHECKLIST.md
-4. 本次需求文档：docs/requirements/<YYYY-MM-DD-feature>-requirements.md
-5. 本次架构文档：docs/design/<YYYY-MM-DD-feature>-architecture.md
-6. 如存在，本次开发指导：docs/design/<YYYY-MM-DD-feature>-development-guide.md
-7. 开发报告：docs/dev_reports/<YYYY-MM-DD-feature>-dev-report.md
+4. 本次需求文档：docs/features/<feature-id>/requirements.md
+5. 本次架构文档：docs/features/<feature-id>/architecture.md
+6. 如存在，本次开发指导：docs/features/<feature-id>/development-guide.md
+7. 开发报告：docs/features/<feature-id>/phase-<n>-dev-report.md
 
 你在 WSL/Linux 环境工作，必须使用项目虚拟环境执行 Python、pytest、ruff 等命令。默认虚拟环境路径为 ./.venv/bin/python。如果该路径不存在，先用 which python、python -V、ls .venv/bin/python 确认实际解释器路径，并在测试报告中记录。
 
@@ -216,7 +216,7 @@ Use this prompt when assigning a feature to a Test Engineer Agent.
 - 如果原开发分支存在未解释的未提交代码变更，停止并报告，不要继续测试。
 - 从当前开发分支当前 commit 新建本地临时测试分支，命名为 test/<feature-slug>-<YYYYMMDD-HHMM>。
 - 所有测试、探测、临时诊断、临时 instrumentation 都只能在临时测试分支上进行。
-- 测试完成后回到原开发分支，只在原开发分支写入并提交 docs/test_reports/<YYYY-MM-DD-feature>-test-report.md。
+- 测试完成后回到原开发分支，只在原开发分支写入并提交 docs/features/<feature-id>/phase-<n>-test-report.md。
 - 删除临时测试分支。
 - 你不允许在原开发分支修改业务代码，也不允许作为测试工程师提交代码修复。
 
@@ -245,7 +245,7 @@ git diff --stat
 git diff --check
 
 测试报告必须输出到：
-docs/test_reports/<YYYY-MM-DD-feature>-test-report.md
+docs/features/<feature-id>/phase-<n>-test-report.md
 
 测试报告必须包含：
 - base branch
@@ -261,4 +261,3 @@ docs/test_reports/<YYYY-MM-DD-feature>-test-report.md
 - 剩余风险
 - 最终结论：PASS、PASS_WITH_NOTES 或 REJECTED
 ```
-

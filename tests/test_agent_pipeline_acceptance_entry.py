@@ -12,9 +12,15 @@ def test_build_acceptance_entry_exposes_user_verification_links(tmp_path: Path):
             "feature_id": feature_id,
             "issue_number": 75,
             "team_pipeline": {"current_phase": 5},
+            "required_docs": {
+                "acceptance": "docs/features/agentops/acceptance.md",
+                "phase_test_report_pattern": "docs/features/agentops/phase-<n>-test-report.md",
+                "codex_review": "docs/features/agentops/codex-review-r1.md",
+                "user_guide": "docs/features/agentops/user-guide.md",
+            },
         },
     )
-    acceptance = "docs/acceptance/2026-06-25-agentops-acceptance.md"
+    acceptance = "docs/features/agentops/acceptance.md"
     write_json(
         tmp_path / ".agent/gates/acceptance_gate.json",
         {
@@ -25,9 +31,9 @@ def test_build_acceptance_entry_exposes_user_verification_links(tmp_path: Path):
     )
     for path in (
         acceptance,
-        "docs/test_reports/2026-06-25-agentops-phase-5-test-report.md",
-        "docs/review/2026-06-25-agentops-codex-review-r1.md",
-        "docs/user_guides/2026-06-25-agentops-user-guide.md",
+        "docs/features/agentops/phase-5-test-report.md",
+        "docs/features/agentops/codex-review-r1.md",
+        "docs/features/agentops/user-guide.md",
     ):
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +48,7 @@ def test_build_acceptance_entry_exposes_user_verification_links(tmp_path: Path):
 
     assert "用户验收入口" in result
     assert "ACCEPTED_WITH_NOTES" in result
-    assert "docs/acceptance/2026-06-25-agentops-acceptance.md" in result
+    assert "docs/features/agentops/acceptance.md" in result
     assert "GET /product/agentops/pipelines/agentops" in result
     assert "GET /product/agentops/pipelines/by-issue/75" in result
     assert "python main.py dashboard" in result
