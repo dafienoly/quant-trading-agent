@@ -1,8 +1,8 @@
 # Agent Handoff: codex_acceptance
 
-Feature: agentops-control-tower-foundationpipeline-api-re
-Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
-Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
+Feature: bug-auto-fix-system-governance
+Title: [V16.4] Bug Auto-Fix System Governance：安全修复白名单、受限模块阻断与审计门禁
+Epic branch: epic/20260629-bug-auto-fix-system-governance-issue-122
 Risk level: unknown
 
 Required read order:
@@ -14,7 +14,9 @@ Required read order:
 
 Task:
 - Perform PM acceptance from the user perspective.
-- Produce `docs/acceptance/20260624-agentops-control-tower-foundationpipeline-api-re-acceptance.md`.
+- Produce `docs/features/bug-auto-fix-system-governance/acceptance.md` in Chinese.
+- The report must contain these exact substantive headings: `## 变更范围`, `## 测试命令`, `## 测试结果`, `## 安全确认`, and `## 最终结论`.
+- Include concrete user verification entrypoints: API/UI path, user guide, latest phase test report, and any residual notes.
 - Conclusion must be one of: ACCEPTED, ACCEPTED_WITH_NOTES, CHANGES_REQUESTED, BLOCKED.
 - ACCEPTED_WITH_NOTES is acceptable only for non-blocking notes.
 - CHANGES_REQUESTED or BLOCKED must fail the acceptance gate.

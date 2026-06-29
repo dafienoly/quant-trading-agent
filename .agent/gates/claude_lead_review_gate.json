@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "feature_id": "bug-auto-fix-system-governance",
   "checked_stages": [
     "pm",
     "architecture",
@@ -12,32 +12,22 @@
   "missing": {},
   "found": {
     "pm": [
-      "docs\\requirements\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-requirements.md"
+      "docs/requirements/2026-06-29-bug-auto-fix-system-governance-requirements.md"
     ],
     "architecture": [
-      "docs\\design\\2026-06-24-agentops-control-tower-foundationpipeline-api-re-architecture.md"
+      "docs/design/2026-06-29-bug-auto-fix-system-governance-architecture.md"
     ],
     "team_plan": [
-      "docs\\dev_plans\\20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md"
+      "docs/features/bug-auto-fix-system-governance/team-plan.md"
     ],
     "phase_dev": [
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-dev-report.md",
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-dev-report.md",
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-dev-report.md",
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-4-dev-report.md",
-      "docs\\dev_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md"
+      "docs/features/bug-auto-fix-system-governance/phase-1-dev-report.md"
     ],
     "phase_test": [
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report-r2.md",
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report-r3.md",
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-1-test-report.md",
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-2-test-report.md",
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-3-test-report.md",
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-4-test-report.md",
-      "docs\\test_reports\\20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-test-report.md"
+      "docs/features/bug-auto-fix-system-governance/phase-1-test-report.md"
     ],
     "claude_lead_review": [
-      "docs\\review\\20260624-agentops-control-tower-foundationpipeline-api-re-opencode-lead-review.md"
+      "docs/features/bug-auto-fix-system-governance/opencode-lead-review.md"
     ]
   },
   "reasons": [

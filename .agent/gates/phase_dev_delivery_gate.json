@@ -1,20 +1,36 @@
 {
-  "passed": false,
-  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "passed": true,
+  "feature_id": "bug-auto-fix-system-governance",
   "stage": "claude_developer",
-  "current_phase": 5,
+  "current_phase": 1,
   "changed_files": [
-    "docs/dev_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-5-dev-report.md"
+    ".agent/gates/phase_dev_delivery_gate.json",
+    ".agent/gates/phase_dev_gate.json",
+    "docs/features/bug-auto-fix-system-governance/phase-1-dev-report.md",
+    "scripts/validate_pr_reports.py",
+    "src/product_app/agent_pipeline_automation.py",
+    "tests/test_agent_pipeline_automation.py",
+    "tests/test_validate_pr_reports.py"
   ],
-  "substantive_files": [],
-  "test_files": [],
-  "claimed_files": [],
-  "invalid": [
-    "report_only_delivery",
-    "missing_implementation_change",
-    "missing_test_change"
+  "substantive_files": [
+    "scripts/validate_pr_reports.py",
+    "src/product_app/agent_pipeline_automation.py",
+    "tests/test_agent_pipeline_automation.py",
+    "tests/test_validate_pr_reports.py"
   ],
+  "test_files": [
+    "tests/test_agent_pipeline_automation.py",
+    "tests/test_validate_pr_reports.py"
+  ],
+  "claimed_files": [
+    "docs/features/bug-auto-fix-system-governance/phase-1-dev-report.md",
+    "scripts/validate_pr_reports.py",
+    "src/product_app/agent_pipeline_automation.py",
+    "tests/test_agent_pipeline_automation.py",
+    "tests/test_validate_pr_reports.py"
+  ],
+  "invalid": [],
   "reasons": [
-    "stage_delivery_invalid"
+    "reused_previous_delivery_gate"
   ]
 }

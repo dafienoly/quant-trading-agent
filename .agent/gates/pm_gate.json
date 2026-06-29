@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "feature_id": "bug-auto-fix-system-governance",
+  "checked_stages": [
+    "pm"
+  ],
+  "missing": {},
+  "found": {
+    "pm": [
+      "docs/requirements/2026-06-29-bug-auto-fix-system-governance-requirements.md"
+    ]
+  },
+  "reasons": [
+    "all_required_reports_found"
+  ],
+  "invalid": {},
+  "decisions": {}
+}

@@ -1,8 +1,8 @@
 {
   "passed": true,
-  "feature_id": "agentops-control-tower-foundationpipeline-api-re",
+  "feature_id": "bug-auto-fix-system-governance",
   "stage": "codex_acceptance",
-  "current_phase": 5,
+  "current_phase": 1,
   "report_gate": "acceptance",
   "report_gate_passed": true,
   "delivery_gate_required": false,

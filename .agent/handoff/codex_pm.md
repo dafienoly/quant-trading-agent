@@ -1,8 +1,8 @@
 # Agent Handoff: codex_pm
 
-Feature: agentops-control-tower-foundationpipeline-api-re
-Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
-Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
+Feature: bug-auto-fix-system-governance
+Title: [V16.4] Bug Auto-Fix System Governance：安全修复白名单、受限模块阻断与审计门禁
+Epic branch: epic/20260629-bug-auto-fix-system-governance-issue-122
 Risk level: unknown
 
 Required read order:
@@ -14,6 +14,6 @@ Required read order:
 
 Task:
 - Act as Codex A, the PM Agent.
-- Produce the PM requirements document at `docs/requirements/20260624-agentops-control-tower-foundationpipeline-api-re-requirements.md`.
+- Produce the PM requirements document at `docs/features/bug-auto-fix-system-governance/requirements.md`.
 - Include goals, non-goals, feature list, acceptance criteria, safety constraints, and user-facing success criteria.
 - Do not write architecture or product code in this stage.

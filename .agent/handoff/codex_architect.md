@@ -1,8 +1,8 @@
 # Agent Handoff: codex_architect
 
-Feature: agentops-control-tower-foundationpipeline-api-re
-Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
-Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
+Feature: bug-auto-fix-system-governance
+Title: [V16.4] Bug Auto-Fix System Governance：安全修复白名单、受限模块阻断与审计门禁
+Epic branch: epic/20260629-bug-auto-fix-system-governance-issue-122
 Risk level: unknown
 
 Required read order:
@@ -13,7 +13,7 @@ Required read order:
 5. docs/pipeline/AUTO_MERGE_POLICY.md
 
 Task:
-- Read the requirements document at `docs/requirements/20260624-agentops-control-tower-foundationpipeline-api-re-requirements.md`.
-- Produce the architecture design at `docs/design/20260624-agentops-control-tower-foundationpipeline-api-re-architecture.md`.
-- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / Claude Developer / OpenCode Tester.
+- Read the requirements document at `docs/features/bug-auto-fix-system-governance/requirements.md`.
+- Produce the architecture design at `docs/features/bug-auto-fix-system-governance/architecture.md`.
+- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / OpenCode Developer / OpenCode Tester.
 - Do not write product code in this stage.
