@@ -387,7 +387,7 @@ def extract_report_decision(text: str) -> str | None:
         re.IGNORECASE,
     )
     heading_pattern = re.compile(
-        r"(最终结论|最终结果|测试结论|验收结论|审查结论|"
+        r"(最终结论|最终结果|最终决策|测试结论|验收结论|审查结论|审查决策|"
         r"final\s+(result|conclusion|decision)|approval\s+decision|"
         r"acceptance\s+decision|review\s+decision|conclusion|decision)",
         re.IGNORECASE,

@@ -1002,6 +1002,18 @@ def test_lead_changes_requested_decision_fails_gate(tmp_path: Path):
     assert extract_report_decision("## 最终结论\n\n**CHANGES_REQUESTED**") == "CHANGES_REQUESTED"
 
 
+def test_lead_review_final_decision_heading_is_authoritative():
+    text = (
+        "# Lead Review\n\n"
+        "## 验证命令与结果\n\n"
+        "pytest: PASS\n\n"
+        "## 最终决策\n\n"
+        "**APPROVED_WITH_NOTES**\n"
+    )
+
+    assert extract_report_decision(text) == "APPROVED_WITH_NOTES"
+
+
 def test_team_plan_phase_count_and_intermediate_phase_advance(tmp_path: Path):
     state = build_feature_state(title="[Feature] Multi", feature_id="multi")
     write_feature_state(tmp_path, state)
