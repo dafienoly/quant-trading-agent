@@ -1,9 +1,9 @@
 {
   "passed": true,
   "feature_id": "bug-auto-fix-system-governance",
-  "requested_stage": "claude_developer",
-  "expected_current_stage": "phase_dev_pending",
-  "actual_current_stage": "phase_dev_pending",
+  "requested_stage": "claude_tester",
+  "expected_current_stage": "phase_test_pending",
+  "actual_current_stage": "phase_test_pending",
   "reasons": [
     "stage_lease_matches_state"
   ]

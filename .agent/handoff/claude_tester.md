@@ -1,8 +1,8 @@
 # Agent Handoff: claude_tester
 
-Feature: agentops-control-tower-foundationpipeline-api-re
-Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
-Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
+Feature: bug-auto-fix-system-governance
+Title: [V16.4] Bug Auto-Fix System Governance：安全修复白名单、受限模块阻断与审计门禁
+Epic branch: epic/20260629-bug-auto-fix-system-governance-issue-122
 Risk level: unknown
 
 Required read order:
@@ -14,11 +14,11 @@ Required read order:
 
 Task:
 - Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.
-- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, build Agent permissions, and superpowers.
-- Create a temporary local `test/agentops-control-tower-foundationpipeline-api-re/phase-<n>-tester-<timestamp>` branch from the phase branch under test.
+- Runtime is fixed to `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent permissions, and superpowers.
+- Create a temporary local `test/bug-auto-fix-system-governance/phase-<n>-tester-<timestamp>` branch from the phase branch under test.
 - Verify the requirements, architecture, team plan, phase dev report, actual diff, and claimed changed paths.
 - Use verification-before-completion; use systematic-debugging for failures.
-- Return to the original branch, delete the temporary test branch, and produce `docs/test_reports/20260624-agentops-control-tower-foundationpipeline-api-re-phase-<n>-test-report.md` without changing business code on the original branch.
+- Return to the original branch, delete the temporary test branch, and produce `docs/features/bug-auto-fix-system-governance/phase-<n>-test-report.md` without changing business code on the original branch.
 - The final decision must be exactly PASS, PASS_WITH_NOTES, or REJECTED; REJECTED routes back to OpenCode Developer.
 - If the phase passes, route back to OpenCode Developer for the next phase unless all phases are complete.
 - Generate and actually persist `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.
