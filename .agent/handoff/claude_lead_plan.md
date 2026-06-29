@@ -1,8 +1,8 @@
 # Agent Handoff: claude_lead_plan
 
-Feature: agentops-control-tower-foundationpipeline-api-re
-Title: [V16.1] AgentOps Control Tower Foundation：Pipeline 观测契约、只读聚合 API 与 React 状态中心
-Epic branch: epic/20260624-agentops-control-tower-foundationpipeline-api-re-issue-75
+Feature: bug-auto-fix-system-governance
+Title: [V16.4] Bug Auto-Fix System Governance：安全修复白名单、受限模块阻断与审计门禁
+Epic branch: epic/20260629-bug-auto-fix-system-governance-issue-122
 Risk level: unknown
 
 Required read order:
@@ -14,8 +14,8 @@ Required read order:
 
 Task:
 - Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.
-- Runtime is fixed to `opencode-go/glm-5.2` and must use superpowers.
-- Read `docs/design/20260624-agentops-control-tower-foundationpipeline-api-re-architecture.md` and split implementation into ordered phases.
-- Produce `docs/dev_plans/20260624-agentops-control-tower-foundationpipeline-api-re-team-plan.md`.
+- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and must use superpowers.
+- Read `docs/features/bug-auto-fix-system-governance/architecture.md` and split implementation into ordered phases.
+- Produce `docs/features/bug-auto-fix-system-governance/team-plan.md`.
 - Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.
-- After each phase test passes, route back to Claude Code Developer for the next phase until all phases are complete.
+- After each phase test passes, route back to OpenCode Developer for the next phase until all phases are complete.
