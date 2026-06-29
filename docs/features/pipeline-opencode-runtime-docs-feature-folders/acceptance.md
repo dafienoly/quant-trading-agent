@@ -1,12 +1,8 @@
 # Pipeline OpenCode Runtime Docs Feature Folders 验收
 
-## 验收范围
+## 变更范围
 
 本次验收覆盖当前分支 `feat/pipeline-opencode-runtime-docs-feature-folders` 的 pipeline 文档目录迁移、OpenCode runtime 文案更新、stage/report gate 兼容逻辑和相关测试。
-
-## 验收结论
-
-ACCEPTED_WITH_NOTES
 
 ## 用户需求满足情况
 
@@ -18,7 +14,16 @@ ACCEPTED_WITH_NOTES
 | 相关自动化测试通过 | 满足 |
 | 不影响真实交易安全边界 | 满足 |
 
-## 测试结果摘要
+## 测试命令
+
+- `./.venv/bin/python -m ruff check scripts/agent_pipeline_acceptance_entry.py scripts/agent_pipeline_regression.py scripts/agent_pipeline_report_viewer.py scripts/agent_runtime_profile.py scripts/validate_pr_reports.py src/product_app/agent_pipeline_automation.py src/product_app/agent_runtime/resolver.py tests/test_agent_pipeline_acceptance_entry.py tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_report_viewer.py tests/test_validate_pr_reports.py`
+- `./.venv/bin/python -m py_compile scripts/agent_pipeline_acceptance_entry.py scripts/agent_pipeline_regression.py scripts/agent_pipeline_report_viewer.py scripts/agent_runtime_profile.py scripts/validate_pr_reports.py src/product_app/agent_pipeline_automation.py src/product_app/agent_runtime/resolver.py`
+- `./.venv/bin/python -m pytest tests/test_agent_pipeline_acceptance_entry.py tests/test_agent_pipeline_automation.py tests/test_agent_pipeline_report_viewer.py tests/test_validate_pr_reports.py -q --basetemp=runtime/pytest-tmp-pipeline-docs-feature-folders`
+- `git diff --check`
+- `bash -n scripts/run-pipeline-team-agent.sh`
+- 当前 diff secret scan
+
+## 测试结果
 
 - Ruff: PASS
 - Py compile: PASS
@@ -38,3 +43,7 @@ ACCEPTED_WITH_NOTES
 ## Notes
 
 远端 GitHub Actions 的完整端到端结果仍以 PR CI 为准；本地已完成 touched-scope 验证。
+
+## 最终结论
+
+ACCEPTED_WITH_NOTES
