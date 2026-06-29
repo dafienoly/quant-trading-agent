@@ -1,9 +1,9 @@
 {
   "passed": true,
   "feature_id": "bug-auto-fix-system-governance",
-  "requested_stage": "claude_lead_review",
-  "expected_current_stage": "claude_lead_review_pending",
-  "actual_current_stage": "claude_lead_review_pending",
+  "requested_stage": "codex_reviewer",
+  "expected_current_stage": "codex_review_pending",
+  "actual_current_stage": "codex_review_pending",
   "reasons": [
     "stage_lease_matches_state"
   ]

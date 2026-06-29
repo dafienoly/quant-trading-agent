@@ -1,9 +1,9 @@
 {
   "passed": true,
   "feature_id": "bug-auto-fix-system-governance",
-  "stage": "claude_lead_review",
+  "stage": "codex_reviewer",
   "current_phase": 1,
-  "report_gate": "claude_lead_review",
+  "report_gate": "codex_review",
   "report_gate_passed": true,
   "delivery_gate_required": false,
   "delivery_gate_passed": true,
