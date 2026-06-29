@@ -16,7 +16,6 @@ import argparse
 import json
 import sys
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -570,20 +569,16 @@ def _simulate_pipeline(tmp: Path, feature_id: str) -> list[CheckResult]:
             checks.append(CheckResult(f"handoff_{stage}", "critical", False, f"handoff {stage} error: {exc}"))
 
     # 3. Create deterministic mock artifacts for each stage
-    # The date used by build_feature_state
-    from src.product_app.agent_pipeline_automation import today_slug
-    date_str = today_slug()
-    date_dashed = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
+    feature_dir = Path("docs/features") / feature_id
     artifacts: dict[str, tuple[str, str, list[str]]] = {
-        "pm": ("docs/requirements", f"{date_str}-{feature_id}-requirements.md", list(VALID_PM_HEADINGS)),
-        "architecture": ("docs/design", f"{date_str}-{feature_id}-architecture.md", list(VALID_ARCH_HEADINGS)),
-        "team_plan": ("docs/dev_plans", f"{date_str}-{feature_id}-team-plan.md", ["## Phase Plan"]),
-        "phase_dev": ("docs/dev_reports", f"{date_str}-{feature_id}-phase-1-dev-report.md", ["## 最终结论"]),
-        "phase_test": ("docs/test_reports", f"{date_str}-{feature_id}-phase-1-test-report.md", ["## 最终结论"]),
-        "claude_lead_review": ("docs/review", f"{date_dashed}-{feature_id}-claude-lead-review.md", ["## Review Decision"]),
-        "codex_review": ("docs/review", f"{date_dashed}-{feature_id}-codex-review-r1.md", ["## Review Decision"]),
-        "acceptance": ("docs/acceptance", f"{date_dashed}-{feature_id}-acceptance.md", ["## Acceptance Decision"]),
+        "pm": (str(feature_dir), "requirements.md", list(VALID_PM_HEADINGS)),
+        "architecture": (str(feature_dir), "architecture.md", list(VALID_ARCH_HEADINGS)),
+        "team_plan": (str(feature_dir), "team-plan.md", ["## Phase Plan"]),
+        "phase_dev": (str(feature_dir), "phase-1-dev-report.md", ["## 最终结论"]),
+        "phase_test": (str(feature_dir), "phase-1-test-report.md", ["## 最终结论"]),
+        "claude_lead_review": (str(feature_dir), "opencode-lead-review.md", ["## Review Decision"]),
+        "codex_review": (str(feature_dir), "codex-review-r1.md", ["## Review Decision"]),
+        "acceptance": (str(feature_dir), "acceptance.md", ["## Acceptance Decision"]),
     }
 
     artifact_created = 0
@@ -727,7 +722,7 @@ def check_bootstrap_env(repo_root: Path) -> list[CheckResult]:
     team_markers = (
         "run-team-stage.ps1",
         "-Stage claude_lead_plan",
-        "Run OpenCode GLM 5.2 team-plan",
+        "Run OpenCode DeepSeek V4 Pro team-plan",
         'git show-ref --verify --quiet "refs/heads/$branch"',
         "Local branch '$branch' already exists on self-hosted runner; resetting it to current HEAD.",
         "git switch -C $branch",
@@ -777,8 +772,8 @@ def check_team_runtime_contract(repo_root: Path) -> list[CheckResult]:
     checks.append(CheckResult("team_runner_exists", "critical", True, "Team runner 已存在"))
 
     required_runner_markers = (
-        'OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"',
-        'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"',
+        'OPENCODE_LEAD_MODEL="opencode-go/deepseek-v4-pro"',
+        'OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-flash"',
         'OPENCODE_TESTER_VARIANT="max"',
         'OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"',
         'OPENCODE_DEVELOPER_VARIANT="max"',
@@ -989,12 +984,13 @@ def check_forbidden_markers(repo_root: Path) -> list[CheckResult]:
     docs_paths = [
         "docs/requirements", "docs/design", "docs/dev_plans",
         "docs/dev_reports", "docs/test_reports", "docs/review", "docs/acceptance",
+        "docs/features",
     ]
     bom_files = []
     for dp in docs_paths:
         d = repo_root / dp
         if d.is_dir():
-            for f in d.glob("*"):
+            for f in d.rglob("*"):
                 if f.is_file() and f.suffix == ".md":
                     raw = f.read_bytes()
                     if raw.startswith(b'\\xef\\xbb\\xbf'):

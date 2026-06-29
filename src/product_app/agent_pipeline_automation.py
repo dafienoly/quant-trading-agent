@@ -65,18 +65,43 @@ SAFE_AUTO_MAIN_PREFIXES: tuple[str, ...] = (
     ".agent/",
 )
 
+FEATURE_DOCS_ROOT = "docs/features"
+
 REPORT_GLOBS_BY_STAGE: dict[str, list[str]] = {
-    "pm": ["docs/requirements/*-{feature_id}-requirements.md"],
-    "architecture": ["docs/design/*-{feature_id}-architecture.md"],
-    "team_plan": ["docs/dev_plans/*-{feature_id}*team-plan.md"],
-    "phase_dev": ["docs/dev_reports/*-{feature_id}*phase-*dev-report*.md"],
-    "phase_test": ["docs/test_reports/*-{feature_id}*phase-*test-report*.md"],
+    "pm": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/requirements.md",
+        "docs/requirements/*-{feature_id}-requirements.md",
+    ],
+    "architecture": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/architecture.md",
+        "docs/design/*-{feature_id}-architecture.md",
+    ],
+    "team_plan": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/team-plan.md",
+        "docs/dev_plans/*-{feature_id}*team-plan.md",
+    ],
+    "phase_dev": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/phase-*-dev-report*.md",
+        "docs/dev_reports/*-{feature_id}*phase-*dev-report*.md",
+    ],
+    "phase_test": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/phase-*-test-report*.md",
+        "docs/test_reports/*-{feature_id}*phase-*test-report*.md",
+    ],
     "claude_lead_review": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/opencode-lead-review*.md",
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/claude-lead-review*.md",
         "docs/review/*-{feature_id}*opencode-lead-review.md",
         "docs/review/*-{feature_id}*claude-lead-review.md",
     ],
-    "codex_review": ["docs/review/*-{feature_id}*codex-review*.md"],
-    "acceptance": ["docs/acceptance/*-{feature_id}*acceptance.md"],
+    "codex_review": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/codex-review*.md",
+        "docs/review/*-{feature_id}*codex-review*.md",
+    ],
+    "acceptance": [
+        f"{FEATURE_DOCS_ROOT}/{{feature_id}}/acceptance*.md",
+        "docs/acceptance/*-{feature_id}*acceptance.md",
+    ],
 }
 
 STAGE_ORDER: tuple[str, ...] = (
@@ -284,13 +309,6 @@ _STAGE_POSITIVE_DECISIONS: dict[str, set[str]] = {
     "acceptance": {"ACCEPTED", "ACCEPTED_WITH_NOTES"},
 }
 
-_DELIVERY_REPORT_PREFIXES: tuple[str, ...] = (
-    "docs/dev_reports/",
-    "docs/test_reports/",
-    "docs/review/",
-    "docs/acceptance/",
-)
-
 _SUBSTANTIVE_PATH_PREFIXES: tuple[str, ...] = (
     ".github/",
     "scripts/",
@@ -321,6 +339,43 @@ def normalize_gate_decision(value: str | None) -> str | None:
         return None
     key = value.strip().replace(" ", "_").lower()
     return _GATE_DECISION_MAP.get(key, None)
+
+
+def feature_docs_dir(feature_id: str) -> str:
+    return f"{FEATURE_DOCS_ROOT}/{feature_id}"
+
+
+def _glob_stage_reports(root: Path, *, stage: str, feature_id: str) -> list[str]:
+    matches: set[str] = set()
+    for pattern in REPORT_GLOBS_BY_STAGE[stage]:
+        for path in root.glob(pattern.format(feature_id=feature_id)):
+            if path.is_file():
+                matches.add(normalize_path(str(path.relative_to(root))))
+    return sorted(matches)
+
+
+def _is_feature_delivery_report(path: str) -> bool:
+    return bool(
+        re.match(
+            r"^docs/features/[^/]+/"
+            r"(?:phase-\d+-dev-report(?:-r\d+)?|phase-\d+-test-report(?:-r\d+)?|"
+            r"opencode-lead-review(?:-r\d+)?|claude-lead-review(?:-r\d+)?|"
+            r"codex-review(?:-r\d+)?|acceptance(?:-r\d+)?)\.md$",
+            normalize_path(path),
+            re.IGNORECASE,
+        )
+    )
+
+
+def _is_delivery_report_path(path: str) -> bool:
+    normalized = normalize_path(path)
+    legacy_prefixes = (
+        "docs/dev_reports/",
+        "docs/test_reports/",
+        "docs/review/",
+        "docs/acceptance/",
+    )
+    return normalized.startswith(legacy_prefixes) or _is_feature_delivery_report(normalized)
 
 
 def extract_report_decision(text: str) -> str | None:
@@ -399,8 +454,7 @@ def _extract_claimed_change_paths(text: str) -> list[str]:
 
 def _current_phase_is_docs_only(root: Path, *, feature_id: str, current_phase: int) -> bool:
     """Honor an explicit docs/regression-only phase declared by the team plan."""
-    pattern = REPORT_GLOBS_BY_STAGE["team_plan"][0].format(feature_id=feature_id)
-    plans = sorted(root.glob(pattern))
+    plans = [root / path for path in _glob_stage_reports(root, stage="team_plan", feature_id=feature_id)]
     if not plans:
         return False
     try:
@@ -480,8 +534,7 @@ def validate_stage_delivery(
         except (json.JSONDecodeError, OSError):
             pass
 
-    report_pattern = REPORT_GLOBS_BY_STAGE["phase_dev"][0].format(feature_id=feature_id)
-    reports = sorted(root.glob(report_pattern))
+    reports = [root / path for path in _glob_stage_reports(root, stage="phase_dev", feature_id=feature_id)]
     changed = sorted(
         {
             normalize_path(path)
@@ -526,7 +579,7 @@ def validate_stage_delivery(
                 and path.startswith("docs/")
             )
         )
-        and not path.startswith(_DELIVERY_REPORT_PREFIXES)
+        and not _is_delivery_report_path(path)
         and not path.startswith(".agent/")
     ]
     tests = [path for path in substantive if path.startswith("tests/")]
@@ -635,23 +688,23 @@ def build_feature_state(
         run_id=run_id,
     ).with_default_branch()
     state = asdict(feature)
+    feature_dir = feature_docs_dir(feature.feature_id)
     state["required_docs"] = {
-        "requirements": f"docs/requirements/{today_slug()}-{feature.feature_id}-requirements.md",
-        "architecture": f"docs/design/{today_slug()}-{feature.feature_id}-architecture.md",
-        "team_plan": f"docs/dev_plans/{today_slug()}-{feature.feature_id}-team-plan.md",
+        "feature_folder": feature_dir,
+        "requirements": f"{feature_dir}/requirements.md",
+        "architecture": f"{feature_dir}/architecture.md",
+        "team_plan": f"{feature_dir}/team-plan.md",
         "phase_dev_report_pattern": (
-            f"docs/dev_reports/{today_slug()}-{feature.feature_id}-phase-<n>-dev-report.md"
+            f"{feature_dir}/phase-<n>-dev-report.md"
         ),
         "phase_test_report_pattern": (
-            f"docs/test_reports/{today_slug()}-{feature.feature_id}-phase-<n>-test-report.md"
+            f"{feature_dir}/phase-<n>-test-report.md"
         ),
-        "claude_lead_review": (
-            f"docs/review/{today_slug()}-{feature.feature_id}-opencode-lead-review.md"
-        ),
-        "codex_review": f"docs/review/{today_slug()}-{feature.feature_id}-codex-review-r1.md",
-        "acceptance": f"docs/acceptance/{today_slug()}-{feature.feature_id}-acceptance.md",
-        "user_guide": f"docs/user_guides/{today_slug()}-{feature.feature_id}-user-guide.md",
-        "postmortem": f"docs/postmortems/{today_slug()}-{feature.feature_id}-r3-failure.md",
+        "claude_lead_review": f"{feature_dir}/opencode-lead-review.md",
+        "codex_review": f"{feature_dir}/codex-review-r1.md",
+        "acceptance": f"{feature_dir}/acceptance.md",
+        "user_guide": f"{feature_dir}/user-guide.md",
+        "postmortem": f"{feature_dir}/r3-failure.md",
     }
     state["team_pipeline"] = {
         "mode": "opencode_lead_deepseek_dev_test",
@@ -921,11 +974,7 @@ def check_required_reports(
 
     for stage in stages:
         patterns = REPORT_GLOBS_BY_STAGE[stage]
-        stage_found: list[str] = []
-        for pattern in patterns:
-            resolved_pattern = pattern.format(feature_id=feature_id)
-            matches = sorted(str(path.relative_to(root)) for path in root.glob(resolved_pattern))
-            stage_found.extend(matches)
+        stage_found = _glob_stage_reports(root, stage=stage, feature_id=feature_id)
         if stage_found:
             found[stage] = stage_found
             stage_invalid = _validate_stage_reports(root, stage=stage, paths=stage_found, feature_id=feature_id)
@@ -1051,8 +1100,7 @@ def _validate_feedback_bug_evidence(root: Path, text: str) -> list[str]:
 
 def sync_team_plan_metadata(root: Path, *, feature_id: str) -> dict[str, Any]:
     """Persist the deterministic number of implementation phases."""
-    pattern = REPORT_GLOBS_BY_STAGE["team_plan"][0].format(feature_id=feature_id)
-    plans = sorted(root.glob(pattern))
+    plans = [root / path for path in _glob_stage_reports(root, stage="team_plan", feature_id=feature_id)]
     if not plans:
         return {"updated": False, "total_phases": None, "reason": "team_plan_missing"}
 
@@ -1573,15 +1621,15 @@ def render_handoff_prompt(stage: str, state: dict[str, Any]) -> str:
     if stage == "codex_architect":
         return common + f"""\nTask:\n- Read the requirements document at `{docs.get('requirements', '<requirements-doc>')}`.\n- Produce the architecture design at `{docs.get('architecture', '<architecture-doc>')}`.\n- Include module boundaries, phase slices, technical choices, pseudocode, test strategy, and handoff guidance for OpenCode Lead / OpenCode Developer / OpenCode Tester.\n- Do not write product code in this stage.\n"""
     if stage == "claude_lead_plan":
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.\n- Runtime is fixed to `opencode-go/glm-5.2`, `variant=max`, and must use superpowers.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to OpenCode Developer for the next phase until all phases are complete.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_plan`; actual role: OpenCode Team Leader.\n- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and must use superpowers.\n- Read `{docs.get('architecture', '<architecture-doc>')}` and split implementation into ordered phases.\n- Produce `{docs.get('team_plan', '<team-plan>')}`.\n- Each phase must have scope, owner, branch, self-test commands, tester checks, and release criteria.\n- After each phase test passes, route back to OpenCode Developer for the next phase until all phases are complete.\n"""
     if stage == "claude_developer":
         phase = team.get("current_phase", 1)
         dev_report_name = str(docs.get('phase_dev_report_pattern', '<phase-dev-report>')).replace('<n>', str(phase))
         return common + f"""\nTask:\n- Compatibility stage ID: `claude_developer`; actual role: OpenCode Developer.\n- Runtime is fixed to `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent permissions, and superpowers.\n- Implement only the current phase {phase} from `{docs.get('team_plan', '<team-plan>')}`.\n- In GitHub Stage Runner mode, remain on the checked-out PR branch and let the workflow commit/push; in manual mode follow `docs/process/BRANCH_WORKFLOW.md`.\n- Write focused failing tests first where practical.\n- Produce `{dev_report_name}` with exact self-test commands and a truthful changed-file list.\n- Every claimed changed path must exist and appear in the current diff; non-documentation phases require implementation and test changes.\n- After OpenCode Test Engineer verifies the phase, continue with the next planned phase until all phases are tested.\n- Do not touch restricted trading modules unless the architecture document explicitly permits it.\n"""
     if stage == "claude_tester":
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.\n- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, build Agent permissions, and superpowers.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, actual diff, and claimed changed paths.\n- Use verification-before-completion; use systematic-debugging for failures.\n- Return to the original branch, delete the temporary test branch, and produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}` without changing business code on the original branch.\n- The final decision must be exactly PASS, PASS_WITH_NOTES, or REJECTED; REJECTED routes back to OpenCode Developer.\n- If the phase passes, route back to OpenCode Developer for the next phase unless all phases are complete.\n- Generate and actually persist `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_tester`; actual role: OpenCode Test Engineer.\n- Runtime is fixed to `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent permissions, and superpowers.\n- Create a temporary local `test/{feature_id}/phase-<n>-tester-<timestamp>` branch from the phase branch under test.\n- Verify the requirements, architecture, team plan, phase dev report, actual diff, and claimed changed paths.\n- Use verification-before-completion; use systematic-debugging for failures.\n- Return to the original branch, delete the temporary test branch, and produce `{docs.get('phase_test_report_pattern', '<phase-test-report>')}` without changing business code on the original branch.\n- The final decision must be exactly PASS, PASS_WITH_NOTES, or REJECTED; REJECTED routes back to OpenCode Developer.\n- If the phase passes, route back to OpenCode Developer for the next phase unless all phases are complete.\n- Generate and actually persist `feedback/bugs/open/BUG_*.md` and `.json` for reproducible blockers.\n"""
     if stage == "claude_lead_review":
-        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.\n- Runtime is fixed to `opencode-go/glm-5.2`, `variant=max`, and must use superpowers.\n- Review all phase development reports, test reports, actual git diff, delivery gates, and phase metadata.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<opencode-lead-review>')}` with an explicit APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED decision.\n- If any phase is incomplete, route back to OpenCode Developer / OpenCode Test Engineer instead of escalating to Codex B.\n"""
+        return common + f"""\nTask:\n- Compatibility stage ID: `claude_lead_review`; actual role: OpenCode Team Leader Reviewer.\n- Runtime is fixed to `opencode-go/deepseek-v4-pro`, `variant=max`, and must use superpowers.\n- Review all phase development reports, test reports, actual git diff, delivery gates, and phase metadata.\n- Confirm every planned phase is complete and tested before handing off to Codex B.\n- Produce `{docs.get('claude_lead_review', '<opencode-lead-review>')}` with an explicit APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED decision.\n- If any phase is incomplete, route back to OpenCode Developer / OpenCode Test Engineer instead of escalating to Codex B.\n"""
     if stage == "codex_reviewer":
         return common + f"""\nTask:\n- Act as Codex B, the final Architect Reviewer.\n- Review code only after `{docs.get('claude_lead_review', '<opencode-lead-review>')}` confirms all phases passed.\n- Produce `{docs.get('codex_review', '<codex-review>')}`.\n- Conclusion must be APPROVED, APPROVED_WITH_NOTES, CHANGES_REQUESTED, or BLOCKED.\n- If review fails, return structured feedback to OpenCode Team Leader. After {max_attempts} failed Codex reviews, trigger the team incompetence alert and postmortem gate.\n"""
     if stage == "codex_acceptance":

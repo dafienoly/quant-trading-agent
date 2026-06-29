@@ -26,6 +26,28 @@ def _latest(root: Path, pattern: str) -> str:
     return str(matches[-1].relative_to(root)).replace("\\", "/") if matches else ""
 
 
+def _existing(root: Path, path: str) -> str:
+    normalized = str(path or "").replace("\\", "/")
+    if normalized and (root / normalized).exists():
+        return normalized
+    return ""
+
+
+def _latest_from_patterns(root: Path, *patterns: str) -> str:
+    for pattern in patterns:
+        latest = _latest(root, pattern)
+        if latest:
+            return latest
+    return ""
+
+
+def _phase_report_pattern(path_pattern: str, phase: int) -> str:
+    resolved = str(path_pattern or "").replace("<n>", str(phase)).replace("\\", "/")
+    if resolved.endswith(".md"):
+        return resolved[:-3] + "*.md"
+    return resolved
+
+
 def build_acceptance_entry(
     root: Path,
     *,
@@ -38,15 +60,40 @@ def build_acceptance_entry(
     feature_id = str(state.get("feature_id") or "unknown-feature")
     issue_number = state.get("issue_number")
     current_phase = int(state.get("team_pipeline", {}).get("current_phase", 1))
+    required_docs = state.get("required_docs", {})
     acceptance = str(gate.get("acceptance_artifact") or "").replace("\\", "/")
+    acceptance = _existing(root, acceptance) or _existing(root, str(required_docs.get("acceptance") or ""))
     if not acceptance:
-        acceptance = _latest(root, f"docs/acceptance/*-{feature_id}-acceptance.md")
-    phase_test = _latest(
+        acceptance = _latest_from_patterns(
+            root,
+            f"docs/features/{feature_id}/acceptance*.md",
+            f"docs/acceptance/*-{feature_id}-acceptance.md",
+        )
+    phase_test = _existing(
         root,
-        f"docs/test_reports/*-{feature_id}*phase-{current_phase}-test-report*.md",
+        _phase_report_pattern(str(required_docs.get("phase_test_report_pattern") or ""), current_phase),
     )
-    codex_review = _latest(root, f"docs/review/*-{feature_id}*codex-review*.md")
-    user_guide = _latest(root, f"docs/user_guides/*-{feature_id}*user-guide.md")
+    if not phase_test:
+        phase_test = _latest_from_patterns(
+            root,
+            _phase_report_pattern(str(required_docs.get("phase_test_report_pattern") or ""), current_phase),
+            f"docs/features/{feature_id}/phase-{current_phase}-test-report*.md",
+            f"docs/test_reports/*-{feature_id}*phase-{current_phase}-test-report*.md",
+        )
+    codex_review = _existing(root, str(required_docs.get("codex_review") or ""))
+    if not codex_review:
+        codex_review = _latest_from_patterns(
+            root,
+            f"docs/features/{feature_id}/codex-review*.md",
+            f"docs/review/*-{feature_id}*codex-review*.md",
+        )
+    user_guide = _existing(root, str(required_docs.get("user_guide") or ""))
+    if not user_guide:
+        user_guide = _latest_from_patterns(
+            root,
+            f"docs/features/{feature_id}/user-guide*.md",
+            f"docs/user_guides/*-{feature_id}*user-guide.md",
+        )
     decision = str(gate.get("decision") or "UNKNOWN")
 
     links = [

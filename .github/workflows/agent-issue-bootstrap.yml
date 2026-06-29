@@ -243,7 +243,7 @@ jobs:
           python scripts/agent_pipeline.py write-handoff --stage claude_lead_plan
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run OpenCode GLM 5.2 team-plan or generate handoff-only dry run
+      - name: Run OpenCode DeepSeek V4 Pro team-plan or generate handoff-only dry run
         env:
           STAGE: claude_lead_plan
           DRY_RUN: ${{ inputs.dry_run || contains(github.event.issue.labels.*.name, 'agent:dry-run') }}
@@ -272,7 +272,7 @@ jobs:
       - name: Commit pipeline bootstrap artifacts
         run: |
           $ErrorActionPreference = "Stop"
-          foreach ($path in @(".agent", "docs/requirements", "docs/design", "docs/dev_plans")) {
+          foreach ($path in @(".agent", "docs/features", "docs/requirements", "docs/design", "docs/dev_plans")) {
             if (Test-Path $path) {
               git add $path
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

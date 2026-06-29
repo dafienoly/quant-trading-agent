@@ -5,15 +5,27 @@
 本文件必须保持通用、稳定、长期有效。不要在这里加入临时 sprint 目标、某个阶段的验收修复、一次性股票池、当前版本的细节任务或短期 workaround。此类内容应放在：
 
 ```text
-docs/requirements/
-docs/design/
-docs/dev_plans/
-docs/dev_reports/
-docs/test_reports/
-docs/review/
-docs/acceptance/
+docs/features/<feature-id>/
 feedback/bugs/
 ```
+
+当前 canonical 文档布局为“按 feature 聚合”：
+
+```text
+docs/features/<feature-id>/
+  requirements.md
+  architecture.md
+  team-plan.md
+  phase-<n>-dev-report.md
+  phase-<n>-test-report.md
+  opencode-lead-review.md
+  codex-review-r1.md
+  acceptance.md
+  user-guide.md
+  r3-failure.md
+```
+
+`docs/requirements/`、`docs/design/`、`docs/dev_plans/`、`docs/dev_reports/`、`docs/test_reports/`、`docs/review/`、`docs/acceptance/` 仅作为历史文档和兼容读取路径保留；新功能默认写入 `docs/features/<feature-id>/`。
 
 如果某些工具读取的是 `AGENT.md` 而不是 `AGENTS.md`，也必须遵守同一套规则。`AGENTS.md` 是本仓库的 canonical root guide。
 
@@ -151,20 +163,18 @@ AgentOps、行情健康、回测、Risk Sentinel、Alpha 研究 MVP 优先使用
 13. `docs/policy/EXECUTION_POLICY.md`
 14. 当前任务状态，如存在：`.agent/current_task.yaml`
 15. 当前任务 handoff，如存在：`.agent/handoff/<stage>.md`
-16. 当前任务需求文档：`docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-17. 当前任务架构文档：`docs/design/YYYY-MM-DD-<feature>-architecture.md`
+16. 当前任务需求文档：`docs/features/<feature-id>/requirements.md`
+17. 当前任务架构文档：`docs/features/<feature-id>/architecture.md`
 18. 当前任务开发指南，如存在：
-    - `docs/design/YYYY-MM-DD-<feature>-development-guide.md`
+    - `docs/features/<feature-id>/development-guide.md`
+    - 兼容旧路径：`docs/design/YYYY-MM-DD-<feature>-development-guide.md`
 19. 当前 handoff 报告，如相关：
-    - `docs/dev_reports/`
-    - `docs/test_reports/`
-    - `docs/review/`
-    - `docs/acceptance/`
+    - `docs/features/<feature-id>/`
     - `feedback/bugs/`
 
 历史报告只在与当前功能、回归或 bug fix 直接相关时阅读。
 
-功能级架构和开发指导必须放在 `docs/design/`。`docs/superpowers/plans/` 仅用于内部 planning scratchpad，不得作为 PM、Architect、Developer、Test Engineer、Reviewer、Acceptance Agent 的 canonical handoff 位置。
+功能级架构和开发指导默认放在 `docs/features/<feature-id>/`；仅在兼容旧流程或迁移历史文档时保留 `docs/design/`。`docs/superpowers/plans/` 仅用于内部 planning scratchpad，不得作为 PM、Architect、Developer、Test Engineer、Reviewer、Acceptance Agent 的 canonical handoff 位置。
 
 ---
 
@@ -380,7 +390,7 @@ Agent interpretation 契约
 - 使用产品 API、Provider 契约、Tool Registry 和数据质量门禁。
 - 为变更行为添加或更新测试。
 - 运行自测并记录准确命令。
-- 在 `docs/dev_reports/` 生成开发报告。
+- 在 `docs/features/<feature-id>/phase-<n>-dev-report.md` 生成开发报告。
 
 不得：
 
@@ -409,7 +419,7 @@ Agent interpretation 契约
 - 涉及 API、UI、CLI、data-source、provider、tool、model-gateway、安全行为时必须验证。
 - 记录 skipped tests、external outages、warnings、xfail、residual risk。
 - 如反馈生成在范围内，确认 runtime defect 生成 `feedback/bugs/open/BUG_*.md` 和 `.json`。
-- 在 `docs/test_reports/` 生成测试报告。
+- 在 `docs/features/<feature-id>/phase-<n>-test-report.md` 生成测试报告。
 - 最终结果只能是 `PASS`、`PASS_WITH_NOTES` 或 `REJECTED`。
 
 不得：
@@ -706,7 +716,7 @@ UI error state
 
 ## 14. 开发报告要求
 
-每份 `docs/dev_reports/` 开发报告必须包含：
+每份 `docs/features/<feature-id>/phase-<n>-dev-report.md` 开发报告必须包含：
 
 - Requirement document path。
 - Architecture document path。
@@ -728,7 +738,7 @@ UI error state
 
 ## 15. 测试报告要求
 
-每份 `docs/test_reports/` 测试报告必须包含：
+每份 `docs/features/<feature-id>/phase-<n>-test-report.md` 测试报告必须包含：
 
 - Requirement、architecture、development report paths。
 - Roadmap section reference。
@@ -783,10 +793,10 @@ secret 出现在日志、报告或 UI
 ## 18. 文档规则
 
 - 根级 `AGENTS.md` 保持通用。
-- 功能特定指令放在 `docs/design/` 的当前架构文档。
-- 验收标准放在 `docs/requirements/` 和 `docs/acceptance/`。
-- Developer evidence 放在 `docs/dev_reports/`。
-- Tester evidence 放在 `docs/test_reports/`。
+- 功能特定指令放在 `docs/features/<feature-id>/architecture.md` 或相关 feature 目录文档。
+- 验收标准放在 `docs/features/<feature-id>/requirements.md` 和 `docs/features/<feature-id>/acceptance.md`。
+- Developer evidence 放在 `docs/features/<feature-id>/phase-<n>-dev-report.md`。
+- Tester evidence 放在 `docs/features/<feature-id>/phase-<n>-test-report.md`。
 - 只有阶段或发布状态实际变化时，才更新 `docs/log/DEVELOPMENT_LOG.md` 和 `docs/log/PHASE_COMPLETION_REPORT.md`。
 - 不得把 canonical handoff instructions 放在 scratchpad 目录。
 - 除非 `docs/roadmap/MASTER_ROADMAP.md` 已覆盖旧内容或已归档，否则不得删除旧 roadmap 文件。
@@ -796,7 +806,7 @@ secret 出现在日志、报告或 UI
 ## 19. 中文输出要求
 
 - 用户可见输出和新功能文档默认使用中文。
-- 非纯文档 PR 必须在 diff 中包含 `docs/dev_reports/` 中文功能说明和 `docs/acceptance/` 中文验收报告。
+- 非纯文档 PR 必须在 diff 中包含 `docs/features/<feature-id>/phase-<n>-dev-report.md` 中文功能说明和 `docs/features/<feature-id>/acceptance.md` 中文验收报告。
 - 报告必须包含：变更范围、测试命令、测试结果、安全确认、最终结论。
 - 代码标识、JSON key、环境变量和第三方术语保留英文。
 

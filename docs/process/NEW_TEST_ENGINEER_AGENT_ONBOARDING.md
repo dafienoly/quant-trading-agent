@@ -19,10 +19,10 @@ Acceptance.
 3. `docs/design/AGENTS.md`
 4. `docs/policy/RISK_POLICY.md`
 5. `docs/policy/EXECUTION_POLICY.md`
-6. 本次任务对应的 `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-7. 本次任务对应的 `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-8. 本次任务对应的 `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md`
-9. 如果是复测修复，再读对应的 `docs/review/`、`docs/acceptance/`、历史 `docs/test_reports/` 和 `feedback/bugs/`
+6. 本次任务对应的 `docs/features/<feature-id>/requirements.md`
+7. 本次任务对应的 `docs/features/<feature-id>/architecture.md`
+8. 本次任务对应的 `docs/features/<feature-id>/phase-<n>-dev-report.md`
+9. 如果是复测修复，再读对应的 `docs/features/<feature-id>/` 和 `feedback/bugs/`
 
 你必须永远遵守的系统不变量：
 1. 默认不能真实自动下单。
@@ -54,7 +54,7 @@ Acceptance.
 6. 补充你自己的测试：API、服务、数据源、UI、异常路径、权限/配置、风控阻断。
 7. 如果发现缺陷，必须记录复现步骤、期望结果、实际结果、严重等级和证据。
 8. 对运行时可复现缺陷，确认是否生成 `feedback/bugs/open/BUG_*.md` 和 `.json`；如果没有，报告为缺陷。
-9. 输出测试报告到 `docs/test_reports/YYYY-MM-DD-<feature>-test-report.md`。
+9. 输出测试报告到 `docs/features/<feature-id>/phase-<n>-test-report.md`。
 10. 给出明确结论：`PASS`、`PASS_WITH_NOTES` 或 `REJECTED`。
 
 最低测试命令模板：
@@ -132,10 +132,10 @@ git diff --check
 - 测试报告必须让 Architect Reviewer 和 PM Acceptance Agent 能直接复核。
 
 如果你接到具体阶段或具体功能测试任务，请优先阅读本次任务对应的：
-- `docs/requirements/YYYY-MM-DD-<feature>-requirements.md`
-- `docs/design/YYYY-MM-DD-<feature>-architecture.md`
-- `docs/dev_reports/YYYY-MM-DD-<feature>-dev-report.md`
-- 如果是复测或验收整改，再读对应的 `docs/acceptance/`、`docs/review/`、历史 `docs/test_reports/` 和 `feedback/bugs/`
+- `docs/features/<feature-id>/requirements.md`
+- `docs/features/<feature-id>/architecture.md`
+- `docs/features/<feature-id>/phase-<n>-dev-report.md`
+- 如果是复测或验收整改，再读对应的 `docs/features/<feature-id>/` 和 `feedback/bugs/`
 
 本阶段的特殊验收目标、特定脚本、特定数据文件、特定接口 smoke 要求，必须以当前架构设计文档为准，不要写入或依赖本通用提示词。
 
@@ -155,7 +155,7 @@ Use this map when the new test engineer asks "what should I read first?"
 | 5 | `docs/policy/EXECUTION_POLICY.md` | Defines order behavior, confirmation rules, and live execution boundaries. |
 | 6 | `docs/design/DATA_CONTRACTS.md` | Defines field contracts testers must assert for market data and factors. |
 | 7 | `docs/policy/FACTOR_RESEARCH_GUIDE.md` | Defines factor categories, evidence requirements, and LLM limits. |
-| 8 | Current `docs/requirements/`, `docs/design/`, and `docs/dev_reports/` files | These are the actual test basis for the assigned feature. |
+| 8 | Current `docs/features/<feature-id>/` files | These are the actual test basis for the assigned feature. |
 
 Historical reports should be read only when they are directly related to the
 assigned test cycle, regression, or bug fix.
@@ -173,7 +173,7 @@ The short version:
 2. Create a local temporary test branch named `test/<feature-slug>-<YYYYMMDD-HHMM>`.
 3. Run all tests, probes, temporary diagnostics, and optional instrumentation on the temporary test branch.
 4. Return to the original development branch.
-5. Write and commit only the test report under `docs/test_reports/` on the original development branch.
+5. Write and commit only the test report under `docs/features/<feature-id>/` on the original development branch.
 6. Delete the temporary test branch.
 
 As Test Engineer Agent, you must not modify implementation code on the original

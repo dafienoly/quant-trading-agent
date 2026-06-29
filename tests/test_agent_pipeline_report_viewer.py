@@ -312,13 +312,13 @@ def test_load_gate_status_detects_gates(tmp_path):
 
 
 def test_scan_artifact_inventory_discovers_files(tmp_path):
-    d = tmp_path / "docs" / "requirements"
+    d = tmp_path / "docs" / "features" / "agentops"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "test-req.md").write_text("ok")
+    (d / "acceptance.md").write_text("ok")
     (d / ".gitkeep").write_text("")
     arts = scan_artifact_inventory(tmp_path)
-    assert "docs/requirements" in arts
-    files = [f for f in arts["docs/requirements"] if ".gitkeep" not in f]
+    assert "docs/features" in arts
+    files = [f for f in arts["docs/features"] if ".gitkeep" not in f]
     assert len(files) == 1
 
 

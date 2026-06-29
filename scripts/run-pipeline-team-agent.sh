@@ -18,9 +18,9 @@ elif [[ -n "$mode" ]]; then
   exit 2
 fi
 
-OPENCODE_LEAD_MODEL="opencode-go/glm-5.2"
+OPENCODE_LEAD_MODEL="opencode-go/deepseek-v4-pro"
 OPENCODE_LEAD_VARIANT="max"
-OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-pro"
+OPENCODE_TESTER_MODEL="opencode-go/deepseek-v4-flash"
 OPENCODE_TESTER_VARIANT="max"
 OPENCODE_DEVELOPER_MODEL="opencode-go/deepseek-v4-flash"
 OPENCODE_DEVELOPER_VARIANT="max"
@@ -295,7 +295,7 @@ verify_tester_did_not_modify_business_code() {
   while IFS= read -r changed_path; do
     [[ -z "$changed_path" ]] && continue
     case "$changed_path" in
-      .agent/*|docs/test_reports/*|feedback/bugs/open/*)
+      .agent/*|docs/test_reports/*|docs/features/*|feedback/bugs/open/*)
         ;;
       *)
         echo "Test Engineer modified a disallowed path on the original branch: $changed_path" >&2

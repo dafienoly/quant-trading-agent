@@ -46,6 +46,15 @@ ALLOWED_PURE_DOC_DIRS = (
     "docs/",
 )
 
+FEATURE_DEV_REPORT_RE = re.compile(
+    r"^docs/features/[^/]+/phase-\d+-dev-report(?:-r\d+)?\.md$",
+    re.IGNORECASE,
+)
+FEATURE_ACCEPTANCE_RE = re.compile(
+    r"^docs/features/[^/]+/acceptance(?:-[A-Za-z0-9_]+)?\.md$",
+    re.IGNORECASE,
+)
+
 
 def _git_command(command: str, cwd: str | Path) -> str:
     """Run a git command and return stdout."""
@@ -222,6 +231,14 @@ def _select_pipeline_acceptance_reports(
     return sorted(accept_reports)[-1:]
 
 
+def _is_dev_report_path(path: str) -> bool:
+    return path.startswith("docs/dev_reports/") or bool(FEATURE_DEV_REPORT_RE.match(path))
+
+
+def _is_acceptance_report_path(path: str) -> bool:
+    return path.startswith("docs/acceptance/") or bool(FEATURE_ACCEPTANCE_RE.match(path))
+
+
 def validate_reports(
     base: str,
     head: str,
@@ -273,8 +290,8 @@ def validate_reports(
     root = Path(repo_root)
 
     # Find dev reports
-    dev_reports = _find_new_or_modified(files, "docs/dev_reports/", root)
-    accept_reports = _find_new_or_modified(files, "docs/acceptance/", root)
+    dev_reports = _find_new_or_modified(files, _is_dev_report_path, root)
+    accept_reports = _find_new_or_modified(files, _is_acceptance_report_path, root)
 
     if pipeline_mode and pipeline_in_progress:
         for f in dev_reports:
@@ -295,9 +312,9 @@ def validate_reports(
     if pipeline_mode:
         selected_acceptance = _select_pipeline_acceptance_reports(root, accept_reports)
         if not dev_reports:
-            result["issues"].append("no docs/dev_reports/ file in diff")
+            result["issues"].append("no development report file in diff")
         if not selected_acceptance:
-            result["issues"].append("no authoritative docs/acceptance/ file in diff")
+            result["issues"].append("no authoritative acceptance report file in diff")
         result["reports_present"] = bool(dev_reports and selected_acceptance)
 
         for f in dev_reports:
@@ -324,9 +341,9 @@ def validate_reports(
         return result
 
     if not dev_reports:
-        result["issues"].append("no docs/dev_reports/ file in diff")
+        result["issues"].append("no development report file in diff")
     if not accept_reports:
-        result["issues"].append("no docs/acceptance/ file in diff")
+        result["issues"].append("no acceptance report file in diff")
 
     result["reports_present"] = bool(dev_reports and accept_reports)
 
@@ -345,9 +362,16 @@ def validate_reports(
     return result
 
 
-def _find_new_or_modified(files: list[str], prefix: str, root: Path) -> list[str]:
-    """Return file paths from *files* that start with *prefix*."""
-    return sorted(f for f in files if f.startswith(prefix))
+def _find_new_or_modified(
+    files: list[str],
+    matcher: str | Any,
+    root: Path,
+) -> list[str]:
+    """Return changed files matching a path prefix or predicate."""
+    del root
+    if isinstance(matcher, str):
+        return sorted(f for f in files if f.startswith(matcher))
+    return sorted(f for f in files if matcher(f))
 
 
 # ---------------------------------------------------------------------------

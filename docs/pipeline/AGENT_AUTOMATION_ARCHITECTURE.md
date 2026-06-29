@@ -41,9 +41,9 @@ GitHub Issue with agent:pipeline
   -> Codex A creates requirements
   -> Codex B creates architecture
   -> epic/<date-feature> branch is created
-  -> OpenCode GLM 5.2 Lead creates phase plan
+  -> OpenCode DeepSeek V4 Pro Lead creates phase plan
   -> OpenCode DeepSeek V4 Flash max implements one phase
-  -> OpenCode DeepSeek V4 Pro max verifies that phase
+  -> OpenCode DeepSeek V4 Flash max verifies that phase
   -> if more phases remain, route back to OpenCode Developer
   -> OpenCode Lead reviews the completed team delivery
   -> Codex B writes final architecture review
@@ -84,9 +84,9 @@ Team-stage execution is fixed:
 
 | Compatibility stage ID | Repository runner | Runtime |
 |---|---|---|
-| `claude_lead_plan`, `claude_lead_review`, `postmortem` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/glm-5.2` + superpowers |
+| `claude_lead_plan`, `claude_lead_review`, `postmortem` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-pro`, `variant=max`, superpowers |
 | `claude_developer`, `bugfix` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-flash`, `variant=max`, build Agent + superpowers |
-| `claude_tester` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-pro`, `variant=max`, superpowers |
+| `claude_tester` | `scripts/run-pipeline-team-agent.sh` | OpenCode `opencode-go/deepseek-v4-flash`, `variant=max`, superpowers |
 
 The `claude_*` stage IDs remain only for workflow, label, and gate compatibility.
 They no longer identify the actual Lead, Developer, or Test Engineer implementation.

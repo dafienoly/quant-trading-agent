@@ -7,10 +7,10 @@
 
 Team stages 由仓库内 runner 固定执行：
 
-1. OpenCode Lead：`opencode-go/glm-5.2`。
+1. OpenCode Lead：`opencode-go/deepseek-v4-pro`、`variant=max`、`superpowers`。
 2. OpenCode Developer/BugFix：`opencode-go/deepseek-v4-flash`、
    `variant=max`、build Agent、`superpowers`。
-3. OpenCode Test Engineer：`opencode-go/deepseek-v4-pro`、
+3. OpenCode Test Engineer：`opencode-go/deepseek-v4-flash`、
    `variant=max`、`superpowers`。
 
 GitHub Variables/Secrets 不再决定 Team stages 的模型。模型或插件不可用时
@@ -113,7 +113,6 @@ gh run watch <run-id>
 
 Preflight 会真实验证：
 
-- OpenCode `opencode-go/glm-5.2`；
 - OpenCode `opencode-go/deepseek-v4-pro`、`variant=max`；
 - OpenCode `opencode-go/deepseek-v4-flash`、`variant=max`；
 - OpenCode `using-superpowers`；

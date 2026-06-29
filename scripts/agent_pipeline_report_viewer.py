@@ -68,6 +68,7 @@ ARTIFACT_DIRS = (
     "docs/test_reports",
     "docs/review",
     "docs/acceptance",
+    "docs/features",
     "docs/smoke",
 )
 
@@ -150,7 +151,7 @@ def scan_artifact_inventory(repo_root: Path) -> dict[str, list[str]]:
         if d.is_dir():
             files = sorted(
                 str(p.relative_to(repo_root))
-                for p in d.glob("*")
+                for p in d.rglob("*")
                 if p.is_file() and ".gitkeep" not in p.name
             )
             if files:
